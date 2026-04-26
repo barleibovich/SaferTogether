@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SaferTogether — ויזואליזציה</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --red:     #E53E3E;
+    --red-dim: #9B2C2C;
+    --green:   #38A169;
+    --green-bright: #48BB78;
+    --navy:    #1A202C;
+    --navy-mid:#2D3748;
+    --navy-light:#4A5568;
+    --gold:    #ECC94B;
+    --white:   #F7FAFC;
+    --gray:    #A0AEC0;
+    --font-main: 'Heebo', sans-serif;
+    --font-display: 'Bebas Neue', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font-main);
+    background: #0D1117;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* ── Background grid ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(229,62,62,.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(229,62,62,.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background: radial-gradient(ellipse 60% 50% at 50% 0%, rgba(229,62,62,.12) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  /* ── Stage label ── */
+  .stage-label {
+    font-family: var(--font-display);
+    font-size: 13px;
+    letter-spacing: 4px;
+    color: var(--red);
+    text-transform: uppercase;
+    margin-bottom: 24px;
+    opacity: .7;
+    position: relative; z-index: 2;
+  }
+
+  /* ── Screen selector ── */
+  .screen-selector {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 32px;
+    background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 50px;
+    padding: 5px;
+    position: relative; z-index: 2;
+  }
+  .screen-btn {
+    font-family: var(--font-main);
+    font-size: 12px;
+    font-weight: 500;
+    padding: 8px 18px;
+    border-radius: 40px;
+    border: none;
+    cursor: pointer;
+    background: transparent;
+    color: var(--gray);
+    transition: all .25s ease;
+    white-space: nowrap;
+  }
+  .screen-btn.active {
+    background: var(--red);
+    color: #fff;
+    box-shadow: 0 0 20px rgba(229,62,62,.4);
+  }
+  .screen-btn:hover:not(.active) { color: var(--white); background: rgba(255,255,255,.08); }
+
+  /* ── Phone mockup ── */
+  .phone-wrap {
+    position: relative; z-index: 2;
+  }
+  .phone {
+    width: 360px;
+    height: 740px;
+    background: #111318;
+    border-radius: 50px;
+    border: 2px solid rgba(255,255,255,.12);
+    box-shadow:
+      0 0 0 1px rgba(0,0,0,.8),
+      0 40px 120px rgba(0,0,0,.8),
+      0 0 60px rgba(229,62,62,.08),
+      inset 0 1px 0 rgba(255,255,255,.08);
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Notch */
+  .notch {
+    position: absolute;
+    top: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 120px; height: 30px;
+    background: #111318;
+    border-radius: 0 0 20px 20px;
+    z-index: 10;
+    display: flex; align-items: center; justify-content: center;
+    gap: 6px;
+  }
+  .notch-camera {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: #1a1a1a;
+    border: 1px solid rgba(255,255,255,.1);
+  }
+  .notch-speaker {
+    width: 40px; height: 5px;
+    border-radius: 3px;
+    background: #1a1a1a;
+  }
+
+  /* Status bar */
+  .status-bar {
+    height: 44px;
+    padding: 0 24px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding-bottom: 6px;
+    flex-shrink: 0;
+  }
+  .status-time { font-size: 11px; font-weight: 700; color: var(--white); }
+  .status-icons { display: flex; gap: 4px; align-items: center; }
+  .status-icons svg { width: 14px; height: 14px; fill: var(--white); }
+
+  /* Screen content */
+  .screen-content {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+  .screen {
+    position: absolute; inset: 0;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .3s ease;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    scrollbar-width: none;
+  }
+  .screen::-webkit-scrollbar { display: none; }
+  .screen.active {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  /* Bottom home indicator */
+  .home-bar {
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .home-bar-line {
+    width: 120px; height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,.2);
+  }
+
+  /* ════════════════════════════════
+     SCREEN 1 — LOGIN
+  ════════════════════════════════ */
+  #screen-login {
+    background: linear-gradient(160deg, #0D1117 0%, #1a0a0a 60%, #0D1117 100%);
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 20px 28px;
+  }
+
+  .login-logo-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 28px;
+    animation: fadeDown .6s ease both;
+  }
+  .login-shield {
+    width: 72px; height: 72px;
+    background: linear-gradient(145deg, var(--red), var(--red-dim));
+    border-radius: 22px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 8px 32px rgba(229,62,62,.5), 0 0 0 1px rgba(229,62,62,.3);
+    margin-bottom: 14px;
+    position: relative;
+    overflow: hidden;
+  }
+  .login-shield::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,.15) 0%, transparent 60%);
+  }
+  .login-shield svg { width: 36px; height: 36px; fill: #fff; position: relative; z-index: 1; }
+
+  .login-title-he {
+    font-size: 22px;
+    font-weight: 900;
+    color: var(--white);
+    line-height: 1;
+    text-align: center;
+  }
+  .login-title-en {
+    font-family: var(--font-display);
+    font-size: 16px;
+    letter-spacing: 3px;
+    color: var(--red);
+    margin-top: 2px;
+  }
+  .login-tagline {
+    font-size: 11px;
+    color: var(--gray);
+    margin-top: 6px;
+    letter-spacing: .5px;
+  }
+
+  .login-form {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    animation: fadeUp .6s .15s ease both;
+  }
+  .input-group {
+    position: relative;
+  }
+  .input-group label {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--gray);
+    margin-bottom: 5px;
+    letter-spacing: .3px;
+  }
+  .input-group input {
+    width: 100%;
+    background: rgba(255,255,255,.06);
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 12px;
+    padding: 13px 14px;
+    color: var(--white);
+    font-family: var(--font-main);
+    font-size: 14px;
+    outline: none;
+    transition: border-color .2s, box-shadow .2s;
+    text-align: right;
+  }
+  .input-group input:focus {
+    border-color: var(--red);
+    box-shadow: 0 0 0 3px rgba(229,62,62,.15);
+  }
+  .input-group input::placeholder { color: rgba(255,255,255,.25); }
+
+  .btn-login {
+    margin-top: 4px;
+    width: 100%;
+    padding: 15px;
+    background: linear-gradient(135deg, var(--red), #C53030);
+    border: none;
+    border-radius: 14px;
+    color: #fff;
+    font-family: var(--font-main);
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 6px 24px rgba(229,62,62,.4);
+    transition: transform .15s, box-shadow .15s;
+    letter-spacing: .5px;
+  }
+  .btn-login:active { transform: scale(.98); box-shadow: 0 3px 12px rgba(229,62,62,.3); }
+
+  .login-divider {
+    display: flex; align-items: center; gap: 10px;
+    margin: 4px 0;
+  }
+  .login-divider span { font-size: 11px; color: var(--gray); flex-shrink: 0; }
+  .login-divider::before, .login-divider::after {
+    content: ''; flex: 1; height: 1px;
+    background: rgba(255,255,255,.1);
+  }
+
+  .btn-guest {
+    width: 100%;
+    padding: 13px;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 14px;
+    color: var(--gray);
+    font-family: var(--font-main);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color .2s, color .2s;
+  }
+  .btn-guest:hover { border-color: rgba(255,255,255,.25); color: var(--white); }
+
+  .login-footer {
+    margin-top: 16px;
+    text-align: center;
+    font-size: 10px;
+    color: rgba(255,255,255,.2);
+    animation: fadeUp .6s .3s ease both;
+  }
+
+  /* ════════════════════════════════
+     SCREEN 2 — PRESENCE BOARD
+  ════════════════════════════════ */
+  #screen-board {
+    background: var(--navy);
+    flex-direction: column;
+  }
+
+  .board-header {
+    background: linear-gradient(135deg, #1a0808 0%, #2a0f0f 100%);
+    padding: 14px 20px 12px;
+    border-bottom: 1px solid rgba(229,62,62,.2);
+    flex-shrink: 0;
+  }
+  .board-header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .board-room-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--white);
+  }
+  .board-room-sub {
+    font-size: 10px;
+    color: var(--gray);
+    margin-top: 1px;
+  }
+  .alert-badge {
+    background: var(--red);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 20px;
+    letter-spacing: .5px;
+    animation: pulse-badge 1.5s ease infinite;
+  }
+
+  .timer-bar {
+    background: rgba(0,0,0,.3);
+    border-radius: 10px;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .timer-label { font-size: 10px; color: var(--gray); }
+  .timer-value {
+    font-family: var(--font-display);
+    font-size: 22px;
+    color: var(--gold);
+    letter-spacing: 2px;
+    line-height: 1;
+  }
+  .timer-progress {
+    width: 160px; height: 4px;
+    background: rgba(255,255,255,.1);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .timer-fill {
+    height: 100%;
+    width: 72%;
+    background: linear-gradient(90deg, var(--gold), #F6AD55);
+    border-radius: 2px;
+    animation: timerShrink 600s linear;
+  }
+
+  .board-body {
+    flex: 1;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+  }
+
+  .section-title {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: var(--gray);
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+
+  .member-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .member-card {
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 16px;
+    padding: 14px 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+    overflow: hidden;
+    transition: transform .2s;
+  }
+  .member-card.safe {
+    border-color: rgba(56,161,105,.3);
+    background: rgba(56,161,105,.07);
+  }
+  .member-card.at-risk {
+    border-color: rgba(229,62,62,.3);
+    background: rgba(229,62,62,.07);
+  }
+  .member-card.at-risk::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: rgba(229,62,62,.04);
+    animation: pulse-bg 1.8s ease infinite;
+  }
+
+  .member-avatar {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    position: relative;
+  }
+  .member-avatar.safe { background: rgba(56,161,105,.2); }
+  .member-avatar.at-risk { background: rgba(229,62,62,.2); }
+
+  .member-status-dot {
+    position: absolute;
+    bottom: 0; left: 0;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    border: 2px solid var(--navy);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .member-status-dot.safe { background: var(--green); }
+  .member-status-dot.at-risk {
+    background: var(--red);
+    animation: pulse-dot 1.2s ease infinite;
+  }
+
+  .member-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--white);
+  }
+  .member-status-text {
+    font-size: 10px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+  .member-status-text.safe { background: rgba(56,161,105,.2); color: var(--green-bright); }
+  .member-status-text.at-risk { background: rgba(229,62,62,.2); color: #FC8181; }
+
+  .summary-bar {
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 14px;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .summary-stat { text-align: center; }
+  .summary-num {
+    font-family: var(--font-display);
+    font-size: 26px;
+    line-height: 1;
+  }
+  .summary-num.green { color: var(--green-bright); }
+  .summary-num.red { color: #FC8181; }
+  .summary-num.gold { color: var(--gold); }
+  .summary-lbl { font-size: 9px; color: var(--gray); margin-top: 2px; letter-spacing: .5px; }
+  .summary-divider { width: 1px; height: 30px; background: rgba(255,255,255,.1); }
+
+  /* ════════════════════════════════
+     SCREEN 3 — EMERGENCY
+  ════════════════════════════════ */
+  #screen-emergency {
+    background: #0a0000;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 0;
+  }
+
+  .emergency-header {
+    width: 100%;
+    background: var(--red);
+    padding: 12px 20px 14px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .emergency-header::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(
+      -45deg,
+      rgba(0,0,0,.1) 0px,
+      rgba(0,0,0,.1) 8px,
+      transparent 8px,
+      transparent 16px
+    );
+  }
+  .emergency-header-text {
+    font-family: var(--font-display);
+    font-size: 22px;
+    letter-spacing: 3px;
+    color: #fff;
+    position: relative;
+    z-index: 1;
+  }
+  .emergency-header-sub {
+    font-size: 10px;
+    color: rgba(255,255,255,.8);
+    position: relative; z-index: 1;
+    margin-top: 2px;
+  }
+
+  .siren-wrap {
+    flex-shrink: 0;
+    padding: 20px 0 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .siren-icon {
+    width: 64px; height: 64px;
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .siren-ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 2px solid rgba(229,62,62,.5);
+    animation: sirenRing 1.5s ease-out infinite;
+  }
+  .siren-ring:nth-child(1) { width: 64px; height: 64px; animation-delay: 0s; }
+  .siren-ring:nth-child(2) { width: 88px; height: 88px; animation-delay: .4s; }
+  .siren-ring:nth-child(3) { width: 112px; height: 112px; animation-delay: .8s; }
+  .siren-core {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: var(--red);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 20px rgba(229,62,62,.8);
+    animation: sirenPulse 1s ease infinite;
+    position: relative; z-index: 1;
+  }
+  .siren-core svg { width: 20px; height: 20px; fill: #fff; }
+  .siren-label {
+    font-size: 10px; color: var(--gray);
+    letter-spacing: 1px;
+  }
+
+  .instructions-box {
+    width: calc(100% - 32px);
+    margin: 0 16px;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 14px;
+    padding: 14px;
+    flex-shrink: 0;
+  }
+  .instructions-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--gold);
+    letter-spacing: .5px;
+    margin-bottom: 8px;
+  }
+  .instructions-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .instructions-list li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: rgba(255,255,255,.8);
+    line-height: 1.4;
+  }
+  .inst-num {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: rgba(229,62,62,.2);
+    color: var(--red);
+    font-size: 10px;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .safe-btn-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    gap: 10px;
+  }
+  .safe-btn-hint { font-size: 11px; color: var(--gray); }
+  .btn-safe {
+    width: 100%;
+    padding: 22px;
+    background: linear-gradient(135deg, var(--green), #276749);
+    border: none;
+    border-radius: 20px;
+    color: #fff;
+    font-family: var(--font-main);
+    font-size: 20px;
+    font-weight: 900;
+    cursor: pointer;
+    box-shadow: 0 8px 32px rgba(56,161,105,.5), 0 0 0 1px rgba(56,161,105,.3);
+    letter-spacing: .5px;
+    position: relative;
+    overflow: hidden;
+    animation: safeBtnPulse 2s ease infinite;
+    transition: transform .15s;
+  }
+  .btn-safe::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,.15) 0%, transparent 60%);
+  }
+  .btn-safe:active { transform: scale(.97); }
+  .btn-safe span { position: relative; z-index: 1; }
+
+  /* ════════════════════════════════
+     SCREEN 4 — GAMIFICATION
+  ════════════════════════════════ */
+  #screen-game {
+    background: var(--navy);
+    flex-direction: column;
+  }
+
+  .game-header {
+    background: linear-gradient(135deg, rgba(26,32,44,1), rgba(45,55,72,.8));
+    padding: 14px 20px;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+    flex-shrink: 0;
+  }
+  .game-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .game-title { font-size: 14px; font-weight: 700; color: var(--white); }
+  .game-subtitle { font-size: 10px; color: var(--gray); margin-top: 2px; }
+  .game-badge {
+    background: rgba(255,255,255,.06);
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 10px;
+    padding: 4px 10px;
+    font-size: 10px;
+    color: var(--gray);
+  }
+
+  .game-body {
+    flex: 1;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow-y: auto;
+  }
+
+  /* Locked state */
+  .locked-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    text-align: center;
+    padding: 20px;
+  }
+  .lock-icon-wrap {
+    width: 80px; height: 80px;
+    border-radius: 24px;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.1);
+    display: flex; align-items: center; justify-content: center;
+    animation: lockFloat 3s ease-in-out infinite;
+  }
+  .lock-icon-wrap svg { width: 36px; height: 36px; fill: var(--gray); }
+  .locked-title { font-size: 16px; font-weight: 700; color: var(--white); }
+  .locked-sub { font-size: 12px; color: var(--gray); line-height: 1.5; max-width: 200px; }
+
+  .waiting-members {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .wait-member {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .wait-avatar {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    border: 2px solid transparent;
+  }
+  .wait-avatar.done { background: rgba(56,161,105,.15); border-color: var(--green); }
+  .wait-avatar.pending {
+    background: rgba(229,62,62,.1);
+    border-color: rgba(229,62,62,.4);
+    animation: pendingPulse 1.5s ease infinite;
+  }
+  .wait-name { font-size: 9px; color: var(--gray); }
+
+  /* Toggle: locked/unlocked */
+  .game-toggle {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 14px;
+    width: 100%;
+  }
+  .toggle-btn {
+    flex: 1;
+    padding: 8px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,.1);
+    background: transparent;
+    color: var(--gray);
+    font-family: var(--font-main);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .toggle-btn.active {
+    background: rgba(255,255,255,.08);
+    color: var(--white);
+    border-color: rgba(255,255,255,.2);
+  }
+
+  /* Unlocked game */
+  .unlocked-panel { width: 100%; display: flex; flex-direction: column; gap: 12px; }
+
+  .question-card {
+    background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 16px;
+    padding: 16px;
+  }
+  .question-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .question-num { font-size: 10px; color: var(--gray); letter-spacing: 1px; }
+  .question-pts {
+    font-size: 10px;
+    background: rgba(236,201,75,.15);
+    color: var(--gold);
+    padding: 2px 8px;
+    border-radius: 8px;
+    font-weight: 600;
+  }
+  .question-text {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--white);
+    line-height: 1.5;
+    margin-bottom: 14px;
+  }
+
+  .answers { display: flex; flex-direction: column; gap: 8px; }
+  .answer-btn {
+    width: 100%;
+    padding: 12px 14px;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 12px;
+    color: rgba(255,255,255,.8);
+    font-family: var(--font-main);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: right;
+    transition: all .2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .answer-btn:hover { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.2); }
+  .answer-btn.correct {
+    background: rgba(56,161,105,.15);
+    border-color: var(--green);
+    color: var(--green-bright);
+  }
+  .answer-letter {
+    width: 22px; height: 22px;
+    border-radius: 6px;
+    background: rgba(255,255,255,.08);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .correct .answer-letter { background: var(--green); color: #fff; }
+
+  .score-bar {
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.06);
+    border-radius: 12px;
+    padding: 10px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .score-player { font-size: 11px; color: var(--gray); }
+  .score-val {
+    font-family: var(--font-display);
+    font-size: 20px;
+    color: var(--gold);
+  }
+
+  /* ═══════════ ANIMATIONS ═══════════ */
+  @keyframes fadeDown { from { opacity:0; transform: translateY(-12px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes fadeUp   { from { opacity:0; transform: translateY(12px);  } to { opacity:1; transform:translateY(0); } }
+
+  @keyframes pulse-badge {
+    0%,100% { box-shadow: 0 0 0 0 rgba(229,62,62,.5); }
+    50%      { box-shadow: 0 0 0 5px rgba(229,62,62,0); }
+  }
+  @keyframes pulse-bg {
+    0%,100% { opacity: 0; }
+    50%      { opacity: 1; }
+  }
+  @keyframes pulse-dot {
+    0%,100% { transform: scale(1); }
+    50%      { transform: scale(1.3); }
+  }
+  @keyframes sirenRing {
+    0%   { transform: scale(.5); opacity: .8; }
+    100% { transform: scale(1.5); opacity: 0; }
+  }
+  @keyframes sirenPulse {
+    0%,100% { box-shadow: 0 0 20px rgba(229,62,62,.8); }
+    50%      { box-shadow: 0 0 40px rgba(229,62,62,1); }
+  }
+  @keyframes safeBtnPulse {
+    0%,100% { box-shadow: 0 8px 32px rgba(56,161,105,.5), 0 0 0 1px rgba(56,161,105,.3); }
+    50%      { box-shadow: 0 8px 48px rgba(56,161,105,.8), 0 0 0 4px rgba(56,161,105,.2); }
+  }
+  @keyframes lockFloat {
+    0%,100% { transform: translateY(0); }
+    50%      { transform: translateY(-6px); }
+  }
+  @keyframes pendingPulse {
+    0%,100% { opacity: 1; }
+    50%      { opacity: .4; }
+  }
+  @keyframes timerShrink {
+    from { width: 72%; }
+    to   { width: 0%; }
+  }
+
+  /* ─── Responsive: smaller viewport ─── */
+  @media (max-height: 820px) {
+    .phone { height: 680px; }
+  }
+</style>
+</head>
+<body>
+
+<p class="stage-label">SAFERTOGETHER · UI PROTOTYPE · 2025</p>
+
+<!-- Screen selector -->
+<div class="screen-selector">
+  <button class="screen-btn active" onclick="showScreen('login',this)">כניסה</button>
+  <button class="screen-btn" onclick="showScreen('board',this)">לוח נוכחות</button>
+  <button class="screen-btn" onclick="showScreen('emergency',this)">חירום</button>
+  <button class="screen-btn" onclick="showScreen('game',this)">משחק</button>
+</div>
+
+<!-- Phone mockup -->
+<div class="phone-wrap">
+  <div class="phone">
+
+    <!-- Notch -->
+    <div class="notch">
+      <div class="notch-camera"></div>
+      <div class="notch-speaker"></div>
+    </div>
+
+    <!-- Status bar -->
+    <div class="status-bar">
+      <div class="status-time">09:41</div>
+      <div class="status-icons">
+        <!-- WiFi -->
+        <svg viewBox="0 0 24 24"><path d="M1.5 8.5a17 17 0 0121 0M5 12a12 12 0 0114 0M8.5 15.5a7 7 0 017 0M12 19h.01" stroke="white" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+        <!-- Battery -->
+        <svg viewBox="0 0 24 24"><rect x="1" y="7" width="18" height="10" rx="2" stroke="white" stroke-width="1.5" fill="none"/><path d="M19 10h2v4h-2" fill="white"/><rect x="3" y="9" width="12" height="6" rx="1" fill="white"/></svg>
+      </div>
+    </div>
+
+    <!-- Screen area -->
+    <div class="screen-content">
+
+      <!-- ── LOGIN ── -->
+      <div id="screen-login" class="screen active">
+        <div class="login-logo-wrap">
+          <div class="login-shield">
+            <svg viewBox="0 0 24 24"><path d="M12 2L4 6v6c0 5.25 3.5 10.15 8 11.35C16.5 22.15 20 17.25 20 12V6L12 2z"/></svg>
+          </div>
+          <div class="login-title-he">ביחד בטוחים יותר</div>
+          <div class="login-title-en">SAFERTOGETHER</div>
+          <div class="login-tagline">ניהול חירום משפחתי חכם</div>
+        </div>
+
+        <div class="login-form">
+          <div class="input-group">
+            <label>מספר טלפון / אימייל</label>
+            <input type="text" placeholder="050-000-0000" value="avner@example.com">
+          </div>
+          <div class="input-group">
+            <label>סיסמה</label>
+            <input type="password" placeholder="••••••••" value="••••••••">
+          </div>
+          <button class="btn-login">כניסה לחשבון</button>
+          <div class="login-divider"><span>או</span></div>
+          <button class="btn-guest">כניסה כאורח</button>
+        </div>
+
+        <div class="login-footer">
+          SaferTogether v1.0 · Ben-Gurion University<br>
+          Avner Shimon · Bar Leibovich · 2025
+        </div>
+      </div>
+
+      <!-- ── PRESENCE BOARD ── -->
+      <div id="screen-board" class="screen">
+        <div class="board-header">
+          <div class="board-header-top">
+            <div>
+              <div class="board-room-title">חדר בטחון — משפחת לוי</div>
+              <div class="board-room-sub">קוד חדר: ST-4821</div>
+            </div>
+            <div class="alert-badge">⚠ כוננות</div>
+          </div>
+          <div class="timer-bar">
+            <div>
+              <div class="timer-label">זמן נותר במרחב מוגן</div>
+            </div>
+            <div class="timer-value">07:23</div>
+            <div class="timer-progress"><div class="timer-fill"></div></div>
+          </div>
+        </div>
+
+        <div class="board-body">
+          <div class="section-title">סטטוס חברי הקבוצה</div>
+
+          <div class="summary-bar">
+            <div class="summary-stat">
+              <div class="summary-num green">3</div>
+              <div class="summary-lbl">בטוחים</div>
+            </div>
+            <div class="summary-divider"></div>
+            <div class="summary-stat">
+              <div class="summary-num red">1</div>
+              <div class="summary-lbl">בסיכון</div>
+            </div>
+            <div class="summary-divider"></div>
+            <div class="summary-stat">
+              <div class="summary-num gold">4</div>
+              <div class="summary-lbl">סה"כ</div>
+            </div>
+          </div>
+
+          <div class="member-grid">
+            <div class="member-card safe">
+              <div class="member-avatar safe">
+                👩
+                <div class="member-status-dot safe"></div>
+              </div>
+              <div class="member-name">אמא</div>
+              <div class="member-status-text safe">בטוחה ✓</div>
+            </div>
+
+            <div class="member-card at-risk">
+              <div class="member-avatar at-risk">
+                👨
+                <div class="member-status-dot at-risk"></div>
+              </div>
+              <div class="member-name">אבא</div>
+              <div class="member-status-text at-risk">בסיכון</div>
+            </div>
+
+            <div class="member-card safe">
+              <div class="member-avatar safe">
+                👧
+                <div class="member-status-dot safe"></div>
+              </div>
+              <div class="member-name">שירה</div>
+              <div class="member-status-text safe">בטוחה ✓</div>
+            </div>
+
+            <div class="member-card safe">
+              <div class="member-avatar safe">
+                👦
+                <div class="member-status-dot safe"></div>
+              </div>
+              <div class="member-name">דניאל</div>
+              <div class="member-status-text safe">בטוח ✓</div>
+            </div>
+          </div>
+
+          <div class="section-title" style="margin-top:4px">משימות בטיחות</div>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <div style="background:rgba(56,161,105,.08);border:1px solid rgba(56,161,105,.2);border-radius:12px;padding:10px 14px;display:flex;align-items:center;gap:10px;">
+              <span style="font-size:16px;">✅</span>
+              <span style="font-size:12px;color:rgba(255,255,255,.6);text-decoration:line-through;">סגרו את חלונות החדר</span>
+            </div>
+            <div style="background:rgba(236,201,75,.06);border:1px solid rgba(236,201,75,.2);border-radius:12px;padding:10px 14px;display:flex;align-items:center;gap:10px;">
+              <span style="font-size:16px;">🔵</span>
+              <span style="font-size:12px;color:rgba(255,255,255,.85);">קחו בקבוק מים</span>
+            </div>
+            <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:10px 14px;display:flex;align-items:center;gap:10px;">
+              <span style="font-size:16px;">⬜</span>
+              <span style="font-size:12px;color:rgba(255,255,255,.5);">שבו על הרצפה הרחק מחלונות</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── EMERGENCY ── -->
+      <div id="screen-emergency" class="screen">
+        <div class="emergency-header">
+          <div class="emergency-header-text">⚠ אזעקה פעילה</div>
+          <div class="emergency-header-sub">היכנסו למרחב המוגן מיידית</div>
+        </div>
+
+        <div class="siren-wrap">
+          <div class="siren-icon">
+            <div class="siren-ring"></div>
+            <div class="siren-ring"></div>
+            <div class="siren-ring"></div>
+            <div class="siren-core">
+              <svg viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            </div>
+          </div>
+          <div class="siren-label">מערכת הגנה פעילה</div>
+        </div>
+
+        <div class="instructions-box">
+          <div class="instructions-title">📋 הוראות בטיחות</div>
+          <ul class="instructions-list">
+            <li><span class="inst-num">1</span>היכנסו למרחב המוגן</li>
+            <li><span class="inst-num">2</span>סגרו את הדלת והחלונות</li>
+            <li><span class="inst-num">3</span>שבו על הרצפה הרחק מחלונות</li>
+            <li><span class="inst-num">4</span>המתינו 10 דקות לאחר האזעקה</span></li>
+          </ul>
+        </div>
+
+        <div class="safe-btn-wrap">
+          <div class="safe-btn-hint">לחצו לאישור הגעה לממ"ד</div>
+          <button class="btn-safe">
+            <span>🛡️ אני בטוח/ה</span>
+          </button>
+          <div style="font-size:10px;color:rgba(255,255,255,.2);text-align:center;line-height:1.5;">
+            לחיצה תעדכן את כל חברי המשפחה<br>בזמן אמת
+          </div>
+        </div>
+      </div>
+
+      <!-- ── GAME ── -->
+      <div id="screen-game" class="screen">
+        <div class="game-header">
+          <div class="game-header-row">
+            <div>
+              <div class="game-title">משחק קבוצתי</div>
+              <div class="game-subtitle">שאלות ידע כללי</div>
+            </div>
+            <div class="game-badge">שאלה 2/10</div>
+          </div>
+        </div>
+
+        <div class="game-body">
+          <div class="game-toggle">
+            <button class="toggle-btn" id="btn-locked" onclick="setGameState('locked')" style="background:rgba(255,255,255,.08);color:#fff;border-color:rgba(255,255,255,.2)">🔒 נעול</button>
+            <button class="toggle-btn" id="btn-unlocked" onclick="setGameState('unlocked')">🔓 פתוח</button>
+          </div>
+
+          <!-- Locked state -->
+          <div id="game-locked" class="locked-panel">
+            <div class="lock-icon-wrap">
+              <svg viewBox="0 0 24 24"><path d="M18 11H6a2 2 0 00-2 2v7a2 2 0 002 2h12a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4"/></svg>
+            </div>
+            <div class="locked-title">ממתין לכולם...</div>
+            <div class="locked-sub">המשחק ייפתח כאשר כל חברי הקבוצה ידווחו שהם בטוחים</div>
+
+            <div class="waiting-members">
+              <div class="wait-member">
+                <div class="wait-avatar done">👩</div>
+                <div class="wait-name">אמא</div>
+              </div>
+              <div class="wait-member">
+                <div class="wait-avatar pending">👨</div>
+                <div class="wait-name">אבא</div>
+              </div>
+              <div class="wait-member">
+                <div class="wait-avatar done">👧</div>
+                <div class="wait-name">שירה</div>
+              </div>
+              <div class="wait-member">
+                <div class="wait-avatar done">👦</div>
+                <div class="wait-name">דניאל</div>
+              </div>
+            </div>
+
+            <div style="font-size:11px;color:rgba(229,62,62,.7);background:rgba(229,62,62,.08);border:1px solid rgba(229,62,62,.2);border-radius:10px;padding:8px 14px;text-align:center;">
+              ⏳ ממתין לאישור של <strong style="color:var(--red)">אבא</strong>
+            </div>
+          </div>
+
+          <!-- Unlocked game -->
+          <div id="game-unlocked" class="unlocked-panel" style="display:none;">
+            <div class="score-bar">
+              <div class="score-player">👩 אמא · 👩 שירה</div>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <div style="font-size:10px;color:var(--gray);">ניקוד</div>
+                <div class="score-val">120</div>
+              </div>
+            </div>
+
+            <div class="question-card">
+              <div class="question-meta">
+                <div class="question-num">שאלה 2 מתוך 10</div>
+                <div class="question-pts">+10 נקודות</div>
+              </div>
+              <div class="question-text">מה צבע ה"כיפת ברזל" — מערכת ההגנה מפני רקטות של ישראל?</div>
+              <div class="answers">
+                <button class="answer-btn correct">
+                  <span class="answer-letter">א</span>
+                  לבן ואפור
+                </button>
+                <button class="answer-btn">
+                  <span class="answer-letter">ב</span>
+                  כחול וזהב
+                </button>
+                <button class="answer-btn">
+                  <span class="answer-letter">ג</span>
+                  שחור
+                </button>
+                <button class="answer-btn">
+                  <span class="answer-letter">ד</span>
+                  ירוק
+                </button>
+              </div>
+            </div>
+
+            <div style="display:flex;gap:8px;align-items:center;justify-content:center;padding:4px 0;">
+              <span style="font-size:11px;color:var(--gray);">👩 אמא ענתה נכון!</span>
+              <span style="font-size:11px;background:rgba(56,161,105,.15);color:var(--green-bright);padding:2px 8px;border-radius:8px;">+10 ✓</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div><!-- /screen-content -->
+
+    <!-- Home indicator -->
+    <div class="home-bar"><div class="home-bar-line"></div></div>
+
+  </div><!-- /phone -->
+</div><!-- /phone-wrap -->
+
+<script>
+  function showScreen(name, btn) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.screen-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('screen-' + name).classList.add('active');
+    btn.classList.add('active');
+  }
+
+  function setGameState(state) {
+    const locked   = document.getElementById('game-locked');
+    const unlocked = document.getElementById('game-unlocked');
+    const btnL = document.getElementById('btn-locked');
+    const btnU = document.getElementById('btn-unlocked');
+    if (state === 'locked') {
+      locked.style.display   = 'flex';
+      unlocked.style.display = 'none';
+      btnL.classList.add('active');
+      btnU.classList.remove('active');
+    } else {
+      locked.style.display   = 'none';
+      unlocked.style.display = 'flex';
+      btnU.classList.add('active');
+      btnL.classList.remove('active');
+    }
+  }
+
+  // Countdown timer simulation
+  let seconds = 443; // 7:23
+  setInterval(() => {
+    if (seconds <= 0) return;
+    seconds--;
+    const m = Math.floor(seconds / 60).toString().padStart(2,'0');
+    const s = (seconds % 60).toString().padStart(2,'0');
+    const el = document.querySelector('.timer-value');
+    if (el) el.textContent = m + ':' + s;
+  }, 1000);
+</script>
+</body>
+</html>
