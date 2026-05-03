@@ -3,14 +3,14 @@ import {
   loginWithUsername,
   logout,
   signUpWithUsername
-} from "./src/gateway/authGateway.js";
+} from "./src/api/authGateway.js";
 import {
   createGroupForCurrentUser,
   deleteOwnedGroup,
   getCurrentUserGroups,
   requestJoinByCode,
   reviewJoinRequest
-} from "./src/gateway/groupGateway.js";
+} from "./src/api/groupGateway.js";
 
 const STORAGE_KEY = "saferTogetherState.v5";
 const EVENT_DURATION_SECONDS = 600;
