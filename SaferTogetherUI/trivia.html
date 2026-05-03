@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SaferTogether - Create Trivia</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-page="trivia">
+<main class="prototype-shell">
+  <section class="phone">
+    <div class="status-bar">
+      <span>09:41</span>
+      <span class="status-icons">5G 100%</span>
+    </div>
+
+    <div class="screen">
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">SAFER TOGETHER</p>
+          <h1>יצירת שאלון</h1>
+        </div>
+      </header>
+      <p class="subtitle form-help">תרשום את השאלה, ארבעת התשובות ולאחר מכן סמן את התשובה הנכונה.</p>
+
+      <form class="form-panel" data-trivia-form>
+        <div class="input-group">
+          <label for="question">רשום את השאלה</label>
+          <textarea class="text-field" id="question" name="question">מה צריך לעשות אחרי שנכנסים למרחב מוגן?</textarea>
+        </div>
+        <div class="input-group">
+          <label for="answerA">רשום תשובה</label>
+          <input class="field" id="answerA" name="answerA" value="לצאת אחרי דקה">
+        </div>
+        <div class="input-group">
+          <label for="answerB">רשום תשובה</label>
+          <input class="field" id="answerB" name="answerB" value="להישאר 10 דקות">
+        </div>
+        <div class="input-group">
+          <label for="answerC">רשום תשובה</label>
+          <input class="field" id="answerC" name="answerC" value="לפתוח חלון">
+        </div>
+        <div class="input-group">
+          <label for="answerD">רשום תשובה</label>
+          <input class="field" id="answerD" name="answerD" value="לעמוד ליד הדלת">
+        </div>
+        <div class="input-group">
+          <label for="correctAnswer">התשובה הנכונה</label>
+          <select class="select-field" id="correctAnswer" name="correctAnswer">
+            <option value="0">תשובה 1</option>
+            <option value="1" selected>תשובה 2</option>
+            <option value="2">תשובה 3</option>
+            <option value="3">תשובה 4</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit">הוספת שאלה נוספת</button>
+      </form>
+
+      <section>
+        <h2>שאלות שנוספו</h2>
+        <div class="added-list" data-question-list></div>
+      </section>
+
+      <div class="button-stack">
+        <button class="btn btn-primary" type="button" data-save-questions>סיום ויצירת שאלון</button>
+        <nav class="bottom-nav" aria-label="ניווט תחתון">
+          <a class="home-round" href="board.html">⌂</a>
+          <a class="settings-round" href="create-activity.html">⚙</a>
+        </nav>
+      </div>
+    </div>
+
+    <div class="home-indicator"></div>
+  </section>
+</main>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

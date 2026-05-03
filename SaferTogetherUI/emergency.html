@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SaferTogether - Emergency Mode</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-page="emergency">
+<main class="prototype-shell">
+  <section class="phone">
+    <div class="status-bar">
+      <span>09:41</span>
+      <span class="status-icons">5G 100%</span>
+    </div>
+
+    <div class="screen danger-screen">
+      <nav class="top-nav" aria-label="ניווט מהיר">
+        <a class="home-round" href="board.html">⌂</a>
+        <a class="settings-round" href="create-activity.html">⚙</a>
+      </nav>
+
+      <section class="big-alert">
+        <p class="eyebrow">SAFER TOGETHER</p>
+        <h1>אזעקת אמת</h1>
+        <p class="subtitle">נא להתמגן ולסמן "אני מוגן"</p>
+      </section>
+
+      <section class="timer-card">
+        <div class="timer-row">
+          <strong>זמן שהייה במרחב מוגן</strong>
+          <span class="timer-value" data-event-timer>10:00</span>
+        </div>
+        <div class="timer-track"><div class="timer-fill" data-event-progress></div></div>
+      </section>
+
+      <button class="btn-safe" type="button" data-emergency-safe>אני מוגן!</button>
+
+      <p class="notice danger" data-emergency-message>ממתין לאישור כל חברי הקבוצה...</p>
+
+      <section>
+        <h2>מצב בני המשפחה</h2>
+        <div class="member-list" data-emergency-family></div>
+      </section>
+    </div>
+
+    <div class="home-indicator"></div>
+  </section>
+</main>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

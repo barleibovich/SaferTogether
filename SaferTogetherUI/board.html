@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SaferTogether - Family Presence Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-page="board">
+<main class="prototype-shell">
+  <section class="phone">
+    <div class="status-bar">
+      <span>09:41</span>
+      <span class="status-icons">5G 100%</span>
+    </div>
+
+    <div class="screen">
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">SAFER TOGETHER</p>
+          <h1 data-active-group-name>&#1492;&#1511;&#1489;&#1493;&#1510;&#1492; &#1513;&#1500;&#1497;</h1>
+        </div>
+        <span class="room-chip" data-active-group-id></span>
+      </header>
+
+      <section class="button-grid" aria-label="Dashboard actions">
+        <a class="btn btn-primary" href="practice.html">&#1514;&#1512;&#1490;&#1493;&#1500;</a>
+        <a class="btn btn-secondary" href="create-activity.html" data-admin-only>&#1497;&#1510;&#1497;&#1512;&#1514; &#1502;&#1513;&#1495;&#1511;&#1493;&#1503;</a>
+        <a class="btn btn-secondary" href="report.html" data-admin-only>&#1491;&#1493;&#1495; &#1505;&#1496;&#1496;&#1497;&#1505;&#1496;&#1497;&#1511;&#1493;&#1514;</a>
+        <button class="btn btn-danger" type="button" data-trigger-emergency>&#1488;&#1494;&#1506;&#1511;&#1514; &#1488;&#1502;&#1514;</button>
+      </section>
+
+      <section class="card board-members-panel" aria-label="Group members">
+        <h2>&#1502;&#1513;&#1514;&#1514;&#1508;&#1497; &#1492;&#1511;&#1489;&#1493;&#1510;&#1492;</h2>
+        <div class="member-list" data-group-members></div>
+      </section>
+
+      <nav class="bottom-nav" aria-label="Bottom navigation">
+        <a class="home-round" href="groups.html">&#8962;</a>
+        <a class="settings-round" href="create-activity.html">&#9881;</a>
+      </nav>
+    </div>
+
+    <div class="home-indicator"></div>
+  </section>
+</main>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

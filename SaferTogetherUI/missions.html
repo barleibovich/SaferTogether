@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SaferTogether - Create Safety Mission</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-page="missions">
+<main class="prototype-shell">
+  <section class="phone">
+    <div class="status-bar">
+      <span>09:41</span>
+      <span class="status-icons">5G 100%</span>
+    </div>
+
+    <div class="screen">
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">SAFER TOGETHER</p>
+          <h1>יצירת משימה</h1>
+        </div>
+      </header>
+      <p class="subtitle form-help">תרשום את תיאור והוראות המשימה ולאחר מכן תוכל להוסיף דוגמא לפתרון המשימה.</p>
+
+      <form class="form-panel" data-mission-form>
+        <div class="input-group">
+          <label for="missionTitle">הוראות המשימה</label>
+          <input class="field" id="missionTitle" name="title" value="סגרו את החלון">
+        </div>
+        <div class="input-group">
+          <label for="missionDescription">תיאור המשימה</label>
+          <textarea class="text-field" id="missionDescription" name="description">ודאו שהחלון סגור לפני שמתיישבים.</textarea>
+        </div>
+        <button class="btn btn-secondary" type="button">הוספת דוגמא</button>
+        <button class="btn btn-primary" type="submit">הוסף משימה</button>
+      </form>
+
+      <section>
+        <h2>משימות</h2>
+        <div class="added-list" data-mission-list></div>
+      </section>
+
+      <div class="button-stack">
+        <button class="btn btn-primary" type="button" data-save-missions>סיום ויצירת משימה</button>
+        <nav class="bottom-nav" aria-label="ניווט תחתון">
+          <a class="home-round" href="board.html">⌂</a>
+          <a class="settings-round" href="create-activity.html">⚙</a>
+        </nav>
+      </div>
+    </div>
+
+    <div class="home-indicator"></div>
+  </section>
+</main>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

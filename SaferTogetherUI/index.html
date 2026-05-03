@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SaferTogether - Login</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-page="login">
+<main class="prototype-shell">
+  <section class="phone">
+    <div class="status-bar">
+      <span>09:41</span>
+      <span class="status-icons">5G 100%</span>
+    </div>
+
+    <div class="screen login-screen">
+      <div class="login-logo">
+        <svg viewBox="0 0 96 96" aria-hidden="true">
+          <path d="M48 7 18 19v25c0 22 13 37 30 45 17-8 30-23 30-45V19L48 7Z" fill="none" stroke="currentColor" stroke-width="5" />
+          <path d="M23 53h13l6-18 10 34 7-24h14" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+          <path d="M43 48V36h18v12" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" />
+        </svg>
+        <div>
+          <strong>SAFER</strong>
+          <span>TOGETHER</span>
+        </div>
+      </div>
+
+      <section class="login-card">
+        <h1>ברוך הבא!</h1>
+        <p>התחבר</p>
+
+        <form class="login-form-new" data-login-form>
+          <input class="login-input" id="username" name="username" type="text" autocomplete="username" placeholder="שם משתמש" value="">
+          <input class="login-input" id="password" name="password" type="password" autocomplete="current-password" placeholder="סיסמא" value="">
+          <button class="login-main-btn" type="submit" data-auth-action="login">LOGIN</button>
+          <a class="login-register-btn" href="signup.html">SIGN UP</a>
+        </form>
+      </section>
+
+      <div class="family-spark" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span>
+        <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+      </div>
+    </div>
+
+    <div class="home-indicator"></div>
+  </section>
+</main>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

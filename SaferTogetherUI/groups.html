@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SaferTogether - Groups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-page="groups">
+<main class="prototype-shell">
+  <section class="phone">
+    <div class="status-bar">
+      <span>09:41</span>
+      <span class="status-icons">5G 100%</span>
+    </div>
+
+    <div class="screen">
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">SAFER TOGETHER</p>
+          <h1>&#1492;&#1511;&#1489;&#1493;&#1510;&#1493;&#1514; &#1513;&#1500;&#1497;</h1>
+        </div>
+      </header>
+
+      <p class="notice" data-current-user></p>
+
+      <form class="form-panel join-team-form hidden" data-join-code-form>
+        <div class="input-group">
+          <label for="joinCode">&#1511;&#1493;&#1491; &#1511;&#1489;&#1493;&#1510;&#1492;</label>
+          <input class="field" id="joinCode" name="code" autocomplete="off" placeholder="ABC123">
+        </div>
+        <button class="btn btn-secondary" type="submit">&#1513;&#1500;&#1497;&#1495;&#1514; &#1489;&#1511;&#1513;&#1492;</button>
+      </form>
+
+      <section class="group-list" data-groups-list aria-label="Group list"></section>
+
+      <a class="btn btn-primary hidden" href="create-group.html" data-admin-create-group>&#1497;&#1510;&#1497;&#1512;&#1514; &#1511;&#1489;&#1493;&#1510;&#1492; &#1495;&#1491;&#1513;&#1492;</a>
+
+      <nav class="bottom-nav" aria-label="Bottom navigation">
+        <a class="home-round" href="groups.html">&#8962;</a>
+        <a class="settings-round" href="index.html" data-logout>&#8617;</a>
+      </nav>
+    </div>
+
+    <div class="home-indicator"></div>
+  </section>
+</main>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

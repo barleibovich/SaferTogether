@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SaferTogether - Practice Mode</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-page="practice">
+<main class="prototype-shell">
+  <section class="phone">
+    <div class="status-bar">
+      <span>09:41</span>
+      <span class="status-icons">5G 100%</span>
+    </div>
+
+    <div class="screen">
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">SAFER TOGETHER</p>
+          <h1>מצב אימון</h1>
+        </div>
+      </header>
+
+      <section class="card" data-practice-intro>
+        <h2>זהו תרגול רגוע.</h2>
+        <p class="subtitle">בצעו את השלבים וסמנו שאתם מוגנים. כך נשמר בסיס התנהגות רגיל להשוואה עתידית.</p>
+        <button class="btn btn-primary" type="button" data-start-practice>התחלת אימון</button>
+      </section>
+
+      <section class="list-stack hidden" data-practice-active>
+        <div class="notice good">האימון התחיל. קראו את ההוראות, סמנו מוגן וענו על הפעילות.</div>
+        <div class="card">
+          <h2>הוראות בטיחות</h2>
+          <ol class="instruction-list">
+            <li>היכנסו למרחב המוגן.</li>
+            <li>סגרו דלת וחלונות.</li>
+            <li>שבו נמוך והרחק מזכוכית.</li>
+            <li>הישארו 10 דקות.</li>
+          </ol>
+        </div>
+        <button class="btn-safe" type="button" data-practice-safe>אני מוגן!</button>
+        <div class="question-card card" data-practice-question></div>
+        <button class="btn btn-primary" type="button" data-complete-practice>סיום אימון</button>
+      </section>
+
+      <section class="summary-card hidden" data-practice-summary></section>
+      <nav class="bottom-nav" aria-label="ניווט תחתון">
+        <a class="home-round" href="board.html">⌂</a>
+        <a class="settings-round" href="create-activity.html">⚙</a>
+      </nav>
+    </div>
+
+    <div class="home-indicator"></div>
+  </section>
+</main>
+<script type="module" src="/app.js"></script>
+</body>
+</html>
