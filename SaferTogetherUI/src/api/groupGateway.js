@@ -36,6 +36,15 @@ export async function reviewJoinRequest({ groupId, requestId, status }) {
   return payload.joinRequest;
 }
 
+// This function renames a group.
+export async function renameGroup(groupId, name) {
+  const payload = await requestJson(`/api/groups/${groupId}`, {
+    body: { name },
+    method: "PATCH"
+  });
+  return payload.group;
+}
+
 // This function deletes a group.
 export async function deleteOwnedGroup(groupId) {
   return requestJson(`/api/groups/${groupId}`, {

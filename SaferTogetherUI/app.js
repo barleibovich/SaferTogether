@@ -8,6 +8,7 @@ import {
   createGroupForCurrentUser,
   deleteOwnedGroup,
   getCurrentUserGroups,
+  renameGroup,
   requestJoinByCode,
   reviewJoinRequest
 } from "./src/api/groupGateway.js";
@@ -559,6 +560,8 @@ async function initBoard() {
   setText("[data-active-group-name]", group.name);
   setText("[data-active-group-id]", group.id);
   renderBoardMembers(group);
+  renderBoardPendingRequests(group);
+
   document.querySelectorAll("[data-admin-only]").forEach(node => {
     node.classList.toggle("hidden", !isCurrentUserAdminForActiveGroup());
   });
@@ -567,6 +570,25 @@ async function initBoard() {
     startEmergency();
     window.location.href = "emergency.html";
   });
+
+  document.querySelector("[data-rename-group]")?.addEventListener("click", async () => {
+    const group = getActiveGroup();
+    const newName = prompt("שם חדש לקבוצה:", group.name);
+    if (!newName || newName.trim() === group.name) return;
+
+    try {
+      await renameGroup(group.id, newName.trim());
+      group.name = newName.trim();
+      saveState();
+      setText("[data-active-group-name]", group.name);
+    } catch {
+      alert("שגיאה בשינוי שם הקבוצה");
+    }
+  });
+
+  if (isCurrentUserAdminForActiveGroup()) {
+    startBoardRequestsPolling();
+  }
 }
 
 function getActiveGroup() {
@@ -596,6 +618,92 @@ function renderBoardMembers(group) {
       </div>
     </article>
   `).join("");
+}
+
+// This function shows pending join requests for the active group on the board.
+function renderBoardPendingRequests(group) {
+  const container = document.querySelector("[data-pending-requests-list]");
+  if (!container || !group) return;
+
+  if (!group.pendingRequests?.length) {
+    container.innerHTML = `<p class="notice">אין בקשות ממתינות.</p>`;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="join-request-list">
+      ${group.pendingRequests.map(request => `
+        <div class="join-request-card">
+          <p>${escapeHtml(request.username || "משתמש")} מבקש להצטרף לקבוצה.</p>
+          <div class="join-request-actions">
+            <button class="btn btn-primary" type="button"
+              data-group-id="${group.id}"
+              data-request-id="${request.id}"
+              data-board-review="approved">אשר</button>
+            <button class="btn btn-secondary" type="button"
+              data-group-id="${group.id}"
+              data-request-id="${request.id}"
+              data-board-review="declined">דחה</button>
+          </div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+
+  container.querySelectorAll("[data-board-review]").forEach(button => {
+    button.addEventListener("click", async () => {
+      try {
+        button.disabled = true;
+        button.closest(".join-request-actions")
+          ?.querySelectorAll("button")
+          .forEach(btn => { btn.disabled = true; });
+
+        await reviewJoinRequest({
+          groupId: button.dataset.groupId,
+          requestId: button.dataset.requestId,
+          status: button.dataset.boardReview
+        });
+
+        await refreshCurrentUserGroups("admin");
+        saveState();
+        renderBoardPendingRequests(getActiveGroup());
+        renderBoardMembers(getActiveGroup());
+      } catch (error) {
+        alert(readableAuthError(error));
+        button.disabled = false;
+        button.closest(".join-request-actions")
+          ?.querySelectorAll("button")
+          .forEach(btn => { btn.disabled = false; });
+      }
+    });
+  });
+}
+
+// This function polls the server every 15 seconds to pick up new join requests.
+function startBoardRequestsPolling() {
+  const INTERVAL_MS = 15000;
+  let previousCount = getActiveGroup()?.pendingRequests?.length ?? 0;
+
+  const intervalId = setInterval(async () => {
+    if (document.hidden) return;
+
+    try {
+      await refreshCurrentUserGroups("admin");
+      saveState();
+
+      const group = getActiveGroup();
+      const newCount = group?.pendingRequests?.length ?? 0;
+
+      if (newCount !== previousCount) {
+        previousCount = newCount;
+        renderBoardPendingRequests(group);
+      }
+    } catch {
+      // silent — next tick will retry
+    }
+  }, INTERVAL_MS);
+
+  window.addEventListener("beforeunload", () => clearInterval(intervalId));
 }
 
 function initTrivia() {
