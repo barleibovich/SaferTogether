@@ -583,6 +583,33 @@ async function updateOwnedGroup(accessToken, groupId, { name, description }) {
   return mapGroup(group, "admin");
 }
 
+async function leaveGroup(accessToken, groupId) {
+  const context = await getSessionContext(accessToken);
+
+  const { data: group, error: groupError } = await context.client
+    .from("groups")
+    .select("id, created_by")
+    .eq("id", groupId)
+    .maybeSingle();
+
+  if (groupError) throw groupError;
+  if (!group) throw httpError(404, "Group not found");
+
+  if (group.created_by === context.user.id) {
+    throw httpError(403, "Group admins cannot leave their own group — delete the group instead");
+  }
+
+  const { error: deleteError } = await context.client
+    .from("user_groups")
+    .delete()
+    .eq("group_id", groupId)
+    .eq("user_id", context.user.id);
+
+  if (deleteError) throw deleteError;
+
+  return { success: true };
+}
+
 // This function deletes a group that belongs to the current admin.
 async function deleteOwnedGroup(accessToken, groupId) {
   const context = await requireAdminContext(accessToken);
@@ -623,6 +650,7 @@ module.exports = {
   createGroupForCurrentUser,
   deleteOwnedGroup,
   getVisibleGroups,
+  leaveGroup,
   requestJoinByCode,
   reviewJoinRequest,
   updateOwnedGroup

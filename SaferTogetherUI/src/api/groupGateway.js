@@ -51,3 +51,10 @@ export async function deleteOwnedGroup(groupId) {
     method: "DELETE"
   });
 }
+
+// This function lets a member leave a group.
+export async function leaveGroup(groupId) {
+  return requestJson(`/api/groups/${groupId}/members/me`, {
+    method: "DELETE"
+  });
+}

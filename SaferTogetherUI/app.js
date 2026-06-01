@@ -8,6 +8,7 @@ import {
   createGroupForCurrentUser,
   deleteOwnedGroup,
   getCurrentUserGroups,
+  leaveGroup,
   renameGroup,
   requestJoinByCode,
   reviewJoinRequest
@@ -874,7 +875,7 @@ async function requireAdminAccess() {
 // This function renders the current user summary text.
 function renderCurrentUserSummary(node) {
   if (!node || !state.user) return;
-  node.textContent = `Logged in as ${state.user.username || state.user.name} (${state.user.role})`;
+  node.textContent = `היי ${state.user.username || state.user.name}, כיף שחזרת!`;
 }
 
 // This function renders the current user's avatar preview.
@@ -1086,8 +1087,66 @@ async function initGroups() {
 
   renderGroupsList();
   initUnityAvatarLaunch();
+
+  const memberPanel = document.querySelector("[data-member-group-panel]");
+  const leaveConfirmDialog = document.querySelector("[data-leave-confirm-dialog]");
+  const leaveGroupBtn = document.querySelector("[data-leave-group-btn]");
+  const leaveConfirmYes = document.querySelector("[data-leave-confirm-yes]");
+  const leaveConfirmNo = document.querySelector("[data-leave-confirm-no]");
+  const leaveGroupError = document.querySelector("[data-leave-group-error]");
+  const memberGroupDisplay = document.querySelector("[data-member-group-display]");
+
+  const isMember = user.role !== "admin" && state.groups.length > 0;
+
   createButton?.classList.toggle("hidden", user.role !== "admin");
-  joinForm?.classList.toggle("hidden", user.role === "admin");
+  joinForm?.classList.toggle("hidden", user.role === "admin" || isMember);
+  memberPanel?.classList.toggle("hidden", !isMember);
+  document.querySelector("[data-groups-list]")?.classList.toggle("hidden", isMember);
+
+  if (isMember && memberGroupDisplay) {
+    const activeGroup = state.groups.find(g => g.id === state.activeGroupId) || state.groups[0];
+    memberGroupDisplay.innerHTML = `
+      <article class="group-entry">
+        <div class="group-card">
+          <button class="group-card-main" type="button" data-open-group="${activeGroup.id}">
+            <span class="group-icon">.</span>
+            <span>
+              <strong>${escapeHtml(activeGroup.name)}</strong>
+              <small>Member</small>
+            </span>
+          </button>
+        </div>
+      </article>`;
+    memberGroupDisplay.querySelector("[data-open-group]")?.addEventListener("click", () => openGroup(activeGroup.id));
+  }
+
+  leaveGroupBtn?.addEventListener("click", () => {
+    leaveConfirmDialog?.classList.remove("hidden");
+  });
+
+  leaveConfirmNo?.addEventListener("click", () => {
+    leaveConfirmDialog?.classList.add("hidden");
+  });
+
+  leaveConfirmYes?.addEventListener("click", async () => {
+    const activeGroup = state.groups.find(g => g.id === state.activeGroupId) || state.groups[0];
+    if (!activeGroup) return;
+    if (leaveGroupError) leaveGroupError.classList.add("hidden");
+    if (leaveConfirmYes) leaveConfirmYes.disabled = true;
+    try {
+      await leaveGroup(activeGroup.id);
+      await refreshCurrentUserGroups("user");
+      saveState();
+      window.location.reload();
+    } catch (error) {
+      if (leaveGroupError) {
+        leaveGroupError.textContent = readableAuthError(error);
+        leaveGroupError.classList.remove("hidden");
+      }
+      if (leaveConfirmYes) leaveConfirmYes.disabled = false;
+      leaveConfirmDialog?.classList.add("hidden");
+    }
+  });
 
   joinForm?.addEventListener("submit", async event => {
     event.preventDefault();

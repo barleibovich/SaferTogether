@@ -8,6 +8,7 @@ const {
   createGroupForCurrentUser,
   deleteOwnedGroup,
   getVisibleGroups,
+  leaveGroup,
   requestJoinByCode,
   reviewJoinRequest,
   updateOwnedGroup
@@ -18,6 +19,7 @@ async function handleGroupRoute(request, response, pathname) {
   const accessToken = getAccessTokenFromRequest(request);
   const groupMatch = pathname.match(/^\/api\/groups\/([^/]+)$/);
   const joinRequestMatch = pathname.match(/^\/api\/groups\/([^/]+)\/join-requests\/([^/]+)$/);
+  const leaveMemberMatch = pathname.match(/^\/api\/groups\/([^/]+)\/members\/me$/);
 
   try {
     if (pathname === "/api/groups" && request.method === "GET") {
@@ -56,6 +58,12 @@ async function handleGroupRoute(request, response, pathname) {
       const body = await readJsonBody(request);
       const group = await updateOwnedGroup(accessToken, groupMatch[1], body);
       sendJson(response, 200, { group });
+      return true;
+    }
+
+    if (leaveMemberMatch && request.method === "DELETE") {
+      const result = await leaveGroup(accessToken, leaveMemberMatch[1]);
+      sendJson(response, 200, result);
       return true;
     }
 
