@@ -58,3 +58,13 @@ export async function leaveGroup(groupId) {
     method: "DELETE"
   });
 }
+
+// This function starts a drill for the given group (admin only).
+export async function startDrill(groupId) {
+  return requestJson(`/api/groups/${groupId}/drill`, { method: "POST" });
+}
+
+// This function ends an active drill for the given group (admin only).
+export async function endDrill(groupId) {
+  return requestJson(`/api/groups/${groupId}/drill`, { method: "DELETE" });
+}

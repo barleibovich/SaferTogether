@@ -1,6 +1,18 @@
+const SESSION_TOKEN_KEY = "saferTogetherToken.v1";
+
+export function setSessionToken(token) {
+  if (token) {
+    sessionStorage.setItem(SESSION_TOKEN_KEY, token);
+  } else {
+    sessionStorage.removeItem(SESSION_TOKEN_KEY);
+  }
+}
+
 // This function sends a JSON request and returns the parsed JSON response.
 async function requestJson(path, options = {}) {
+  const token = sessionStorage.getItem(SESSION_TOKEN_KEY);
   const headers = {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.headers || {})
   };
 

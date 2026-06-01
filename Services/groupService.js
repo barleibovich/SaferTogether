@@ -11,6 +11,8 @@ function createJoinCode() {
 // This function changes a group from the database to the format the UI uses.
 function mapGroup(group, role, pendingRequests = [], members = []) {
   return {
+    drillActive: group.drill_active || false,
+    drillStartedAt: group.drill_started_at || null,
     id: group.id,
     joinCode: group.join_code || "",
     members,
@@ -220,7 +222,7 @@ async function getVisibleGroups(accessToken) {
   if (context.profile.role === "admin") {
     const { data: ownedGroups, error } = await context.client
       .from("groups")
-      .select("id, name, description, created_by, join_code")
+      .select("id, name, description, created_by, join_code, drill_active, drill_started_at")
       .eq("created_by", context.user.id)
       .order("created_at", { ascending: false });
 
@@ -236,7 +238,9 @@ async function getVisibleGroups(accessToken) {
           name,
           description,
           created_by,
-          join_code
+          join_code,
+          drill_active,
+          drill_started_at
         )
       `)
       .eq("user_id", context.user.id);
@@ -295,7 +299,9 @@ async function getVisibleGroups(accessToken) {
         name,
         description,
         created_by,
-        join_code
+        join_code,
+        drill_active,
+        drill_started_at
       )
     `)
     .eq("user_id", context.user.id);
@@ -646,12 +652,46 @@ async function deleteOwnedGroup(accessToken, groupId) {
   return { success: true };
 }
 
+// This function starts a drill for a group (admin only).
+async function startGroupDrill(accessToken, groupId) {
+  const context = await requireAdminContext(accessToken);
+  await getManageableGroupRecord(context.client, context.user.id, groupId);
+
+  const { data: group, error } = await context.client
+    .from("groups")
+    .update({ drill_active: true, drill_started_at: new Date().toISOString() })
+    .eq("id", groupId)
+    .select("id, name, description, created_by, join_code, drill_active, drill_started_at")
+    .single();
+
+  if (error) throw error;
+  return mapGroup(group, "admin");
+}
+
+// This function ends a drill for a group (admin only).
+async function endGroupDrill(accessToken, groupId) {
+  const context = await requireAdminContext(accessToken);
+  await getManageableGroupRecord(context.client, context.user.id, groupId);
+
+  const { data: group, error } = await context.client
+    .from("groups")
+    .update({ drill_active: false, drill_started_at: null })
+    .eq("id", groupId)
+    .select("id, name, description, created_by, join_code, drill_active, drill_started_at")
+    .single();
+
+  if (error) throw error;
+  return mapGroup(group, "admin");
+}
+
 module.exports = {
   createGroupForCurrentUser,
   deleteOwnedGroup,
+  endGroupDrill,
   getVisibleGroups,
   leaveGroup,
   requestJoinByCode,
   reviewJoinRequest,
+  startGroupDrill,
   updateOwnedGroup
 };

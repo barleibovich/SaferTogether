@@ -27,7 +27,8 @@
       </header>
 
       <section class="button-grid" aria-label="Dashboard actions">
-        <a class="btn btn-primary" href="practice.html">&#1514;&#1512;&#1490;&#1493;&#1500;</a>
+        <button class="btn btn-primary" type="button" data-start-drill data-admin-only>&#1514;&#1512;&#1490;&#1493;&#1500;</button>
+        <a class="btn btn-primary hidden" href="practice.html" data-member-drill-link>&#1514;&#1512;&#1490;&#1493;&#1500;</a>
         <a class="btn btn-secondary" href="create-activity.html" data-admin-only>&#1497;&#1510;&#1497;&#1512;&#1514; &#1502;&#1513;&#1495;&#1511;&#1493;&#1503;</a>
         <a class="btn btn-secondary" href="report.html" data-admin-only>&#1491;&#1493;&#1495; &#1505;&#1496;&#1496;&#1497;&#1505;&#1496;&#1497;&#1511;&#1493;&#1514;</a>
         <button class="btn btn-secondary" type="button" data-rename-group data-admin-only>&#1513;&#1497;&#1504;&#1493;&#1497; &#1513;&#1501; &#1511;&#1489;&#1493;&#1510;&#1492;</button>
@@ -59,6 +60,14 @@
         <a class="home-round" href="groups.html">&#8962;</a>
         <a class="settings-round" href="create-activity.html">&#9881;</a>
       </nav>
+
+      <div class="drill-overlay hidden" data-drill-overlay aria-live="polite">
+        <div class="drill-overlay-content">
+          <p class="drill-overlay-icon">🔔</p>
+          <h2>תרגול התחיל!</h2>
+          <p class="subtitle">ה-admin הפעיל תרגול. עוברים למצב אימון...</p>
+        </div>
+      </div>
     </div>
 
     <div class="home-indicator"></div>

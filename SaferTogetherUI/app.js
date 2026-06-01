@@ -7,11 +7,13 @@ import {
 import {
   createGroupForCurrentUser,
   deleteOwnedGroup,
+  endDrill,
   getCurrentUserGroups,
   leaveGroup,
   renameGroup,
   requestJoinByCode,
-  reviewJoinRequest
+  reviewJoinRequest,
+  startDrill
 } from "./src/api/groupGateway.js";
 import {
   getGroupOrefStatus,
@@ -194,19 +196,19 @@ function copy(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-// This function loads saved app state from local storage.
+// This function loads saved app state from session storage.
 function loadState() {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved = sessionStorage.getItem(STORAGE_KEY);
     return saved ? { ...initialState(), ...JSON.parse(saved) } : initialState();
   } catch {
     return initialState();
   }
 }
 
-// This function saves the current app state to local storage.
+// This function saves the current app state to session storage.
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
 // This function stores an avatar coming back from Unity so signup can use it before an account exists.
@@ -218,7 +220,7 @@ function syncSignupAvatarDraftFromUrl() {
     return;
   }
 
-  localStorage.setItem(SIGNUP_AVATAR_KEY, avatar);
+  sessionStorage.setItem(SIGNUP_AVATAR_KEY, avatar);
   params.delete("avatar");
   const query = params.toString();
   const cleanUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
@@ -704,14 +706,14 @@ function initSignup() {
     const username = formData.get("username")?.toString() || "";
     const password = formData.get("password")?.toString() || "";
     const role = formData.get("role")?.toString() === "admin" ? "admin" : "user";
-    const avatar = normalizeAvatar(localStorage.getItem(SIGNUP_AVATAR_KEY), username);
+    const avatar = normalizeAvatar(sessionStorage.getItem(SIGNUP_AVATAR_KEY), username);
 
     try {
       setFormBusy(form, true);
       await signUpWithUsername({ avatar, username, password, role });
       await loadSessionIntoState();
       saveState();
-      localStorage.removeItem(SIGNUP_AVATAR_KEY);
+      sessionStorage.removeItem(SIGNUP_AVATAR_KEY);
       showFormSuccess(form, "Saved successfully");
       window.setTimeout(() => {
         window.location.href = "groups.html";
@@ -1032,7 +1034,7 @@ function sendWebSessionToUnity(unityInstance, profile) {
   const payload = {
     gatewayBaseUrl: window.location.origin,
     returnUrl: safeUnityReturnUrl(profile),
-    draftAvatar: localStorage.getItem(SIGNUP_AVATAR_KEY) || "",
+    draftAvatar: sessionStorage.getItem(SIGNUP_AVATAR_KEY) || "",
     profile
   };
 
@@ -1053,7 +1055,7 @@ function wireLogoutLink() {
     }
 
     state = initialState();
-    localStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem(STORAGE_KEY);
     window.location.href = "index.html";
   });
 }
@@ -1175,7 +1177,7 @@ async function initGroups() {
       console.warn(readableAuthError(error));
     }
     state = initialState();
-    localStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem(STORAGE_KEY);
     window.location.href = "index.html";
   });
 }
@@ -1325,6 +1327,25 @@ async function initBoard() {
   document.querySelectorAll("[data-admin-only]").forEach(node => {
     node.classList.toggle("hidden", !isCurrentUserAdminForActiveGroup());
   });
+
+  const isAdmin = isCurrentUserAdminForActiveGroup();
+
+  if (isAdmin) {
+    document.querySelector("[data-start-drill]")?.addEventListener("click", async () => {
+      const group = getActiveGroup();
+      if (!group) return;
+      try {
+        await startDrill(group.id);
+        window.location.href = "practice.html";
+      } catch (error) {
+        console.error("startDrill failed:", error);
+        alert("שגיאה בהפעלת התרגול");
+      }
+    });
+  } else {
+    startDrillPolling();
+    startMembersPolling();
+  }
 
   document.querySelector("[data-trigger-emergency]")?.addEventListener("click", () => {
     startEmergency();
@@ -1485,7 +1506,7 @@ function renderBoardPendingRequests(group) {
   });
 }
 
-// This function polls the server every 15 seconds to pick up new join requests.
+// This function polls the server every 15 seconds to pick up new join requests and member changes.
 function startBoardRequestsPolling() {
   const INTERVAL_MS = 15000;
   let previousCount = getActiveGroup()?.pendingRequests?.length ?? 0;
@@ -1504,12 +1525,63 @@ function startBoardRequestsPolling() {
         previousCount = newCount;
         renderBoardPendingRequests(group);
       }
+
+      renderBoardMembers(group);
     } catch {
       // This retry loop lets the next poll recover from a transient request error.
     }
   }, INTERVAL_MS);
 
   window.addEventListener("beforeunload", () => clearInterval(intervalId));
+}
+
+// This function polls the server every 15 seconds so regular members see up-to-date member locations and avatars.
+function startMembersPolling() {
+  const INTERVAL_MS = 15000;
+
+  const intervalId = setInterval(async () => {
+    if (document.hidden) return;
+    try {
+      await refreshCurrentUserGroups("user");
+      saveState();
+      renderBoardMembers(getActiveGroup());
+    } catch {
+      // silently ignore polling errors
+    }
+  }, INTERVAL_MS);
+
+  window.addEventListener("beforeunload", () => clearInterval(intervalId));
+}
+
+// This function polls the server every 5 seconds to detect when an admin starts a drill.
+function startDrillPolling() {
+  const INTERVAL_MS = 5000;
+
+  const intervalId = setInterval(async () => {
+    if (document.hidden) return;
+    try {
+      const groups = await getCurrentUserGroups();
+      const activeGroupId = getActiveGroup()?.id;
+      const group = (groups || []).find(g => g.id === activeGroupId);
+      if (group?.drillActive) {
+        clearInterval(intervalId);
+        showDrillOverlay();
+      }
+    } catch {
+      // silently ignore polling errors
+    }
+  }, INTERVAL_MS);
+}
+
+// This function shows the drill overlay and redirects to practice after a short delay.
+function showDrillOverlay() {
+  const overlay = document.querySelector("[data-drill-overlay]");
+  if (overlay) {
+    overlay.classList.remove("hidden");
+  }
+  setTimeout(() => {
+    window.location.href = "practice.html";
+  }, 3000);
 }
 
 // This function starts automatic GPS alert-area matching for the current user.
