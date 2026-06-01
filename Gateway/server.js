@@ -4,16 +4,21 @@ const path = require("path");
 const { getConfig } = require("../Services/configService");
 const { handleAuthRoute } = require("./routes/authRoutes");
 const { handleGroupRoute } = require("./routes/groupRoutes");
+const { handleOrefRoute } = require("./routes/orefRoutes");
 
 const mimeTypes = {
+  ".br": "application/octet-stream",
   ".css": "text/css; charset=utf-8",
+  ".data": "application/octet-stream",
+  ".gz": "application/octet-stream",
   ".html": "text/html; charset=utf-8",
   ".jpeg": "image/jpeg",
   ".jpg": "image/jpeg",
   ".js": "application/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".png": "image/png",
-  ".svg": "image/svg+xml"
+  ".svg": "image/svg+xml",
+  ".wasm": "application/wasm"
 };
 
 // This function sends API requests to the matching route handler.
@@ -26,7 +31,31 @@ async function handleApiRoute(request, response, pathname) {
     return true;
   }
 
+  if (await handleOrefRoute(request, response, pathname)) {
+    return true;
+  }
+
   return false;
+}
+
+// This function returns the content type for regular and compressed static files.
+function getStaticContentType(filePath) {
+  const normalizedPath = filePath.replace(/\.(br|gz)$/i, "");
+  const extension = path.extname(normalizedPath).toLowerCase();
+  return mimeTypes[extension] || "application/octet-stream";
+}
+
+// This function returns the browser content encoding for compressed Unity files.
+function getStaticContentEncoding(filePath) {
+  if (filePath.endsWith(".br")) {
+    return "br";
+  }
+
+  if (filePath.endsWith(".gz")) {
+    return "gzip";
+  }
+
+  return "";
 }
 
 // This function serves static files from the frontend folder.
@@ -50,10 +79,17 @@ function serveStaticFile(request, response) {
       return;
     }
 
-    const extension = path.extname(filePath).toLowerCase();
-    response.writeHead(200, {
-      "Content-Type": mimeTypes[extension] || "application/octet-stream"
-    });
+    const headers = {
+      "Content-Length": data.length,
+      "Content-Type": getStaticContentType(filePath)
+    };
+    const contentEncoding = getStaticContentEncoding(filePath);
+
+    if (contentEncoding) {
+      headers["Content-Encoding"] = contentEncoding;
+    }
+
+    response.writeHead(200, headers);
     response.end(data);
   });
 }
@@ -76,28 +112,23 @@ function createServer() {
   });
 }
 
-// This function starts the server on an open port.
+// This function starts the server on the configured port only.
 function startServer() {
   const { port } = getConfig();
   const server = createServer();
 
-  // This function retries the server with the next port if needed.
-  function listen(nextPort, attemptsLeft = 20) {
-    server.once("error", error => {
-      if (error.code === "EADDRINUSE" && attemptsLeft > 0) {
-        listen(nextPort + 1, attemptsLeft - 1);
-        return;
-      }
+  server.once("error", error => {
+    if (error.code === "EADDRINUSE") {
+      console.error(`Port ${port} is already in use. Stop the existing gateway before starting a new one.`);
+      process.exit(1);
+    }
 
-      throw error;
-    });
+    throw error;
+  });
 
-    server.listen(nextPort, () => {
-      console.log(`SaferTogether gateway running at http://localhost:${nextPort}`);
-    });
-  }
-
-  listen(port);
+  server.listen(port, () => {
+    console.log(`SaferTogether gateway running at http://localhost:${port}`);
+  });
 }
 
 module.exports = {

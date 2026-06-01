@@ -1,4 +1,6 @@
 const { httpError } = require("./errors");
+const { normalizeAvatar } = require("./avatarService");
+const { getLocationsForUsers } = require("./memberLocationService");
 const { getSessionContext } = require("./supabaseService");
 
 // This function creates a short code for joining a group.
@@ -29,13 +31,12 @@ async function requireAdminContext(accessToken) {
   return context;
 }
 
-// This function gets one group that belongs to the current admin.
-async function getOwnedGroupRecord(client, userId, groupId) {
+// This function checks whether an admin can manage one group.
+async function getManageableGroupRecord(client, userId, groupId) {
   const { data, error } = await client
     .from("groups")
     .select("id, name, description, created_by, join_code")
     .eq("id", groupId)
-    .eq("created_by", userId)
     .maybeSingle();
 
   if (error) {
@@ -46,7 +47,37 @@ async function getOwnedGroupRecord(client, userId, groupId) {
     throw httpError(404, "Group not found");
   }
 
+  if (data.created_by === userId) {
+    return data;
+  }
+
+  const { data: membership, error: membershipError } = await client
+    .from("user_groups")
+    .select("group_id")
+    .eq("group_id", groupId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (membershipError) {
+    throw membershipError;
+  }
+
+  if (!membership) {
+    throw httpError(404, "Group not found");
+  }
+
   return data;
+}
+
+// This function gets one group that belongs to the current admin.
+async function getOwnedGroupRecord(client, userId, groupId) {
+  const group = await getManageableGroupRecord(client, userId, groupId);
+
+  if (group.created_by !== userId) {
+    throw httpError(404, "Group not found");
+  }
+
+  return group;
 }
 
 // This function gets the pending requests for admin groups.
@@ -75,11 +106,35 @@ async function getPendingRequests(client, groupIds) {
   }));
 }
 
+// This function reads profile rows when they are visible through the active RLS policies.
+async function getProfilesById(client, userIds) {
+  const ids = [...new Set((userIds || []).filter(Boolean))];
+
+  if (!ids.length) {
+    return new Map();
+  }
+
+  const { data, error } = await client
+    .from("profiles")
+    .select("*")
+    .in("id", ids);
+
+  if (error) {
+    return new Map();
+  }
+
+  return new Map((data || []).map(profile => [profile.id, profile]));
+}
+
 // This function gets the members of the groups.
-async function getGroupMembers(client, groupIds) {
+async function getGroupMembers(client, groups, currentUser, currentProfile) {
+  const groupIds = (groups || []).map(group => group.id).filter(Boolean);
+
   if (!groupIds.length) {
     return [];
   }
+
+  const ownerByGroupId = new Map((groups || []).map(group => [group.id, group.created_by]));
 
   const { data, error } = await client
     .from("user_groups")
@@ -90,11 +145,72 @@ async function getGroupMembers(client, groupIds) {
     throw error;
   }
 
-  return (data || []).map(member => ({
-    groupId: member.group_id,
-    id: member.user_id,
-    username: member.member_username || "User"
-  }));
+  const locationMap = await getLocationsForUsers(
+    client,
+    (data || []).map(member => member.user_id)
+  );
+  const profileMap = await getProfilesById(
+    client,
+    (data || []).map(member => member.user_id)
+  );
+
+  return (data || []).map(member => {
+    const profile = profileMap.get(member.user_id);
+    const username = member.member_username || profile?.username || "User";
+    const isCurrentUser = member.user_id === currentUser?.id;
+    const isGroupOwner = member.user_id === ownerByGroupId.get(member.group_id);
+    const avatar = isCurrentUser
+      ? (currentUser?.user_metadata?.avatar || currentProfile.avatar)
+      : profile?.avatar;
+
+    return {
+      alertLocation: locationMap.get(member.user_id) || null,
+      avatar: normalizeAvatar(avatar, username),
+      groupId: member.group_id,
+      id: member.user_id,
+      role: isGroupOwner ? "admin" : (profile?.role || (isCurrentUser ? currentProfile.role : "user")),
+      username
+    };
+  });
+}
+
+// This function adds a group owner as a visible admin member when old groups are missing that row.
+async function addMissingGroupOwnersAsMembers(client, groups, members, currentUser, currentProfile) {
+  const existingMemberships = new Set(
+    (members || []).map(member => `${member.groupId}:${member.id}`)
+  );
+  const missingOwnerGroups = (groups || []).filter(group => (
+    group.created_by && !existingMemberships.has(`${group.id}:${group.created_by}`)
+  ));
+
+  if (!missingOwnerGroups.length) {
+    return members;
+  }
+
+  const ownerIds = missingOwnerGroups.map(group => group.created_by);
+  const profileMap = await getProfilesById(client, ownerIds);
+  const locationMap = await getLocationsForUsers(client, ownerIds);
+  const ownerMembers = missingOwnerGroups.map(group => {
+    const isCurrentUser = group.created_by === currentUser?.id;
+    const profile = profileMap.get(group.created_by);
+    const username = isCurrentUser
+      ? currentProfile.username
+      : (profile?.username || "Admin");
+
+    return {
+      alertLocation: locationMap.get(group.created_by) || null,
+      avatar: normalizeAvatar(
+        isCurrentUser ? (currentUser?.user_metadata?.avatar || currentProfile.avatar) : profile?.avatar,
+        username
+      ),
+      groupId: group.id,
+      id: group.created_by,
+      role: "admin",
+      username
+    };
+  });
+
+  return [...members, ...ownerMembers];
 }
 
 // This function gets the groups of the current user.
@@ -102,7 +218,7 @@ async function getVisibleGroups(accessToken) {
   const context = await getSessionContext(accessToken);
 
   if (context.profile.role === "admin") {
-    const { data, error } = await context.client
+    const { data: ownedGroups, error } = await context.client
       .from("groups")
       .select("id, name, description, created_by, join_code")
       .eq("created_by", context.user.id)
@@ -112,10 +228,49 @@ async function getVisibleGroups(accessToken) {
       throw error;
     }
 
-    const groups = data || [];
-    const members = await getGroupMembers(
+    const { data: memberRows, error: memberGroupsError } = await context.client
+      .from("user_groups")
+      .select(`
+        groups (
+          id,
+          name,
+          description,
+          created_by,
+          join_code
+        )
+      `)
+      .eq("user_id", context.user.id);
+
+    if (memberGroupsError) {
+      throw memberGroupsError;
+    }
+
+    const groupsById = new Map();
+
+    (ownedGroups || []).forEach(group => {
+      groupsById.set(group.id, group);
+    });
+
+    (memberRows || [])
+      .map(row => row.groups)
+      .filter(Boolean)
+      .forEach(group => {
+        groupsById.set(group.id, group);
+      });
+
+    const groups = Array.from(groupsById.values());
+    const rawMembers = await getGroupMembers(
       context.client,
-      groups.map(group => group.id)
+      groups,
+      context.user,
+      context.profile
+    );
+    const members = await addMissingGroupOwnersAsMembers(
+      context.client,
+      groups,
+      rawMembers,
+      context.user,
+      context.profile
     );
     const pendingRequests = await getPendingRequests(
       context.client,
@@ -150,9 +305,18 @@ async function getVisibleGroups(accessToken) {
   }
 
   const groups = (data || []).map(row => row.groups).filter(Boolean);
-  const members = await getGroupMembers(
+  const rawMembers = await getGroupMembers(
     context.client,
-    groups.map(group => group.id)
+    groups,
+    context.user,
+    context.profile
+  );
+  const members = await addMissingGroupOwnersAsMembers(
+    context.client,
+    groups,
+    rawMembers,
+    context.user,
+    context.profile
   );
 
   return groups.map(group => (
@@ -253,77 +417,38 @@ async function requestJoinByCode(accessToken, { code }) {
     throw requestError;
   }
 
+  const requestPayload = {
+    group_id: group.id,
+    requested_username: context.profile.username,
+    status: "pending",
+    user_id: context.user.id
+  };
+
   if (existingRequest?.status === "pending") {
     throw httpError(400, "You already sent a request");
-  }
-
-  if (existingRequest?.status === "declined") {
-    const { error: deleteError } = await context.client
-      .from("group_join_requests")
-      .delete()
-      .eq("id", existingRequest.id);
-
-    if (deleteError) {
-      throw deleteError;
-    }
   }
 
   if (existingRequest?.status === "approved") {
     throw httpError(400, "You are already in this group");
   }
 
-  const requestPayload = {
-    group_id: group.id,
-    requested_username: context.profile.username,
-    user_id: context.user.id
-  };
-
-  const { error: insertError } = await context.client
-    .from("group_join_requests")
-    .insert(requestPayload);
-
-  if (insertError?.code === "23505") {
-    const { data: duplicateRequest, error: duplicateError } = await context.client
+  if (existingRequest?.status === "declined") {
+    const { error: updateError } = await context.client
       .from("group_join_requests")
-      .select("id, status")
-      .eq("group_id", group.id)
-      .eq("user_id", context.user.id)
-      .maybeSingle();
+      .update({ requested_username: context.profile.username, status: "pending" })
+      .eq("id", existingRequest.id);
 
-    if (duplicateError) {
-      throw duplicateError;
+    if (updateError) {
+      throw updateError;
     }
+  } else {
+    const { error: insertError } = await context.client
+      .from("group_join_requests")
+      .insert(requestPayload);
 
-    if (duplicateRequest?.status === "pending") {
-      throw httpError(400, "You already sent a request");
+    if (insertError) {
+      throw insertError;
     }
-
-    if (duplicateRequest?.status === "approved") {
-      throw httpError(400, "You are already in this group");
-    }
-
-    if (duplicateRequest?.status === "declined") {
-      const { error: deleteError } = await context.client
-        .from("group_join_requests")
-        .delete()
-        .eq("id", duplicateRequest.id);
-
-      if (deleteError) {
-        throw deleteError;
-      }
-
-      const { error: retryError } = await context.client
-        .from("group_join_requests")
-        .insert(requestPayload);
-
-      if (retryError) {
-        throw retryError;
-      }
-    }
-  }
-
-  if (insertError) {
-    throw insertError;
   }
 
   return {
@@ -341,7 +466,7 @@ async function reviewJoinRequest(accessToken, groupId, requestId, { status }) {
     throw httpError(400, "Invalid request status");
   }
 
-  await getOwnedGroupRecord(context.client, context.user.id, groupId);
+  await getManageableGroupRecord(context.client, context.user.id, groupId);
 
   const { data: request, error: requestError } = await context.client
     .from("group_join_requests")
@@ -427,7 +552,7 @@ async function reviewJoinRequest(accessToken, groupId, requestId, { status }) {
 // This function updates a group that belongs to the current admin.
 async function updateOwnedGroup(accessToken, groupId, { name, description }) {
   const context = await requireAdminContext(accessToken);
-  await getOwnedGroupRecord(context.client, context.user.id, groupId);
+  await getManageableGroupRecord(context.client, context.user.id, groupId);
 
   const payload = {};
 

@@ -3,6 +3,7 @@ const path = require("path");
 
 let cachedConfig = null;
 
+// This function reads simple key-value settings from an env file.
 function readEnvFile(filePath) {
   if (!fs.existsSync(filePath)) {
     return {};
@@ -38,6 +39,7 @@ function readEnvFile(filePath) {
   return env;
 }
 
+// This function builds and caches the app configuration.
 function getConfig() {
   if (cachedConfig) {
     return cachedConfig;

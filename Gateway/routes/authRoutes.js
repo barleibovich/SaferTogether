@@ -10,7 +10,9 @@ const {
   getCurrentUserProfile,
   loginWithUsername,
   logout,
-  signUpWithUsername
+  signUpWithUsername,
+  updateCurrentUserAlertLocation,
+  updateCurrentUserAvatar
 } = require("../../Services/authService");
 
 // This function handles all the auth routes.
@@ -20,7 +22,10 @@ async function handleAuthRoute(request, response, pathname) {
       const body = await readJsonBody(request);
       const result = await signUpWithUsername(body);
       setAuthCookies(response, result.session);
-      sendJson(response, 201, { profile: result.profile });
+      sendJson(response, 201, {
+        accessToken: result.session.access_token,
+        profile: result.profile
+      });
       return true;
     }
 
@@ -28,7 +33,10 @@ async function handleAuthRoute(request, response, pathname) {
       const body = await readJsonBody(request);
       const result = await loginWithUsername(body);
       setAuthCookies(response, result.session);
-      sendJson(response, 200, { profile: result.profile });
+      sendJson(response, 200, {
+        accessToken: result.session.access_token,
+        profile: result.profile
+      });
       return true;
     }
 
@@ -48,6 +56,22 @@ async function handleAuthRoute(request, response, pathname) {
       const accessToken = getAccessTokenFromRequest(request);
       const profile = await getCurrentUserProfile(accessToken);
       sendJson(response, 200, { profile });
+      return true;
+    }
+
+    if (pathname === "/api/auth/profile" && request.method === "PATCH") {
+      const accessToken = getAccessTokenFromRequest(request);
+      const body = await readJsonBody(request);
+      const profile = await updateCurrentUserAvatar(accessToken, body);
+      sendJson(response, 200, { profile });
+      return true;
+    }
+
+    if (pathname === "/api/auth/location" && request.method === "PATCH") {
+      const accessToken = getAccessTokenFromRequest(request);
+      const body = await readJsonBody(request);
+      const alertLocation = await updateCurrentUserAlertLocation(accessToken, body);
+      sendJson(response, 200, { alertLocation });
       return true;
     }
   } catch (error) {

@@ -1,12 +1,14 @@
 import { requestJson } from "./apiClient.js";
 
-export async function signUpWithUsername({ username, password, role }) {
+// This function creates a user account.
+export async function signUpWithUsername({ username, password, role, avatar }) {
   return requestJson("/api/auth/signup", {
-    body: { password, role, username },
+    body: { avatar, password, role, username },
     method: "POST"
   });
 }
 
+// This function logs in with a username and password.
 export async function loginWithUsername({ username, password }) {
   return requestJson("/api/auth/login", {
     body: { password, username },
@@ -14,13 +16,25 @@ export async function loginWithUsername({ username, password }) {
   });
 }
 
+// This function logs out the current user.
 export async function logout() {
   return requestJson("/api/auth/logout", {
     method: "POST"
   });
 }
 
+// This function gets the current user's profile.
 export async function getCurrentUserProfile() {
   const payload = await requestJson("/api/auth/profile");
+  return payload.profile;
+}
+
+// This function saves the current user's avatar.
+export async function updateCurrentUserAvatar({ avatar }) {
+  const payload = await requestJson("/api/auth/profile", {
+    body: { avatar },
+    method: "PATCH"
+  });
+
   return payload.profile;
 }

@@ -6,6 +6,7 @@ const { httpError } = require("./errors");
 const requireFromGateway = createRequire(path.join(__dirname, "..", "Gateway", "package.json"));
 const { createClient } = requireFromGateway("@supabase/supabase-js");
 
+// This function creates shared Supabase client options.
 function createBaseOptions(global = {}) {
   return {
     auth: {
@@ -17,11 +18,13 @@ function createBaseOptions(global = {}) {
   };
 }
 
+// This function creates an anonymous Supabase client.
 function createPublicClient() {
   const { supabaseAnonKey, supabaseUrl } = getConfig();
   return createClient(supabaseUrl, supabaseAnonKey, createBaseOptions());
 }
 
+// This function creates a Supabase client authorized as the current user.
 function createUserClient(accessToken) {
   const { supabaseAnonKey, supabaseUrl } = getConfig();
   return createClient(
@@ -35,6 +38,7 @@ function createUserClient(accessToken) {
   );
 }
 
+// This function gets the Supabase auth user from an access token.
 async function getUserFromAccessToken(accessToken) {
   if (!accessToken) {
     throw httpError(401, "Unauthorized");
@@ -54,6 +58,7 @@ async function getUserFromAccessToken(accessToken) {
   return data.user;
 }
 
+// This function returns the auth user, app profile, and user-scoped client.
 async function getSessionContext(accessToken) {
   const user = await getUserFromAccessToken(accessToken);
   const client = createUserClient(accessToken);

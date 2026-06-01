@@ -1,3 +1,4 @@
+// This function sends a JSON request and returns the parsed JSON response.
 async function requestJson(path, options = {}) {
   const headers = {
     ...(options.headers || {})

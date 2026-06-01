@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SaferTogether - Avatar Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-page="unity-avatar-editor">
+<main class="prototype-shell">
+  <section class="phone">
+    <div class="status-bar">
+      <span>09:41</span>
+      <span class="status-icons">5G 100%</span>
+    </div>
+
+    <div class="screen unity-screen">
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">SAFER TOGETHER</p>
+          <h1>Avatar editor</h1>
+        </div>
+      </header>
+
+      <p class="notice" data-unity-status>Loading avatar editor...</p>
+
+      <section
+        class="unity-webgl-host"
+        data-unity-host
+        data-loader-url="/unity/avatar-editor/Build/avatar-editor.loader.js"
+        data-data-url="/unity/avatar-editor/Build/avatar-editor.data.gz"
+        data-framework-url="/unity/avatar-editor/Build/avatar-editor.framework.js.gz"
+        data-code-url="/unity/avatar-editor/Build/avatar-editor.wasm.gz"
+        data-streaming-assets-url="/unity/avatar-editor/StreamingAssets"
+        aria-label="Unity avatar editor"
+      >
+        <canvas id="unity-canvas" class="unity-webgl-canvas" data-unity-canvas tabindex="-1"></canvas>
+        <div class="unity-progress" data-unity-progress>
+          <span></span>
+        </div>
+      </section>
+
+      <section class="unity-build-missing hidden" data-unity-missing>
+        <p>Build the Unity WebGL avatar editor into:</p>
+        <code>SaferTogetherUI/unity/avatar-editor</code>
+      </section>
+
+      <nav class="bottom-nav" aria-label="Bottom navigation">
+        <a class="home-round" href="groups.html">&#8962;</a>
+        <a class="settings-round" href="index.html" data-logout>&#8617;</a>
+      </nav>
+    </div>
+
+    <div class="home-indicator"></div>
+  </section>
+</main>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

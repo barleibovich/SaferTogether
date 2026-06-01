@@ -12,10 +12,108 @@ import {
   requestJoinByCode,
   reviewJoinRequest
 } from "./src/api/groupGateway.js";
+import {
+  getGroupOrefStatus,
+  saveCurrentUserAlertLocation
+} from "./src/api/orefGateway.js";
 
 const STORAGE_KEY = "saferTogetherState.v5";
+const SIGNUP_AVATAR_KEY = "saferTogetherSignupAvatar.v1";
 const EVENT_DURATION_SECONDS = 600;
-
+const OREF_POLL_INTERVAL_MS = 5000;
+const GPS_LOCATION_SAVE_INTERVAL_MS = 15000;
+const GPS_LOCATION_DISTANCE_THRESHOLD_METERS = 50;
+const AVATAR_OPTIONS = ["aqua", "mint", "sun", "rose", "violet", "steel"];
+const AVATAR_BUILDER_SHAPES = ["circle", "square", "diamond", "hex"];
+const AVATAR_BUILDER_COLORS = ["aqua", "mint", "sun", "rose", "violet", "steel", "coral", "lime", "sky", "peach"];
+const AVATAR_BUILDER_EYES = ["dot", "line", "happy", "wink"];
+const LEGACY_CHARACTER_ACCESSORIES = ["none", "glasses", "cap", "badge", "mask"];
+const LEGACY_CHARACTER_EYES = ["dot", "line", "happy", "focused"];
+const LEGACY_CHARACTER_HAIR_COLORS = ["black", "brown", "blonde", "red", "blue", "silver"];
+const LEGACY_CHARACTER_HAIR_STYLES = ["short", "bob", "curls", "spiky", "hijab", "none"];
+const LEGACY_CHARACTER_MOUTHS = ["smile", "calm", "open", "flat"];
+const LEGACY_CHARACTER_SHIRTS = ["tee", "hoodie", "jacket", "vest"];
+const LEGACY_CHARACTER_SKINS = ["light", "tan", "brown", "deep"];
+const CHARACTER_ACCESSORIES = ["none", "glasses", "cap", "crown", "mask", "headphones", "wings", "halo", "horns", "tail"];
+const CHARACTER_BACKGROUNDS = [...AVATAR_BUILDER_COLORS, "navy", "white", "black", "red", "green", "denim"];
+const CHARACTER_BOTTOMS = ["jeans", "training", "shorts", "skirt", "cargo", "leggings"];
+const CHARACTER_CLOTHING_COLORS = CHARACTER_BACKGROUNDS;
+const CHARACTER_EYE_COLORS = ["brown", "blue", "green", "hazel", "violet", "amber", "gray"];
+const CHARACTER_EYES = ["dot", "almond", "happy", "focused", "sleepy"];
+const CHARACTER_FACE_SHAPES = ["round", "soft", "sharp", "snout", "long"];
+const CHARACTER_HAIR_COLORS = ["black", "brown", "blonde", "red", "blue", "pink", "silver", "white"];
+const CHARACTER_HAIR_STYLES = ["short", "bob", "curls", "spiky", "long", "ponytail", "bun", "mohawk", "hijab", "none"];
+const CHARACTER_SEXES = ["female", "male"];
+const CHARACTER_SHOES = ["sneakers", "boots", "sandals", "slippers", "none"];
+const CHARACTER_SKINS = ["porcelain", "light", "tan", "brown", "deep", "green", "red", "gray", "gold"];
+const CHARACTER_SPECIES = ["human", "dragon", "bear", "elephant", "devil", "angel"];
+const CHARACTER_TOPS = ["tee", "shirt", "hoodie", "sweatshirt", "jacket", "vest", "armor", "dress"];
+const AVATAR_COLOR_VALUES = {
+  aqua: "#66d9ef",
+  black: "#222831",
+  coral: "#ff8473",
+  denim: "#4169a8",
+  green: "#2f9e44",
+  lime: "#aee66f",
+  mint: "#73e2a7",
+  navy: "#203a63",
+  peach: "#ffbb8f",
+  red: "#e04f5f",
+  rose: "#ff9bb0",
+  sky: "#78c6ff",
+  steel: "#b8c7d9",
+  sun: "#ffd36a",
+  violet: "#c4a7ff",
+  white: "#f8fafc"
+};
+const CHARACTER_HAIR_COLOR_VALUES = {
+  black: "#231f20",
+  blonde: "#eac15d",
+  blue: "#366ab8",
+  brown: "#5b3724",
+  pink: "#d96fb1",
+  red: "#ac4831",
+  silver: "#c2c5cb",
+  white: "#f3f4f6"
+};
+const CHARACTER_EYE_COLOR_VALUES = {
+  amber: "#d48b28",
+  blue: "#2f80ed",
+  brown: "#5b3724",
+  gray: "#7b8794",
+  green: "#2f9e44",
+  hazel: "#8a6f2a",
+  violet: "#7c5cff"
+};
+const CHARACTER_SKIN_VALUES = {
+  brown: "#a76947",
+  deep: "#693f2d",
+  gold: "#d8aa45",
+  gray: "#9aa4ad",
+  green: "#59b06f",
+  light: "#ffd6b9",
+  porcelain: "#ffe6d5",
+  red: "#c94f45",
+  tan: "#da9a69"
+};
+const DEFAULT_CHARACTER_SPEC = {
+  accessory: "none",
+  background: "sky",
+  bottom: "jeans",
+  bottomColor: "denim",
+  eyeColor: "brown",
+  eyes: "almond",
+  face: "soft",
+  hair: "short",
+  hairColor: "brown",
+  sex: "female",
+  shoes: "sneakers",
+  shoeColor: "white",
+  skin: "tan",
+  species: "human",
+  top: "tee",
+  topColor: "aqua"
+};
 const DEFAULT_FAMILY = [
   { id: "1", name: "×“×§×œ", role: "×™×œ×“", status: "offline", avatar: "ðŸ¯" },
   { id: "2", name: "×©×™×¨×”", role: "×™×œ×“×”", status: "offline", avatar: "ðŸ¬" },
@@ -64,6 +162,8 @@ const DEFAULT_BASELINE = {
 };
 
 let state = loadState();
+let orefGpsWatchId = null;
+let lastGpsLocationSave = null;
 
 document.addEventListener("DOMContentLoaded", () => {
   ensureDefaults();
@@ -71,6 +171,7 @@ document.addEventListener("DOMContentLoaded", () => {
   startEventTimer();
 });
 
+// This function creates the default in-browser app state.
 function initialState() {
   return {
     user: null,
@@ -82,14 +183,17 @@ function initialState() {
     missions: copy(DEFAULT_MISSIONS),
     baseline: copy(DEFAULT_BASELINE),
     practiceSession: null,
+    orefStatus: null,
     emergency: null
   };
 }
 
+// This function clones simple JSON-safe values.
 function copy(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+// This function loads saved app state from local storage.
 function loadState() {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -99,10 +203,53 @@ function loadState() {
   }
 }
 
+// This function saves the current app state to local storage.
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
+// This function stores an avatar coming back from Unity so signup can use it before an account exists.
+function syncSignupAvatarDraftFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const avatar = params.get("avatar");
+
+  if (!avatar) {
+    return;
+  }
+
+  localStorage.setItem(SIGNUP_AVATAR_KEY, avatar);
+  params.delete("avatar");
+  const query = params.toString();
+  const cleanUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
+  window.history.replaceState(null, "", cleanUrl);
+}
+
+// This function keeps Unity navigation inside this prototype instead of allowing arbitrary external redirects.
+function safeUnityReturnUrl(profile) {
+  const params = new URLSearchParams(window.location.search);
+  const requested = params.get("return");
+  const fallback = profile ? "groups.html" : "signup.html";
+
+  if (!requested) {
+    return fallback;
+  }
+
+  let url;
+
+  try {
+    url = new URL(requested, window.location.origin);
+  } catch {
+    return fallback;
+  }
+
+  if (url.origin !== window.location.origin || url.pathname.endsWith("/avatar-editor.html")) {
+    return fallback;
+  }
+
+  return `${url.pathname.replace(/^\//, "")}${url.search}${url.hash}` || fallback;
+}
+
+// This function fills any missing state sections with defaults.
 function ensureDefaults() {
   state.familyMembers = state.familyMembers?.length ? state.familyMembers : copy(DEFAULT_FAMILY);
   state.groups = Array.isArray(state.groups) ? state.groups : [];
@@ -113,9 +260,391 @@ function ensureDefaults() {
   state.questions = state.questions?.length ? state.questions : copy(DEFAULT_QUESTIONS);
   state.missions = state.missions?.length ? state.missions : copy(DEFAULT_MISSIONS);
   state.baseline = state.baseline || copy(DEFAULT_BASELINE);
+  state.orefStatus = state.orefStatus || null;
+  delete state.gpsAlertLocationEnabled;
   saveState();
 }
 
+// This function creates a deterministic number from a username.
+function seedFromUsername(username) {
+  return String(username || "")
+    .trim()
+    .toLowerCase()
+    .split("")
+    .reduce((sum, char) => sum + char.charCodeAt(0), 0);
+}
+
+// This function returns a supported option value with a fallback.
+function optionValue(value, options, fallback) {
+  const cleanValue = String(value || "").trim().toLowerCase();
+  return options.includes(cleanValue) ? cleanValue : fallback;
+}
+
+// This function normalizes a complete character spec.
+function normalizeCharacterSpec(spec = {}) {
+  return {
+    accessory: optionValue(spec.accessory, CHARACTER_ACCESSORIES, DEFAULT_CHARACTER_SPEC.accessory),
+    background: optionValue(spec.background, CHARACTER_BACKGROUNDS, DEFAULT_CHARACTER_SPEC.background),
+    bottom: optionValue(spec.bottom, CHARACTER_BOTTOMS, DEFAULT_CHARACTER_SPEC.bottom),
+    bottomColor: optionValue(spec.bottomColor, CHARACTER_CLOTHING_COLORS, DEFAULT_CHARACTER_SPEC.bottomColor),
+    eyeColor: optionValue(spec.eyeColor, CHARACTER_EYE_COLORS, DEFAULT_CHARACTER_SPEC.eyeColor),
+    eyes: optionValue(spec.eyes, CHARACTER_EYES, DEFAULT_CHARACTER_SPEC.eyes),
+    face: optionValue(spec.face, CHARACTER_FACE_SHAPES, DEFAULT_CHARACTER_SPEC.face),
+    hair: optionValue(spec.hair, CHARACTER_HAIR_STYLES, DEFAULT_CHARACTER_SPEC.hair),
+    hairColor: optionValue(spec.hairColor, CHARACTER_HAIR_COLORS, DEFAULT_CHARACTER_SPEC.hairColor),
+    sex: optionValue(spec.sex, CHARACTER_SEXES, DEFAULT_CHARACTER_SPEC.sex),
+    shoes: optionValue(spec.shoes, CHARACTER_SHOES, DEFAULT_CHARACTER_SPEC.shoes),
+    shoeColor: optionValue(spec.shoeColor, CHARACTER_CLOTHING_COLORS, DEFAULT_CHARACTER_SPEC.shoeColor),
+    skin: optionValue(spec.skin, CHARACTER_SKINS, DEFAULT_CHARACTER_SPEC.skin),
+    species: optionValue(spec.species, CHARACTER_SPECIES, DEFAULT_CHARACTER_SPEC.species),
+    top: optionValue(spec.top, CHARACTER_TOPS, DEFAULT_CHARACTER_SPEC.top),
+    topColor: optionValue(spec.topColor, CHARACTER_CLOTHING_COLORS, DEFAULT_CHARACTER_SPEC.topColor)
+  };
+}
+
+// This function builds the saved complete avatar id.
+function buildCharacterAvatar(spec) {
+  const avatar = normalizeCharacterSpec(spec);
+
+  return [
+    "character",
+    "v2",
+    avatar.species,
+    avatar.sex,
+    avatar.skin,
+    avatar.face,
+    avatar.eyes,
+    avatar.eyeColor,
+    avatar.hair,
+    avatar.hairColor,
+    avatar.top,
+    avatar.topColor,
+    avatar.bottom,
+    avatar.bottomColor,
+    avatar.shoes,
+    avatar.shoeColor,
+    avatar.accessory,
+    avatar.background
+  ].join(":");
+}
+
+// This function creates a stable default avatar from the username.
+function avatarSpecFromUsername(username) {
+  const seed = seedFromUsername(username);
+
+  return normalizeCharacterSpec({
+    ...DEFAULT_CHARACTER_SPEC,
+    background: CHARACTER_BACKGROUNDS[(seed + 2) % CHARACTER_BACKGROUNDS.length],
+    eyeColor: CHARACTER_EYE_COLORS[seed % CHARACTER_EYE_COLORS.length],
+    hairColor: CHARACTER_HAIR_COLORS[(seed + 3) % CHARACTER_HAIR_COLORS.length],
+    topColor: CHARACTER_CLOTHING_COLORS[(seed + 5) % CHARACTER_CLOTHING_COLORS.length]
+  });
+}
+
+// This function creates a stable default avatar id from the username.
+function avatarFromUsername(username) {
+  return buildCharacterAvatar(avatarSpecFromUsername(username));
+}
+
+// This function parses a Unity-built avatar id into its saved parts.
+function parseBuilderAvatar(avatar) {
+  const cleanAvatar = String(avatar || "").trim().toLowerCase();
+  const parts = cleanAvatar.split(":");
+
+  if (parts.length !== 5 || parts[0] !== "builder") {
+    return null;
+  }
+
+  const spec = {
+    accentColor: parts[3],
+    baseColor: parts[2],
+    eyes: parts[4],
+    shape: parts[1]
+  };
+
+  if (!AVATAR_BUILDER_SHAPES.includes(spec.shape)) {
+    return null;
+  }
+
+  if (!AVATAR_BUILDER_COLORS.includes(spec.baseColor) || !AVATAR_BUILDER_COLORS.includes(spec.accentColor)) {
+    return null;
+  }
+
+  if (!AVATAR_BUILDER_EYES.includes(spec.eyes)) {
+    return null;
+  }
+
+  return {
+    ...spec,
+    id: `builder:${spec.shape}:${spec.baseColor}:${spec.accentColor}:${spec.eyes}`
+  };
+}
+
+// This function parses a legacy character avatar id into its saved parts.
+function parseLegacyCharacterAvatar(avatar) {
+  const cleanAvatar = String(avatar || "").trim().toLowerCase();
+  const parts = cleanAvatar.split(":");
+
+  if (parts.length !== 11 || parts[0] !== "character" || parts[1] !== "v1") {
+    return null;
+  }
+
+  const spec = {
+    accessory: parts[9],
+    background: parts[10],
+    eyes: parts[7],
+    hair: parts[3],
+    hairColor: parts[4],
+    mouth: parts[8],
+    shirt: parts[5],
+    shirtColor: parts[6],
+    skin: parts[2]
+  };
+
+  if (!LEGACY_CHARACTER_SKINS.includes(spec.skin) || !LEGACY_CHARACTER_HAIR_STYLES.includes(spec.hair)) {
+    return null;
+  }
+
+  if (!LEGACY_CHARACTER_HAIR_COLORS.includes(spec.hairColor) || !LEGACY_CHARACTER_SHIRTS.includes(spec.shirt)) {
+    return null;
+  }
+
+  if (!AVATAR_BUILDER_COLORS.includes(spec.shirtColor) || !LEGACY_CHARACTER_EYES.includes(spec.eyes)) {
+    return null;
+  }
+
+  if (!LEGACY_CHARACTER_MOUTHS.includes(spec.mouth) || !LEGACY_CHARACTER_ACCESSORIES.includes(spec.accessory)) {
+    return null;
+  }
+
+  if (!AVATAR_BUILDER_COLORS.includes(spec.background)) {
+    return null;
+  }
+
+  return {
+    ...spec,
+    id: [
+      "character",
+      "v1",
+      spec.skin,
+      spec.hair,
+      spec.hairColor,
+      spec.shirt,
+      spec.shirtColor,
+      spec.eyes,
+      spec.mouth,
+      spec.accessory,
+      spec.background
+    ].join(":")
+  };
+}
+
+// This function parses a complete character avatar id into its saved parts.
+function parseCharacterAvatar(avatar) {
+  const cleanAvatar = String(avatar || "").trim().toLowerCase();
+  const parts = cleanAvatar.split(":");
+
+  if (parts.length !== 18 || parts[0] !== "character" || parts[1] !== "v2") {
+    return null;
+  }
+
+  const spec = normalizeCharacterSpec({
+    accessory: parts[16],
+    background: parts[17],
+    bottom: parts[12],
+    bottomColor: parts[13],
+    eyeColor: parts[7],
+    eyes: parts[6],
+    face: parts[5],
+    hair: parts[8],
+    hairColor: parts[9],
+    sex: parts[3],
+    shoes: parts[14],
+    shoeColor: parts[15],
+    skin: parts[4],
+    species: parts[2],
+    top: parts[10],
+    topColor: parts[11]
+  });
+
+  if (buildCharacterAvatar(spec) !== cleanAvatar) {
+    return null;
+  }
+
+  return {
+    ...spec,
+    id: buildCharacterAvatar(spec)
+  };
+}
+
+// This function maps old character ids to the complete editor model.
+function legacyCharacterToSpec(legacyAvatar) {
+  if (!legacyAvatar) return null;
+
+  return normalizeCharacterSpec({
+    ...DEFAULT_CHARACTER_SPEC,
+    accessory: legacyAvatar.accessory === "badge" ? "crown" : legacyAvatar.accessory,
+    background: legacyAvatar.background,
+    eyes: legacyAvatar.eyes === "line" ? "sleepy" : legacyAvatar.eyes,
+    hair: legacyAvatar.hair,
+    hairColor: legacyAvatar.hairColor,
+    skin: legacyAvatar.skin,
+    top: legacyAvatar.shirt === "tee" ? "tee" : legacyAvatar.shirt,
+    topColor: legacyAvatar.shirtColor
+  });
+}
+
+// This function maps builder ids and color presets to the complete editor model.
+function compactAvatarToSpec(avatar, username) {
+  const cleanAvatar = String(avatar || "").trim().toLowerCase();
+  const builderAvatar = parseBuilderAvatar(cleanAvatar);
+  const baseColor = builderAvatar?.baseColor || (AVATAR_OPTIONS.includes(cleanAvatar) ? cleanAvatar : "");
+  const accentColor = builderAvatar?.accentColor || "";
+
+  if (!baseColor) {
+    return avatarSpecFromUsername(username);
+  }
+
+  return normalizeCharacterSpec({
+    ...avatarSpecFromUsername(username),
+    background: accentColor || "sky",
+    eyes: builderAvatar?.eyes === "wink" ? "focused" : "happy",
+    topColor: baseColor
+  });
+}
+
+// This function returns the complete character spec for any supported avatar id.
+function avatarSpecFromAvatar(avatar, username) {
+  const cleanAvatar = String(avatar || "").trim().toLowerCase();
+  const characterAvatar = parseCharacterAvatar(cleanAvatar);
+  const legacyCharacterAvatar = parseLegacyCharacterAvatar(cleanAvatar);
+
+  if (characterAvatar) {
+    return characterAvatar;
+  }
+
+  if (legacyCharacterAvatar) {
+    return legacyCharacterToSpec(legacyCharacterAvatar);
+  }
+
+  return compactAvatarToSpec(cleanAvatar, username);
+}
+
+// This function accepts known preset, old builder, and character avatar ids.
+function normalizeAvatar(avatar, username) {
+  const cleanAvatar = String(avatar || "").trim().toLowerCase();
+  const characterAvatar = parseCharacterAvatar(cleanAvatar);
+  const legacyCharacterAvatar = parseLegacyCharacterAvatar(cleanAvatar);
+  const builderAvatar = parseBuilderAvatar(cleanAvatar);
+
+  if (AVATAR_OPTIONS.includes(cleanAvatar)) {
+    return cleanAvatar;
+  }
+
+  if (characterAvatar) {
+    return characterAvatar.id;
+  }
+
+  if (legacyCharacterAvatar) {
+    return legacyCharacterAvatar.id;
+  }
+
+  if (builderAvatar) {
+    return builderAvatar.id;
+  }
+
+  return avatarFromUsername(username);
+}
+
+// This function returns the CSS class for an avatar id.
+function avatarClass(avatar, username) {
+  const spec = avatarSpecFromAvatar(avatar, username);
+  return [
+    "avatar-character-v2",
+    "avatar-illustrated",
+    `avatar-species-${spec.species}`,
+    `avatar-sex-${spec.sex}`,
+    `avatar-face-${spec.face}`,
+    `avatar-eyes-${spec.eyes}`,
+    `avatar-hair-${spec.hair}`,
+    `avatar-top-${spec.top}`,
+    `avatar-bottom-${spec.bottom}`,
+    `avatar-shoes-${spec.shoes}`,
+    `avatar-accessory-${spec.accessory}`
+  ].join(" ");
+}
+
+function avatarArtPath(avatar, username) {
+  const spec = avatarSpecFromAvatar(avatar, username);
+  return `assets/avatar-art/${spec.species}.png`;
+}
+
+// This function returns CSS variables for an avatar.
+function avatarStyle(avatar, username) {
+  const spec = avatarSpecFromAvatar(avatar, username);
+  return ` style="--avatar-bg:${AVATAR_COLOR_VALUES[spec.background]};--avatar-skin:${CHARACTER_SKIN_VALUES[spec.skin]};--avatar-eye:${CHARACTER_EYE_COLOR_VALUES[spec.eyeColor]};--avatar-hair:${CHARACTER_HAIR_COLOR_VALUES[spec.hairColor]};--avatar-top:${AVATAR_COLOR_VALUES[spec.topColor]};--avatar-bottom:${AVATAR_COLOR_VALUES[spec.bottomColor]};--avatar-shoe:${AVATAR_COLOR_VALUES[spec.shoeColor]};"`;
+}
+
+// This function chooses a readable initial for the avatar badge.
+function avatarInitial(username) {
+  return String(username || "?").trim().charAt(0).toUpperCase() || "?";
+}
+
+// This function renders the CSS-built character avatar from the saved avatar id.
+function renderAvatarBadge(username, avatar, className = "profile-avatar") {
+  return `
+    <span class="${className} ${avatarClass(avatar, username)}"${avatarStyle(avatar, username)}>
+      <img class="avatar-art-image" src="${avatarArtPath(avatar, username)}" alt="" aria-hidden="true">
+      <span class="avatar-art-overlay" aria-hidden="true">
+        <span class="avatar-art-wing"></span>
+        <span class="avatar-art-tail"></span>
+        <span class="avatar-art-arm avatar-art-arm-left"></span>
+        <span class="avatar-art-arm avatar-art-arm-right"></span>
+        <span class="avatar-art-top"></span>
+        <span class="avatar-art-bottom"></span>
+        <span class="avatar-art-leg avatar-art-leg-left"></span>
+        <span class="avatar-art-leg avatar-art-leg-right"></span>
+        <span class="avatar-art-shoe avatar-art-shoe-left"></span>
+        <span class="avatar-art-shoe avatar-art-shoe-right"></span>
+        <span class="avatar-art-initial">${escapeHtml(avatarInitial(username))}</span>
+        <span class="avatar-art-accessory"></span>
+        <span class="avatar-art-accessory-detail avatar-art-accessory-detail-left"></span>
+        <span class="avatar-art-accessory-detail avatar-art-accessory-detail-right"></span>
+      </span>
+      <span class="avatar-v2-shadow"></span>
+      <span class="avatar-v2-wings"></span>
+      <span class="avatar-v2-tail"></span>
+      <span class="avatar-v2-arm avatar-v2-arm-left"></span>
+      <span class="avatar-v2-arm avatar-v2-arm-right"></span>
+      <span class="avatar-v2-body">
+        <span class="avatar-v2-neck"></span>
+        <span class="avatar-v2-bottom"></span>
+        <span class="avatar-v2-leg avatar-v2-leg-left"></span>
+        <span class="avatar-v2-leg avatar-v2-leg-right"></span>
+        <span class="avatar-v2-shoe avatar-v2-shoe-left"></span>
+        <span class="avatar-v2-shoe avatar-v2-shoe-right"></span>
+        <span class="avatar-v2-ear avatar-v2-ear-left avatar-v2-ear-outer"></span>
+        <span class="avatar-v2-ear avatar-v2-ear-right avatar-v2-ear-outer"></span>
+        <span class="avatar-v2-hair avatar-v2-hair-outer"></span>
+        <span class="avatar-v2-head">
+          <span class="avatar-v2-ear avatar-v2-ear-left"></span>
+          <span class="avatar-v2-ear avatar-v2-ear-right"></span>
+          <span class="avatar-v2-hair"></span>
+          <span class="avatar-v2-trunk"></span>
+          <span class="avatar-v2-face-mark"></span>
+          <span class="avatar-v2-eyes"></span>
+          <span class="avatar-v2-nose"></span>
+          <span class="avatar-v2-mouth"></span>
+          <span class="avatar-v2-accessory"></span>
+        </span>
+        <span class="avatar-v2-accessory avatar-v2-accessory-outer"></span>
+        <span class="avatar-v2-badge">${escapeHtml(avatarInitial(username))}</span>
+      </span>
+    </span>
+  `;
+}
+
+// This function routes the current HTML page to its initializer.
 function routePage() {
   const page = document.body.dataset.page;
 
@@ -130,10 +659,12 @@ function routePage() {
   if (page === "practice") initPractice();
   if (page === "emergency") initEmergency();
   if (page === "game") initGame();
+  if (page === "unity-avatar-editor") initUnityAvatarEditor();
   if (page === "summary") initSummary();
   if (page === "report") initAdminPage(initReport);
 }
 
+// This function wires the login form to the auth API.
 function initLogin() {
   const form = document.querySelector("[data-login-form]");
 
@@ -159,8 +690,10 @@ function initLogin() {
   });
 }
 
+// This function wires the signup form and initial avatar choice to the auth API.
 function initSignup() {
   const form = document.querySelector("[data-signup-form]");
+  syncSignupAvatarDraftFromUrl();
 
   form?.addEventListener("submit", async event => {
     event.preventDefault();
@@ -170,12 +703,14 @@ function initSignup() {
     const username = formData.get("username")?.toString() || "";
     const password = formData.get("password")?.toString() || "";
     const role = formData.get("role")?.toString() === "admin" ? "admin" : "user";
+    const avatar = normalizeAvatar(localStorage.getItem(SIGNUP_AVATAR_KEY), username);
 
     try {
       setFormBusy(form, true);
-      await signUpWithUsername({ username, password, role });
+      await signUpWithUsername({ avatar, username, password, role });
       await loadSessionIntoState();
       saveState();
+      localStorage.removeItem(SIGNUP_AVATAR_KEY);
       showFormSuccess(form, "Saved successfully");
       window.setTimeout(() => {
         window.location.href = "groups.html";
@@ -187,20 +722,24 @@ function initSignup() {
   });
 }
 
-function setSessionUser(username, role, userId) {
+// This function saves the logged-in user profile in local state.
+function setSessionUser(username, role, userId, avatar, alertLocation = null) {
   const cleanRole = role === "admin" ? "admin" : "user";
 
   state.user = {
+    avatar: normalizeAvatar(avatar, username),
     userId,
     username,
     name: username,
     role: cleanRole,
+    alertLocation,
     familyRoomId: state.activeGroupId || ""
   };
 
   state.groups = state.groups.map(group => ({ ...group, userRole: cleanRole }));
 }
 
+// This function loads the server session profile into local state.
 async function loadSessionIntoState() {
   const profile = await getCurrentUserProfile();
 
@@ -208,12 +747,13 @@ async function loadSessionIntoState() {
     return null;
   }
 
-  setSessionUser(profile.username, profile.role, profile.id);
+  setSessionUser(profile.username, profile.role, profile.id, profile.avatar, profile.alertLocation);
   state.groups = [];
   await refreshCurrentUserGroups(profile.role);
   return profile;
 }
 
+// This function refreshes the visible groups for the current user.
 async function refreshCurrentUserGroups(role = state.user?.role || "user") {
   const groups = await getCurrentUserGroups();
 
@@ -222,7 +762,15 @@ async function refreshCurrentUserGroups(role = state.user?.role || "user") {
     .map(group => ({
       id: group.id,
       joinCode: group.joinCode || "",
-      members: Array.isArray(group.members) ? group.members : [],
+      members: Array.isArray(group.members)
+        ? group.members.map(member => ({
+          ...member,
+          alertLocation: member.alertLocation || null,
+          avatar: member.id === state.user?.userId
+            ? normalizeAvatar(state.user.avatar, member.username)
+            : normalizeAvatar(member.avatar, member.username)
+        }))
+        : [],
       name: group.name || "Untitled group",
       pendingRequests: Array.isArray(group.pendingRequests) ? group.pendingRequests : [],
       userRole: group.userRole || (role === "admin" ? "admin" : "user")
@@ -244,6 +792,7 @@ async function refreshCurrentUserGroups(role = state.user?.role || "user") {
   if (state.user) state.user.familyRoomId = activeGroup.id;
 }
 
+// This function disables or enables a form while a request is running.
 function setFormBusy(form, isBusy) {
   const submitButton = form.querySelector("button[type='submit']");
 
@@ -257,14 +806,17 @@ function setFormBusy(form, isBusy) {
   }
 }
 
+// This function shows an error message inside a form.
 function showFormError(form, message) {
   showFormMessage(form, message, "auth-error");
 }
 
+// This function shows a success message inside a form.
 function showFormSuccess(form, message) {
   showFormMessage(form, message, "auth-success");
 }
 
+// This function creates or updates a form message.
 function showFormMessage(form, message, className) {
   let messageNode = form.querySelector("[data-form-message]");
 
@@ -278,19 +830,23 @@ function showFormMessage(form, message, className) {
   messageNode.textContent = message;
 }
 
+// This function removes the current form message.
 function clearFormMessage(form) {
   form.querySelector("[data-form-message]")?.remove();
 }
 
+// This function turns auth errors into text safe for display.
 function readableAuthError(error) {
   return error?.message || "Authentication failed. Please try again.";
 }
 
+// This function protects admin-only pages before running their initializer.
 async function initAdminPage(initializer) {
   const allowed = await requireAdminAccess();
   if (allowed && initializer) initializer();
 }
 
+// This function verifies that the logged-in user is an admin.
 async function requireAdminAccess() {
   try {
     const profile = await loadSessionIntoState();
@@ -315,6 +871,193 @@ async function requireAdminAccess() {
   }
 }
 
+// This function renders the current user summary text.
+function renderCurrentUserSummary(node) {
+  if (!node || !state.user) return;
+  node.textContent = `Logged in as ${state.user.username || state.user.name} (${state.user.role})`;
+}
+
+// This function renders the current user's avatar preview.
+function renderCurrentAvatar() {
+  if (!state.user) return;
+
+  const summaryMarkup = renderAvatarBadge(
+    state.user.username || state.user.name,
+    state.user.avatar,
+    "profile-avatar avatar-unity-preview"
+  );
+
+  document.querySelectorAll("[data-current-avatar-summary]").forEach(preview => {
+    preview.innerHTML = `
+      <div class="avatar-edit-preview">
+        ${summaryMarkup}
+        <button class="avatar-edit-button" type="button" data-open-avatar-editor aria-label="Edit avatar"></button>
+      </div>
+    `;
+  });
+}
+
+// This function wires the avatar launch button to the Unity WebGL editor.
+function initUnityAvatarLaunch() {
+  renderCurrentAvatar();
+
+  document.querySelectorAll("[data-open-avatar-editor]").forEach(openButton => openButton.addEventListener("click", () => {
+    window.location.href = "avatar-editor.html?return=groups.html";
+  }));
+}
+
+// This function starts the embedded Unity WebGL avatar editor page.
+async function initUnityAvatarEditor() {
+  const status = document.querySelector("[data-unity-status]");
+  let profile = null;
+
+  try {
+    profile = await loadSessionIntoState();
+    if (profile) saveState();
+  } catch (error) {
+    console.warn(readableAuthError(error));
+  }
+
+  wireLogoutLink();
+  if (status) {
+    status.textContent = profile ? `Logged in as ${profile.username}` : "Unity avatar editor";
+  }
+  await loadUnityAvatarEditor(profile);
+}
+
+// This function reads Unity build URLs from the host element.
+function getUnityHostConfig(host) {
+  return {
+    codeUrl: host.dataset.codeUrl,
+    dataUrl: host.dataset.dataUrl,
+    frameworkUrl: host.dataset.frameworkUrl,
+    loaderUrl: host.dataset.loaderUrl,
+    streamingAssetsUrl: host.dataset.streamingAssetsUrl
+  };
+}
+
+// This function loads the Unity WebGL loader script.
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.async = true;
+    script.src = src;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error("Unity WebGL build was not found"));
+    document.head.append(script);
+  });
+}
+
+// This function loads the Unity instance and connects it to the web profile.
+async function loadUnityAvatarEditor(profile) {
+  const host = document.querySelector("[data-unity-host]");
+  const canvas = document.querySelector("[data-unity-canvas]");
+
+  if (!host || !canvas) {
+    return;
+  }
+
+  const config = getUnityHostConfig(host);
+
+  try {
+    await loadScript(config.loaderUrl);
+  } catch (error) {
+    showUnityBuildMissing(error);
+    return;
+  }
+
+  try {
+    const unityInstance = await window.createUnityInstance(canvas, {
+      codeUrl: config.codeUrl,
+      dataUrl: config.dataUrl,
+      frameworkUrl: config.frameworkUrl,
+      streamingAssetsUrl: config.streamingAssetsUrl
+    }, updateUnityProgress);
+
+    sendWebSessionToUnity(unityInstance, profile);
+    showUnityStatus("Avatar editor ready", "good");
+  } catch (error) {
+    showUnityStartupError(error);
+  }
+}
+
+// This function updates the visible Unity loading progress.
+function updateUnityProgress(progress) {
+  const progressBar = document.querySelector("[data-unity-progress] span");
+
+  if (progressBar) {
+    progressBar.style.width = `${Math.round(progress * 100)}%`;
+  }
+}
+
+// This function shows status text above the Unity editor.
+function showUnityStatus(message, tone = "") {
+  const status = document.querySelector("[data-unity-status]");
+
+  if (!status) {
+    return;
+  }
+
+  status.className = `notice ${tone}`.trim();
+  status.textContent = message;
+}
+
+// This function shows local build instructions when the Unity build is missing.
+function showUnityBuildMissing(error) {
+  const missing = document.querySelector("[data-unity-missing]");
+  const host = document.querySelector("[data-unity-host]");
+
+  host?.classList.add("unity-webgl-host-missing");
+  missing?.classList.remove("hidden");
+  showUnityStatus(error?.message || "Unity WebGL build was not found", "warn");
+}
+
+// This function reports Unity runtime startup errors without hiding them as missing files.
+function showUnityStartupError(error) {
+  const missing = document.querySelector("[data-unity-missing]");
+  const host = document.querySelector("[data-unity-host]");
+
+  host?.classList.remove("unity-webgl-host-missing");
+  missing?.classList.add("hidden");
+  showUnityStatus(error?.message || "Unity editor could not start", "warn");
+}
+
+// This function sends the current web profile into the running Unity instance.
+function sendWebSessionToUnity(unityInstance, profile) {
+  if (!unityInstance?.SendMessage) {
+    return;
+  }
+
+  const payload = {
+    gatewayBaseUrl: window.location.origin,
+    returnUrl: safeUnityReturnUrl(profile),
+    draftAvatar: localStorage.getItem(SIGNUP_AVATAR_KEY) || "",
+    profile
+  };
+
+  window.setTimeout(() => {
+    unityInstance.SendMessage("SaferTogether Auth Controller", "ApplyWebSessionJson", JSON.stringify(payload));
+  }, 250);
+}
+
+// This function wires logout links that appear outside the groups screen.
+function wireLogoutLink() {
+  document.querySelector("[data-logout]")?.addEventListener("click", async event => {
+    event.preventDefault();
+
+    try {
+      await logout();
+    } catch (error) {
+      console.warn(readableAuthError(error));
+    }
+
+    state = initialState();
+    localStorage.removeItem(STORAGE_KEY);
+    window.location.href = "index.html";
+  });
+}
+
+// This function wires the groups screen.
 async function initGroups() {
   const currentUser = document.querySelector("[data-current-user]");
   const createButton = document.querySelector("[data-admin-create-group]");
@@ -329,12 +1072,8 @@ async function initGroups() {
     saveState();
   } catch (error) {
     if (currentUser) currentUser.textContent = readableAuthError(error);
-    if (!state.user) {
-      state.groups = [];
-      renderGroupsList();
-      createButton?.classList.add("hidden");
-      return;
-    }
+    window.location.href = "index.html";
+    return;
   }
 
   const user = state.user;
@@ -343,11 +1082,10 @@ async function initGroups() {
     return;
   }
 
-  if (currentUser) {
-    currentUser.textContent = `Logged in as ${user.username || user.name} (${user.role})`;
-  }
+  renderCurrentUserSummary(currentUser);
 
   renderGroupsList();
+  initUnityAvatarLaunch();
   createButton?.classList.toggle("hidden", user.role !== "admin");
   joinForm?.classList.toggle("hidden", user.role === "admin");
 
@@ -425,7 +1163,6 @@ function renderGroupsList() {
       ${group.userRole === "admin" ? `
         <div class="group-extra">
           <p class="notice">Team code: <strong class="join-code-value">${escapeHtml(group.joinCode)}</strong></p>
-          ${renderPendingRequests(group)}
         </div>
       ` : ""}
     </article>
@@ -433,26 +1170,6 @@ function renderGroupsList() {
 
   container.querySelectorAll("[data-open-group]").forEach(button => {
     button.addEventListener("click", () => openGroup(button.dataset.openGroup));
-  });
-
-  container.querySelectorAll("[data-review-request]").forEach(button => {
-    button.addEventListener("click", async () => {
-      try {
-        button.disabled = true;
-        await reviewJoinRequest({
-          groupId: button.dataset.groupId,
-          requestId: button.dataset.requestId,
-          status: button.dataset.reviewRequest
-        });
-        await refreshCurrentUserGroups("admin");
-        renderGroupsList();
-      } catch (error) {
-        const currentUser = document.querySelector("[data-current-user]");
-        if (currentUser) {
-          currentUser.textContent = readableAuthError(error);
-        }
-      }
-    });
   });
 
   container.querySelectorAll("[data-delete-group]").forEach(button => {
@@ -470,27 +1187,6 @@ function renderGroupsList() {
       }
     });
   });
-}
-
-// This function shows the pending join requests for one group.
-function renderPendingRequests(group) {
-  if (!group.pendingRequests.length) {
-    return `<p class="notice">No pending requests.</p>`;
-  }
-
-  return `
-    <div class="join-request-list">
-      ${group.pendingRequests.map(request => `
-        <div class="join-request-card">
-          <p>${escapeHtml(request.username || "User")} wants to join the group.</p>
-          <div class="join-request-actions">
-            <button class="btn btn-primary" type="button" data-group-id="${group.id}" data-request-id="${request.id}" data-review-request="approved">Accept</button>
-            <button class="btn btn-secondary" type="button" data-group-id="${group.id}" data-request-id="${request.id}" data-review-request="declined">Decline</button>
-          </div>
-        </div>
-      `).join("")}
-    </div>
-  `;
 }
 
 // This function creates a new group for the admin.
@@ -537,6 +1233,7 @@ async function initCreateGroup() {
   });
 }
 
+// This function wires the active group board screen.
 async function initBoard() {
   try {
     const profile = await loadSessionIntoState();
@@ -561,6 +1258,10 @@ async function initBoard() {
   setText("[data-active-group-id]", group.id);
   renderBoardMembers(group);
   renderBoardPendingRequests(group);
+  initAlertLocationControls();
+  renderOrefStatus();
+  refreshOrefStatus();
+  startOrefStatusPolling();
 
   document.querySelectorAll("[data-admin-only]").forEach(node => {
     node.classList.toggle("hidden", !isCurrentUserAdminForActiveGroup());
@@ -568,6 +1269,11 @@ async function initBoard() {
 
   document.querySelector("[data-trigger-emergency]")?.addEventListener("click", () => {
     startEmergency();
+    window.location.href = "emergency.html";
+  });
+
+  document.querySelector("[data-open-oref-emergency]")?.addEventListener("click", () => {
+    startEmergency(state.orefStatus);
     window.location.href = "emergency.html";
   });
 
@@ -591,10 +1297,12 @@ async function initBoard() {
   }
 }
 
+// This function returns the currently selected group.
 function getActiveGroup() {
   return state.groups.find(group => group.id === state.activeGroupId) || state.groups[0] || null;
 }
 
+// This function checks admin rights for the currently selected group.
 function isCurrentUserAdminForActiveGroup() {
   const group = getActiveGroup();
   return Boolean(group) && state.user?.role === "admin" && group.userRole === "admin";
@@ -610,14 +1318,53 @@ function renderBoardMembers(group) {
     return;
   }
 
-  container.innerHTML = group.members.map(member => `
-    <article class="member-card">
-      <div class="member-main">
-        <p class="member-name">${escapeHtml(member.username)}</p>
-        <p class="member-role">${member.role === "admin" ? "Admin" : "User"}</p>
-      </div>
-    </article>
-  `).join("");
+  container.innerHTML = group.members.map(member => {
+    const isCurrentMember = state.user?.userId && String(member.id) === String(state.user.userId);
+    const liveStatus = getOrefMemberStatus(member.id);
+    const location = liveStatus?.alertLocation || member.alertLocation;
+    const statusClass = orefMemberStatusClass(liveStatus, location, true);
+    const statusLabel = orefMemberStatusLabel(liveStatus, location);
+
+    return `
+      <article class="member-card ${isCurrentMember ? "member-card-current" : ""} ${liveStatus?.status === "alert" ? "member-card-alert" : ""}">
+        ${renderAvatarBadge(member.username, member.avatar, "member-avatar avatar-unity-preview")}
+        <div class="member-main">
+          <p class="member-name">
+            ${escapeHtml(member.username)}
+            ${isCurrentMember ? `<span class="member-me-pill">Me</span>` : ""}
+          </p>
+        </div>
+        <span class="status-pill ${statusClass}">${escapeHtml(statusLabel)}</span>
+      </article>
+    `;
+  }).join("");
+}
+
+// This function returns one member's live HFC status.
+function getOrefMemberStatus(memberId) {
+  return (state.orefStatus?.members || []).find(member => member.memberId === memberId) || null;
+}
+
+// This function maps a live HFC member status to an existing visual state.
+function orefMemberStatusClass(memberStatus, location = null, showLocation = false) {
+  if (memberStatus?.status === "alert") return "at_risk";
+  if (showLocation && (memberStatus?.status === "clear" || location?.areaName)) return "located";
+  if (memberStatus?.status === "clear") return "safe";
+  if (location?.areaName) return "located";
+  return "offline";
+}
+
+// This function maps a live HFC member status to display text.
+function orefMemberStatusLabel(memberStatus, location = null) {
+  if (memberStatus?.status === "alert") return "ALERT";
+  const areaName = alertLocationLabel(memberStatus?.alertLocation || location);
+  if (areaName) return areaName;
+  return "No area";
+}
+
+// This function returns the most readable saved Home Front Command area name.
+function alertLocationLabel(location) {
+  return location?.areaNameHebrew || location?.areaName || "";
 }
 
 // This function shows pending join requests for the active group on the board.
@@ -699,13 +1446,289 @@ function startBoardRequestsPolling() {
         renderBoardPendingRequests(group);
       }
     } catch {
-      // silent — next tick will retry
+      // This retry loop lets the next poll recover from a transient request error.
     }
   }, INTERVAL_MS);
 
   window.addEventListener("beforeunload", () => clearInterval(intervalId));
 }
 
+// This function starts automatic GPS alert-area matching for the current user.
+function initAlertLocationControls() {
+  if (!state.user) {
+    return;
+  }
+
+  void enableGpsAlertLocation();
+}
+
+// This function enables automatic GPS updates for the user's alert area.
+async function enableGpsAlertLocation() {
+  if (!navigator.geolocation) {
+    renderGpsLocationStatus("GPS is not available in this browser", "warn");
+    return;
+  }
+
+  try {
+    renderGpsLocationStatus("Getting GPS location...");
+    const position = await getCurrentGpsPosition();
+    await saveGpsAlertLocation(position, { force: true });
+    startGpsAlertLocationWatch();
+  } catch (error) {
+    renderGpsLocationStatus(readableGpsError(error), "warn");
+  }
+}
+
+// This function gets the browser's current GPS position as a promise.
+function getCurrentGpsPosition() {
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      maximumAge: 30000,
+      timeout: 12000
+    });
+  });
+}
+
+// This function starts watching GPS and updates the saved HFC area as the user moves.
+function startGpsAlertLocationWatch() {
+  if (!navigator.geolocation || orefGpsWatchId !== null) {
+    return;
+  }
+
+  orefGpsWatchId = navigator.geolocation.watchPosition(
+    position => {
+      saveGpsAlertLocation(position).catch(error => {
+        renderGpsLocationStatus(readableGpsError(error), "warn");
+      });
+    },
+    error => {
+      if (error?.code === 1) {
+        stopGpsAlertLocationWatch();
+      }
+
+      renderGpsLocationStatus(readableGpsError(error), "warn");
+    },
+    {
+      enableHighAccuracy: true,
+      maximumAge: 45000,
+      timeout: 15000
+    }
+  );
+}
+
+// This function stops the current GPS watch when permission is revoked or the page closes.
+function stopGpsAlertLocationWatch() {
+  if (!navigator.geolocation || orefGpsWatchId === null) {
+    return;
+  }
+
+  navigator.geolocation.clearWatch(orefGpsWatchId);
+  orefGpsWatchId = null;
+}
+
+// This function resolves one GPS position to an HFC area and saves it.
+async function saveGpsAlertLocation(position, { force = false } = {}) {
+  const coords = position.coords;
+  const now = Date.now();
+  const nextLocation = {
+    latitude: coords.latitude,
+    longitude: coords.longitude
+  };
+
+  if (!force && lastGpsLocationSave) {
+    const elapsed = now - lastGpsLocationSave.at;
+    const distance = distanceMeters(lastGpsLocationSave.coords, nextLocation);
+
+    // Avoid hammering the gateway while still updating quickly when the user moves across areas.
+    if (elapsed < GPS_LOCATION_SAVE_INTERVAL_MS && distance < GPS_LOCATION_DISTANCE_THRESHOLD_METERS) {
+      return state.user?.alertLocation || null;
+    }
+  }
+
+  renderGpsLocationStatus("Matching GPS to alert area...");
+  const alertLocation = await saveCurrentUserAlertLocation({
+    latitude: coords.latitude,
+    longitude: coords.longitude
+  });
+
+  lastGpsLocationSave = {
+    at: now,
+    coords: nextLocation
+  };
+  state.user.alertLocation = alertLocation;
+  updateActiveMemberAlertLocation(alertLocation);
+  await refreshCurrentUserGroups(state.user.role);
+  saveState();
+
+  renderGpsLocationStatus(`GPS area: ${alertLocationLabel(alertLocation)}`, "good");
+  renderBoardMembers(getActiveGroup());
+  await refreshOrefStatus();
+  return alertLocation;
+}
+
+// This function renders short GPS state near the location controls.
+function renderGpsLocationStatus(message, kind = "") {
+  const node = document.querySelector("[data-alert-location-status]");
+  if (!node) return;
+
+  if (!message) {
+    node.classList.add("hidden");
+    node.textContent = "";
+    return;
+  }
+
+  node.textContent = message;
+  node.className = `notice ${kind}`.trim();
+}
+
+// This function turns browser geolocation errors into short display text.
+function readableGpsError(error) {
+  if (error?.code === 1) return "GPS permission was denied";
+  if (error?.code === 2) return "GPS location is unavailable";
+  if (error?.code === 3) return "GPS request timed out";
+  return error?.message || "Could not use GPS";
+}
+
+// This function calculates distance between two GPS coordinates.
+function distanceMeters(a, b) {
+  const radius = 6371000;
+  const lat1 = toRadians(a.latitude);
+  const lat2 = toRadians(b.latitude);
+  const deltaLat = toRadians(b.latitude - a.latitude);
+  const deltaLon = toRadians(b.longitude - a.longitude);
+  const h = Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * (Math.sin(deltaLon / 2) ** 2);
+
+  return 2 * radius * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
+// This function converts degrees to radians.
+function toRadians(value) {
+  return value * Math.PI / 180;
+}
+
+// This function updates the active group member after the user saves a location.
+function updateActiveMemberAlertLocation(alertLocation) {
+  const group = getActiveGroup();
+  if (!group || !state.user?.userId) return;
+
+  group.members = (group.members || []).map(member => (
+    member.id === state.user.userId ? { ...member, alertLocation } : member
+  ));
+}
+
+// This function starts live HFC polling while the board or emergency screen is open.
+function startOrefStatusPolling() {
+  const group = getActiveGroup();
+  if (!group) return;
+
+  const intervalId = window.setInterval(() => {
+    if (!document.hidden) {
+      refreshOrefStatus();
+    }
+  }, OREF_POLL_INTERVAL_MS);
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      refreshOrefStatus();
+    }
+  });
+  window.addEventListener("beforeunload", () => window.clearInterval(intervalId));
+}
+
+// This function refreshes live HFC status for the active group.
+async function refreshOrefStatus() {
+  const group = getActiveGroup();
+  if (!group) return null;
+
+  try {
+    const status = await getGroupOrefStatus(group.id);
+    state.orefStatus = status;
+
+    if (state.emergency?.active && state.emergency.trigger === "pikud_haoref") {
+      state.emergency.orefStatus = status;
+    }
+
+    saveState();
+    renderOrefStatus(status);
+
+    if (document.body.dataset.page === "board") {
+      renderBoardMembers(getActiveGroup());
+    }
+
+    if (document.body.dataset.page === "emergency") {
+      renderEmergency();
+    }
+
+    return status;
+  } catch (error) {
+    renderOrefStatus(null, error);
+    return null;
+  }
+}
+
+// This function renders live HFC state in the board and emergency screens.
+function renderOrefStatus(status = state.orefStatus, error = null) {
+  const summary = document.querySelector("[data-oref-alert-summary]");
+  const refreshState = document.querySelector("[data-oref-refresh-state]");
+  const emergencyButton = document.querySelector("[data-open-oref-emergency]");
+
+  if (refreshState) {
+    refreshState.textContent = status?.fetchedAt
+      ? `Checked ${new Date(status.fetchedAt).toLocaleTimeString()}`
+      : "Connecting";
+  }
+
+  if (summary) {
+    if (error) {
+      summary.textContent = error.message || "Could not check Pikud HaOref right now. Keep using official alerts.";
+      summary.className = "notice warn";
+    } else if (status?.hasGroupAlert) {
+      const names = status.members
+        .filter(member => member.status === "alert")
+        .map(member => member.username)
+        .join(", ");
+      const areas = status.affectedAreas.slice(0, 6).join(", ");
+      summary.textContent = `Real Home Front Command alert for ${names || "this group"}. Affected areas: ${areas || "see official alert"}.`;
+      summary.className = "notice danger";
+    } else if (status?.hasActiveAlert) {
+      summary.textContent = `There is an active Home Front Command alert outside this group's saved areas. Affected areas: ${status.affectedAreas.slice(0, 6).join(", ")}.`;
+      summary.className = "notice warn";
+    } else if (!state.user?.alertLocation) {
+      summary.textContent = "Set your alert area so real Home Front Command alarms can be matched to you.";
+      summary.className = "notice warn";
+    } else {
+      summary.textContent = "No active Home Front Command alert for saved group areas.";
+      summary.className = "notice good";
+    }
+  }
+
+  emergencyButton?.classList.toggle("hidden", !status?.hasGroupAlert);
+  renderEmergencyOrefSummary(status);
+}
+
+// This function renders the real-alert summary on the emergency screen.
+function renderEmergencyOrefSummary(status = state.emergency?.orefStatus || state.orefStatus) {
+  const node = document.querySelector("[data-oref-emergency-summary]");
+  if (!node) return;
+
+  if (!status?.hasGroupAlert) {
+    node.classList.add("hidden");
+    node.textContent = "";
+    return;
+  }
+
+  const affectedMembers = status.members
+    .filter(member => member.status === "alert")
+    .map(member => member.username)
+    .join(", ");
+
+  node.textContent = `Pikud HaOref real alert: ${affectedMembers || "group member"} must enter protected space now.`;
+  node.classList.remove("hidden");
+}
+
+// This function wires the trivia question builder.
 function initTrivia() {
   renderQuestionList();
 
@@ -735,6 +1758,7 @@ function initTrivia() {
   });
 }
 
+// This function wires the mission builder.
 function initMissions() {
   renderMissionList();
 
@@ -758,6 +1782,7 @@ function initMissions() {
   });
 }
 
+// This function wires the practice flow.
 function initPractice() {
   const intro = document.querySelector("[data-practice-intro]");
   const active = document.querySelector("[data-practice-active]");
@@ -794,12 +1819,23 @@ function initPractice() {
   });
 }
 
-function initEmergency() {
-  if (!state.emergency?.active) {
-    startEmergency();
+// This function wires the emergency check-in flow.
+async function initEmergency() {
+  try {
+    await loadSessionIntoState();
+    saveState();
+  } catch {
+    // Emergency mode can still show the locally stored event if the session refresh fails.
   }
 
+  if (!state.emergency?.active) {
+    startEmergency(state.orefStatus);
+  }
+
+  renderOrefStatus();
   renderEmergency();
+  refreshOrefStatus();
+  startOrefStatusPolling();
 
   document.querySelector("[data-emergency-safe]")?.addEventListener("click", () => {
     if (allMembersSafe()) {
@@ -807,19 +1843,24 @@ function initEmergency() {
       return;
     }
 
-    markMemberSafe("1");
+    markMemberSafe(currentFamilyMemberId());
     state.emergency.telemetry.safeClickTime = secondsSince(state.emergency.startedAt);
     state.emergency.telemetry.tapCount += 1;
     saveState();
     renderEmergency();
-    simulateFamilyCheckIns();
+
+    if (state.emergency.trigger !== "pikud_haoref") {
+      simulateFamilyCheckIns();
+    }
   });
 }
 
+// This function starts the unlocked activity game.
 function initGame() {
   renderGame();
 }
 
+// This function renders the emergency summary screen.
 function initSummary() {
   const container = document.querySelector("[data-summary-list]");
   if (!container) return;
@@ -841,6 +1882,7 @@ function initSummary() {
   }).join("");
 }
 
+// This function wires the report member selector.
 function initReport() {
   const select = document.querySelector("[data-report-member]");
   if (!select) return;
@@ -853,23 +1895,23 @@ function initReport() {
   renderReport(select.value || state.familyMembers[0]?.id);
 }
 
+// This function renders the local family member cards.
 function renderFamilyList(container) {
   if (!container) return;
 
   container.innerHTML = state.familyMembers.map(member => `
     <article class="member-card">
-      <div class="avatar-badge ${member.status}">
-        <span>${member.avatar || "ðŸ‘¤"}</span>
-      </div>
+      ${renderAvatarBadge(member.name, member.avatar, `avatar-badge ${member.status}`)}
       <div class="member-main">
         <p class="member-name">${escapeHtml(member.name)}</p>
-        <p class="member-role">${escapeHtml(member.role)}</p>
+        <p class="member-role">${escapeHtml(member.alertLocation?.areaName || member.role)}</p>
       </div>
       <span class="status-pill ${member.status}">${statusLabel(member.status)}</span>
     </article>
   `).join("");
 }
 
+// This function renders the saved trivia questions.
 function renderQuestionList() {
   const container = document.querySelector("[data-question-list]");
   if (!container) return;
@@ -882,6 +1924,7 @@ function renderQuestionList() {
   `).join("");
 }
 
+// This function renders the saved missions.
 function renderMissionList() {
   const container = document.querySelector("[data-mission-list]");
   if (!container) return;
@@ -894,6 +1937,7 @@ function renderMissionList() {
   `).join("");
 }
 
+// This function renders the active practice question.
 function renderPracticeQuestion() {
   const container = document.querySelector("[data-practice-question]");
   const question = state.questions[0] || DEFAULT_QUESTIONS[0];
@@ -929,6 +1973,7 @@ function renderPracticeQuestion() {
   });
 }
 
+// This function saves the practice baseline and shows its summary.
 function completePractice() {
   const session = state.practiceSession || {
     startedAt: Date.now() - 4000,
@@ -966,10 +2011,13 @@ function completePractice() {
   summary.classList.remove("hidden");
 }
 
-function startEmergency() {
-  state.familyMembers = state.familyMembers.map(member => ({ ...member, status: "at_risk" }));
+// This function starts emergency mode and resets emergency telemetry.
+function startEmergency(orefStatus = null) {
+  state.familyMembers = buildEmergencyMembers(orefStatus);
   state.emergency = {
     active: true,
+    trigger: orefStatus?.hasGroupAlert ? "pikud_haoref" : "manual",
+    orefStatus: orefStatus || null,
     startedAt: Date.now(),
     checkIns: {},
     telemetry: {
@@ -988,11 +2036,45 @@ function startEmergency() {
   saveState();
 }
 
+// This function creates the emergency member list from the active group and live alert state.
+function buildEmergencyMembers(orefStatus = null) {
+  const group = getActiveGroup();
+
+  if (!group?.members?.length) {
+    return state.familyMembers.map(member => ({ ...member, status: "at_risk" }));
+  }
+
+  const statusMap = new Map((orefStatus?.members || []).map(member => [member.memberId, member]));
+
+  return group.members.map(member => {
+    const liveStatus = statusMap.get(member.id);
+    const status = orefStatus?.hasGroupAlert
+      ? orefMemberStatusClass(liveStatus)
+      : "at_risk";
+
+    return {
+      alertLocation: liveStatus?.alertLocation || member.alertLocation || null,
+      avatar: member.avatar,
+      id: member.id,
+      name: member.username,
+      role: member.role === "admin" ? "Admin" : "User",
+      status
+    };
+  });
+}
+
+// This function returns the current user's member id in the emergency list.
+function currentFamilyMemberId() {
+  return state.user?.userId || "1";
+}
+
+// This function renders the emergency check-in state.
 function renderEmergency() {
   renderFamilyList(document.querySelector("[data-emergency-family]"));
+  renderEmergencyOrefSummary();
   const button = document.querySelector("[data-emergency-safe]");
   const message = document.querySelector("[data-emergency-message]");
-  const current = state.familyMembers.find(member => member.id === "1");
+  const current = state.familyMembers.find(member => member.id === currentFamilyMemberId());
 
   if (!button || !message) return;
 
@@ -1018,6 +2100,7 @@ function renderEmergency() {
   message.className = "notice danger";
 }
 
+// This function marks one local family member as safe.
 function markMemberSafe(id) {
   const member = state.familyMembers.find(item => item.id === id);
   if (!member || member.status === "safe") return;
@@ -1025,8 +2108,10 @@ function markMemberSafe(id) {
   state.emergency.checkIns[id] = formatSeconds(secondsSince(state.emergency.startedAt));
 }
 
+// This function simulates other family members checking in.
 function simulateFamilyCheckIns() {
-  const pending = state.familyMembers.filter(member => member.status !== "safe" && member.id !== "1");
+  const currentId = currentFamilyMemberId();
+  const pending = state.familyMembers.filter(member => member.status !== "safe" && member.id !== currentId);
   pending.forEach((member, index) => {
     window.setTimeout(() => {
       markMemberSafe(member.id);
@@ -1036,6 +2121,7 @@ function simulateFamilyCheckIns() {
   });
 }
 
+// This function renders the post-check-in game.
 function renderGame() {
   const locked = document.querySelector("[data-game-locked]");
   const unlocked = document.querySelector("[data-game-unlocked]");
@@ -1109,6 +2195,7 @@ function renderGame() {
   });
 }
 
+// This function renders the stress report for one member.
 function renderReport(memberId) {
   const detail = document.querySelector("[data-report-detail]");
   const member = state.familyMembers.find(item => item.id === memberId) || state.familyMembers[0];
@@ -1176,6 +2263,7 @@ function renderReport(memberId) {
   `;
 }
 
+// This function builds the local analytics report data for one member.
 function buildMemberReport(member, index) {
   const baseline = state.baseline || DEFAULT_BASELINE;
   const telemetry = state.emergency?.telemetry || {};
@@ -1219,6 +2307,7 @@ function buildMemberReport(member, index) {
   };
 }
 
+// This function starts the visible emergency timer.
 function startEventTimer() {
   if (!document.querySelector("[data-event-timer]")) return;
 
@@ -1226,6 +2315,7 @@ function startEventTimer() {
   window.setInterval(updateEventTimer, 1000);
 }
 
+// This function updates timer labels and progress bars.
 function updateEventTimer() {
   if (!state.emergency?.startedAt) return;
   const elapsed = secondsSince(state.emergency.startedAt);
@@ -1241,25 +2331,30 @@ function updateEventTimer() {
   });
 }
 
+// This function counts local family members by status.
 function countStatus(status) {
   return state.familyMembers.filter(member => member.status === status).length;
 }
 
+// This function checks whether every local family member is safe.
 function allMembersSafe() {
   return state.familyMembers.every(member => member.status === "safe");
 }
 
+// This function maps a status id to display text.
 function statusLabel(status) {
   if (status === "safe") return "×ž×•×’×Ÿ";
   if (status === "at_risk") return "×‘×¡×™×›×•×Ÿ";
   return "OFFLINE";
 }
 
+// This function writes text into a selected element when it exists.
 function setText(selector, value) {
   const node = document.querySelector(selector);
   if (node) node.textContent = value;
 }
 
+// This function escapes text before placing it in HTML strings.
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -1269,10 +2364,12 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+// This function calculates seconds elapsed since a timestamp.
 function secondsSince(timestamp) {
   return Math.max((Date.now() - timestamp) / 1000, 0);
 }
 
+// This function formats seconds as mm:ss.
 function formatSeconds(seconds) {
   const total = Math.max(Math.floor(seconds), 0);
   const minutes = Math.floor(total / 60).toString().padStart(2, "0");
@@ -1280,27 +2377,32 @@ function formatSeconds(seconds) {
   return `${minutes}:${rest}`;
 }
 
+// This function calculates an average for numeric values.
 function average(values) {
   if (!values.length) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+// This function rounds a number to two decimals.
 function round(value) {
   return Math.round(value * 100) / 100;
 }
 
+// This function maps a stress level to its CSS class.
 function stressClass(level) {
   if (level === "High") return "stress-high";
   if (level === "Medium") return "stress-medium";
   return "stress-low";
 }
 
+// This function maps a stress level to display text.
 function stressLabel(level) {
   if (level === "High") return "×’×‘×•×”";
   if (level === "Medium") return "×‘×™× ×•× ×™";
   return "× ×ž×•×š";
 }
 
+// This function chooses activity feedback text for a result.
 function feedbackText(correct) {
   return correct ? "×›×œ ×”×›×‘×•×“! ×”×ž×©×™×›×• ×›×š." : "× ×™×¡×™×•×Ÿ ×˜×•×‘. ××ª× ×¢×•×©×™× ×¢×‘×•×“×” ×˜×•×‘×”.";
 }
