@@ -276,19 +276,24 @@ async function getVisibleGroups(accessToken) {
       context.user,
       context.profile
     );
+    const ownedGroupIds = groups
+      .filter(group => group.created_by === context.user.id)
+      .map(group => group.id);
+
     const pendingRequests = await getPendingRequests(
       context.client,
-      groups.map(group => group.id)
+      ownedGroupIds
     );
 
-    return groups.map(group => (
-      mapGroup(
+    return groups.map(group => {
+      const isOwner = group.created_by === context.user.id;
+      return mapGroup(
         group,
-        "admin",
-        pendingRequests.filter(request => request.groupId === group.id),
+        isOwner ? "admin" : "user",
+        isOwner ? pendingRequests.filter(request => request.groupId === group.id) : [],
         members.filter(member => member.groupId === group.id)
-      )
-    ));
+      );
+    });
   }
 
   const { data, error } = await context.client
