@@ -662,6 +662,11 @@ async function startGroupDrill(accessToken, groupId) {
   const context = await requireAdminContext(accessToken);
   await getManageableGroupRecord(context.client, context.user.id, groupId);
 
+  await context.client
+    .from("group_drill_safe_users")
+    .delete()
+    .eq("group_id", groupId);
+
   const { data: group, error } = await context.client
     .from("groups")
     .update({ drill_active: true, drill_started_at: new Date().toISOString() })
@@ -689,12 +694,46 @@ async function endGroupDrill(accessToken, groupId) {
   return mapGroup(group, "admin");
 }
 
+// This function marks the current user as safe in an active drill.
+async function markMemberDrillSafe(accessToken, groupId) {
+  const context = await getSessionContext(accessToken);
+
+  const { error } = await context.client
+    .from("group_drill_safe_users")
+    .upsert({ group_id: groupId, user_id: context.user.id }, { onConflict: "group_id,user_id", ignoreDuplicates: true });
+
+  if (error) throw error;
+
+  const { data: rows, error: fetchError } = await context.client
+    .from("group_drill_safe_users")
+    .select("user_id")
+    .eq("group_id", groupId);
+
+  if (fetchError) throw fetchError;
+  return { safeUsers: (rows || []).map(r => r.user_id) };
+}
+
+// This function returns the list of members who marked safe in the active drill.
+async function getDrillStatus(accessToken, groupId) {
+  const context = await getSessionContext(accessToken);
+
+  const { data: rows, error } = await context.client
+    .from("group_drill_safe_users")
+    .select("user_id")
+    .eq("group_id", groupId);
+
+  if (error) throw error;
+  return { safeUsers: (rows || []).map(r => r.user_id) };
+}
+
 module.exports = {
   createGroupForCurrentUser,
   deleteOwnedGroup,
   endGroupDrill,
+  getDrillStatus,
   getVisibleGroups,
   leaveGroup,
+  markMemberDrillSafe,
   requestJoinByCode,
   reviewJoinRequest,
   startGroupDrill,

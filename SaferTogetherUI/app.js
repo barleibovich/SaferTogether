@@ -8,8 +8,10 @@ import {
   createGroupForCurrentUser,
   deleteOwnedGroup,
   endDrill,
+  fetchDrillStatus,
   getCurrentUserGroups,
   leaveGroup,
+  markSafe,
   renameGroup,
   requestJoinByCode,
   reviewJoinRequest,
@@ -1554,23 +1556,40 @@ function startMembersPolling() {
 }
 
 // This function polls the server every 5 seconds to detect when an admin starts a drill.
+// It snapshots the drill state on the first poll so it only alarms on transitions
+// (inactive → active), not on a drill that was already running when the user loaded.
 function startDrillPolling() {
   const INTERVAL_MS = 5000;
+  let initialized = false;
+  let wasActive = false;
 
-  const intervalId = setInterval(async () => {
+  async function poll() {
     if (document.hidden) return;
     try {
       const groups = await getCurrentUserGroups();
       const activeGroupId = getActiveGroup()?.id;
       const group = (groups || []).find(g => g.id === activeGroupId);
-      if (group?.drillActive) {
+      const isActive = group?.drillActive ?? false;
+
+      if (!initialized) {
+        initialized = true;
+        wasActive = isActive;
+        return;
+      }
+
+      if (isActive && !wasActive) {
         clearInterval(intervalId);
         showDrillOverlay();
       }
+      wasActive = isActive;
     } catch {
       // silently ignore polling errors
     }
-  }, INTERVAL_MS);
+  }
+
+  poll();
+  const intervalId = setInterval(poll, INTERVAL_MS);
+  window.addEventListener("beforeunload", () => clearInterval(intervalId));
 }
 
 // This function shows the drill overlay and redirects to practice after a short delay.
@@ -1915,6 +1934,74 @@ function initMissions() {
 
 // This function wires the practice flow.
 function initPractice() {
+  const isAdmin = isCurrentUserAdminForActiveGroup();
+
+  if (isAdmin) {
+    initAdminDrillMonitor();
+  } else {
+    initMemberPractice();
+  }
+}
+
+// This function runs the admin drill monitor view on practice.html.
+function initAdminDrillMonitor() {
+  const monitor = document.querySelector("[data-drill-monitor]");
+  if (!monitor) return;
+
+  monitor.classList.remove("hidden");
+
+  const group = getActiveGroup();
+  if (!group) return;
+
+  renderDrillMembers(group.members || [], []);
+
+  let drillPollInterval = setInterval(async () => {
+    if (document.hidden) return;
+    try {
+      const safeUsers = await fetchDrillStatus(group.id);
+      renderDrillMembers(group.members || [], safeUsers);
+    } catch {
+      // silently ignore polling errors
+    }
+  }, 5000);
+
+  document.querySelector("[data-end-drill]")?.addEventListener("click", async () => {
+    clearInterval(drillPollInterval);
+    try {
+      await endDrill(group.id);
+    } catch {
+      // best effort
+    }
+    window.location.href = "board.html";
+  });
+
+  window.addEventListener("beforeunload", () => clearInterval(drillPollInterval));
+}
+
+// This function renders the drill member grid with safe/pending status.
+function renderDrillMembers(members, safeUsers) {
+  const container = document.querySelector("[data-drill-members]");
+  if (!container) return;
+
+  if (!members.length) {
+    container.innerHTML = `<p class="notice">אין חברים בקבוצה.</p>`;
+    return;
+  }
+
+  container.innerHTML = members.map(member => {
+    const isSafe = safeUsers.includes(member.id);
+    return `
+      <article class="member-card">
+        ${renderAvatarBadge(member.username, member.avatar, `member-avatar ${isSafe ? "" : "avatar-grayscale"}`)}
+        <p class="member-name">${escapeHtml(member.username)}</p>
+        <span class="status-pill ${isSafe ? "safe" : "offline"}">${isSafe ? "מוגן" : "ממתין"}</span>
+      </article>
+    `;
+  }).join("");
+}
+
+// This function runs the regular member practice flow.
+function initMemberPractice() {
   const intro = document.querySelector("[data-practice-intro]");
   const active = document.querySelector("[data-practice-active]");
   const summary = document.querySelector("[data-practice-summary]");
@@ -1936,13 +2023,22 @@ function initPractice() {
     summary?.classList.add("hidden");
   });
 
-  document.querySelector("[data-practice-safe]")?.addEventListener("click", event => {
+  document.querySelector("[data-practice-safe]")?.addEventListener("click", async event => {
     if (!state.practiceSession) return;
     state.practiceSession.safeAt = Date.now();
     state.practiceSession.taps += 1;
     saveState();
-    event.currentTarget.textContent = "××™×©×•×¨ ×ž×•×’×Ÿ × ×©×ž×¨";
+    event.currentTarget.textContent = "אישור מוגן נשמר";
     event.currentTarget.disabled = true;
+
+    const group = getActiveGroup();
+    if (group) {
+      try {
+        await markSafe(group.id);
+      } catch {
+        // best effort — local state already saved
+      }
+    }
   });
 
   document.querySelector("[data-complete-practice]")?.addEventListener("click", () => {
