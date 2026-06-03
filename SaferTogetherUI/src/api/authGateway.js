@@ -1,9 +1,9 @@
 import { requestJson } from "./apiClient.js";
 
 // This function creates a user account.
-export async function signUpWithUsername({ username, password, role, avatar }) {
+export async function signUpWithUsername({ username, password, role, avatar, avatarImage }) {
   return requestJson("/api/auth/signup", {
-    body: { avatar, password, role, username },
+    body: { avatar, avatarImage, password, role, username },
     method: "POST"
   });
 }
@@ -30,9 +30,9 @@ export async function getCurrentUserProfile() {
 }
 
 // This function saves the current user's avatar.
-export async function updateCurrentUserAvatar({ avatar }) {
+export async function updateCurrentUserAvatar({ avatar, avatarImage }) {
   const payload = await requestJson("/api/auth/profile", {
-    body: { avatar },
+    body: { avatar, avatarImage },
     method: "PATCH"
   });
 

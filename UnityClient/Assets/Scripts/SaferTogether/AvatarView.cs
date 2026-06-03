@@ -288,6 +288,13 @@ namespace SaferTogether.UnityClient
         /// <summary>
         /// This function applies creature-specific parts.
         /// </summary>
+        private static bool IsHumanAvatarSpecies(string species)
+        {
+            return species == CharacterAvatarOptions.Male
+                || species == CharacterAvatarOptions.Female
+                || species == CharacterAvatarOptions.Human;
+        }
+
         private void ApplySpeciesStyle(string species, string accessory, Color skinColor)
         {
             string value = CharacterAvatarId.NormalizeSpecies(species);
@@ -300,7 +307,7 @@ namespace SaferTogether.UnityClient
                 || accessoryValue == CharacterAvatarOptions.Tail;
             bool hasRoundEars = value == CharacterAvatarOptions.Bear
                 || value == CharacterAvatarOptions.Elephant;
-            bool hasHumanEars = value == CharacterAvatarOptions.Human
+            bool hasHumanEars = IsHumanAvatarSpecies(value)
                 || value == CharacterAvatarOptions.Angel;
             bool hasHorns = value == CharacterAvatarOptions.Dragon
                 || value == CharacterAvatarOptions.Devil
@@ -435,7 +442,7 @@ namespace SaferTogether.UnityClient
                 return;
             }
 
-            bool showNose = speciesValue == CharacterAvatarOptions.Human
+            bool showNose = IsHumanAvatarSpecies(speciesValue)
                 || speciesValue == CharacterAvatarOptions.Angel
                 || speciesValue == CharacterAvatarOptions.Devil;
             trunkImage.enabled = showNose;
@@ -950,7 +957,7 @@ namespace SaferTogether.UnityClient
         /// </summary>
         private void ApplyGenderStyle(string sex, string species)
         {
-            if (CharacterAvatarId.NormalizeSpecies(species) != CharacterAvatarOptions.Human || bodyImage == null)
+            if (!IsHumanAvatarSpecies(CharacterAvatarId.NormalizeSpecies(species)) || bodyImage == null)
             {
                 return;
             }
@@ -1646,7 +1653,7 @@ namespace SaferTogether.UnityClient
         /// </summary>
         private void ApplyFaceDetailLayers(string face, string species, Color skinColor)
         {
-            bool humanLike = species == CharacterAvatarOptions.Human
+            bool humanLike = IsHumanAvatarSpecies(species)
                 || species == CharacterAvatarOptions.Angel
                 || species == CharacterAvatarOptions.Devil;
             SetImageVisible(jawShadowImage, humanLike);

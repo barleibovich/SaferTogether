@@ -371,109 +371,829 @@ MonoBehaviour:
   avatarRoot: {fileID: 223541403}
   resourcesRoot: GeneratedAvatarBuilder
   instantiateAvatarPrefabs: 1
-  dragonAvatar: {fileID: 7624327883896440053, guid: 549e078fb21066c49b89ea141835a14f, type: 3}
-  humanAvatar: {fileID: 2381540883155298744, guid: 93aaedfc5ff1aac49b93581b953a73c6, type: 3}
-  bearAvatar: {fileID: 2874247666411349012, guid: b5708478b2a20764e9a2334c228c3a80, type: 3}
-  elephantAvatar: {fileID: 663168808482459350, guid: 6db0773b779f3f041b5a318fda28103c, type: 3}
-  devilAvatar: {fileID: 5100766055549032906, guid: 21c171b4c443adf4e9cc97e1228823ba, type: 3}
-  angelAvatar: {fileID: 8041465454474039692, guid: 37fffa302cbbc734195c6d84d21961b6, type: 3}
+  dragonAvatar: {fileID: 3011408024110492421, guid: 549e078fb21066c49b89ea141835a14f, type: 3}
+  maleAvatar: {fileID: 3731451786563790036, guid: a8dd38df5ac2edd4e9556d4e425daac0, type: 3}
+  femaleAvatar: {fileID: 2943577778888900076, guid: 0d8b4adbc3e5c394980abfdbf9b1a489, type: 3}
+  devilAvatar: {fileID: 2017579013431421887, guid: 21c171b4c443adf4e9cc97e1228823ba, type: 3}
   accessoryPrefabs:
-  - id: glasses
+  - species: male
+    id: bandana
+    color: 
     slot: 0
-    prefab: {fileID: 2512509318368674045, guid: fe083aba76a0ec240b0999d0d6aa8e86, type: 3}
-  - id: cap
+    prefab: {fileID: 5086290216973358963, guid: 25af22eca237cfb448b6ecb0b2656909, type: 3}
+  - species: male
+    id: crown
+    color: 
     slot: 1
-    prefab: {fileID: 5844252927832054962, guid: 1b405a058bc749d44a93024cef69ff04, type: 3}
-  - id: crown
-    slot: 1
-    prefab: {fileID: 1944080982318229278, guid: d7bb954935bffce44be2abf5a948e97e, type: 3}
-  - id: mask
+    prefab: {fileID: 776183862515113935, guid: 169c32cd1ee568348b21cbc856b8fd6a, type: 3}
+  - species: male
+    id: glasses
+    color: 
     slot: 0
-    prefab: {fileID: 8034813894987305324, guid: 00ff79ca2a485e245882aaea21978267, type: 3}
-  - id: headphones
+    prefab: {fileID: 7269084032168268226, guid: 2c19a616c6eda3f46be3be3d8dc70518, type: 3}
+  - species: male
+    id: mask
+    color: 
     slot: 0
-    prefab: {fileID: 5567582797142127680, guid: 66b90876b0b1acf4e9ef9fe74cfb7b4d, type: 3}
-  - id: wings
-    slot: 3
-    prefab: {fileID: 1833033282192691951, guid: fe8f0fb9eaa42e346b2f107db7f96f8c, type: 3}
-  - id: halo
+    prefab: {fileID: 9209581800478378433, guid: 62461a6e679113f469c6a6f1a2501f30, type: 3}
+  - species: female
+    id: bandana
+    color: 
+    slot: 0
+    prefab: {fileID: 5490275868306982327, guid: ffc5e381be7907242abf94b99e5727aa, type: 3}
+  - species: female
+    id: crown
+    color: 
     slot: 1
-    prefab: {fileID: 6479544308425455876, guid: 2743d54494222f4488850678c03828f6, type: 3}
-  - id: horns
-    slot: 2
-    prefab: {fileID: 4205274754366930476, guid: 3f91ba8ee0e82da47931b6d0a10d93f2, type: 3}
-  - id: tail
-    slot: 4
-    prefab: {fileID: 8606076535077538653, guid: 6bfedc15cff8b5b468e530448949ce06, type: 3}
+    prefab: {fileID: 7245281261362131003, guid: 0394ff53d68b210438d54e44e0a7a709, type: 3}
+  - species: female
+    id: glasses
+    color: 
+    slot: 0
+    prefab: {fileID: 2169536439043839917, guid: 222164a46af9fa6488fd5bad0eb5a4e8, type: 3}
+  - species: female
+    id: mask
+    color: 
+    slot: 0
+    prefab: {fileID: 7793963734372748272, guid: b7bc18262ac2ad448a119ac8a563b41a, type: 3}
+  - species: dragon
+    id: bandana
+    color: 
+    slot: 0
+    prefab: {fileID: 1451096117273476243, guid: fc14c0434724b6a41a815b8952cc7f4e, type: 3}
+  - species: dragon
+    id: crown
+    color: 
+    slot: 1
+    prefab: {fileID: 5881947522053820988, guid: 8127db0630153164f81e24da5e8edf50, type: 3}
+  - species: dragon
+    id: glasses
+    color: 
+    slot: 0
+    prefab: {fileID: 2457913472368249290, guid: a3937dadf31c3d341849e9cdd593e3e4, type: 3}
+  - species: dragon
+    id: mask
+    color: 
+    slot: 0
+    prefab: {fileID: 4050509940102456669, guid: ddf65e6e189c97344b0f6e4ec5f5afe7, type: 3}
+  - species: devil
+    id: bandana
+    color: 
+    slot: 0
+    prefab: {fileID: 5957323722789080075, guid: 26908a450d3fdc044afd39cf610e0142, type: 3}
+  - species: devil
+    id: crown
+    color: 
+    slot: 1
+    prefab: {fileID: 3636630672537101373, guid: 680ff604343d45548984ee2e9590013f, type: 3}
+  - species: devil
+    id: glasses
+    color: 
+    slot: 0
+    prefab: {fileID: 2122943808849428246, guid: b860a7c8b02616c4db105cafdd586fce, type: 3}
+  - species: devil
+    id: mask
+    color: 
+    slot: 0
+    prefab: {fileID: 5265835129067173766, guid: ffe0b0e38ff4c4740bd30d011b24fe74, type: 3}
   shirtPrefabs:
-  - id: tee
+  - species: male
+    id: tee
+    color: black
     slot: 5
-    prefab: {fileID: 2573571231918723782, guid: 2eb79743695a8154eb10b39677579a9f, type: 3}
-  - id: shirt
+    prefab: {fileID: 3777863339430044729, guid: 35efcbee6d1a4104abec28062a3d6faf, type: 3}
+  - species: male
+    id: tee
+    color: blue
     slot: 5
-    prefab: {fileID: 4645863216247692627, guid: 82ef2b7a69f04854bbb5775525fc7c1b, type: 3}
-  - id: hoodie
+    prefab: {fileID: 5588830371098775417, guid: 2a4cf395ddbfe4349857115bfd92c8dd, type: 3}
+  - species: male
+    id: tee
+    color: green
     slot: 5
-    prefab: {fileID: 1695897524292107294, guid: 1c43da6868c22c146b80ce92e953eb32, type: 3}
-  - id: sweatshirt
+    prefab: {fileID: 3057062669074720358, guid: 0b61d25e8db97e74699c2d4857f91b92, type: 3}
+  - species: male
+    id: tee
+    color: red
     slot: 5
-    prefab: {fileID: 8509086432853869368, guid: 19b20ebaf7500a34fb0033af3d3ba982, type: 3}
-  - id: jacket
+    prefab: {fileID: 7444152014239669365, guid: 82a2187ed233b8842a6957a4b670ec33, type: 3}
+  - species: male
+    id: tee
+    color: white
     slot: 5
-    prefab: {fileID: 2195618490216884192, guid: d336beda086770e4cb8dd39b3fa66766, type: 3}
-  - id: vest
+    prefab: {fileID: 5635152807812266600, guid: 9ea0754ac22426e4ba9f00017fcb1a78, type: 3}
+  - species: male
+    id: tee
+    color: yellow
     slot: 5
-    prefab: {fileID: 1453535466806084276, guid: 0cc9b45601c8eb847854fc48993396d3, type: 3}
-  - id: armor
+    prefab: {fileID: 5987506384916679366, guid: 217bdecad950b714cbc7c2afb1a70f84, type: 3}
+  - species: male
+    id: sweatshirt
+    color: black
     slot: 5
-    prefab: {fileID: 7744371170094810352, guid: 8ccda8c9016801b4683492698a579249, type: 3}
-  - id: dress
+    prefab: {fileID: 4561426684319751145, guid: 7119731984a08ca45b21ad1daebc4e45, type: 3}
+  - species: male
+    id: sweatshirt
+    color: blue
     slot: 5
-    prefab: {fileID: 2916827992831438767, guid: 2d0b3ffa621d644478ccd9cf72c1a3fe, type: 3}
+    prefab: {fileID: 3747165962056255968, guid: 1138636cab3c7e149a7d43bc6483c9ad, type: 3}
+  - species: male
+    id: sweatshirt
+    color: green
+    slot: 5
+    prefab: {fileID: 8245304258870630725, guid: d42ac0d50fb67db45bc9c833931ba3d0, type: 3}
+  - species: male
+    id: sweatshirt
+    color: red
+    slot: 5
+    prefab: {fileID: 738675032155381600, guid: 41d015d4f753ebe42ba126b3861af7e5, type: 3}
+  - species: male
+    id: sweatshirt
+    color: white
+    slot: 5
+    prefab: {fileID: 2666640612128602846, guid: 19b329ade23861f4dac4a5c6bdc1593a, type: 3}
+  - species: male
+    id: sweatshirt
+    color: yellow
+    slot: 5
+    prefab: {fileID: 1197494485804620637, guid: 4e66f786ec25f444693f0c7714258a64, type: 3}
+  - species: male
+    id: undershirt
+    color: black
+    slot: 5
+    prefab: {fileID: 256882151635139037, guid: 78072c9659d2df143a5c549bd33c481e, type: 3}
+  - species: male
+    id: undershirt
+    color: blue
+    slot: 5
+    prefab: {fileID: 1924016110565199880, guid: 9be604088ed29e24594f21384a6d1da9, type: 3}
+  - species: male
+    id: undershirt
+    color: green
+    slot: 5
+    prefab: {fileID: 2052098863293779377, guid: 2273ddca8cc46b44fade6edc94377d20, type: 3}
+  - species: male
+    id: undershirt
+    color: red
+    slot: 5
+    prefab: {fileID: 1018972415040639023, guid: 671e111458bb6184a987fcdfee03db52, type: 3}
+  - species: male
+    id: undershirt
+    color: white
+    slot: 5
+    prefab: {fileID: 8748827950073512343, guid: a903ee1b3d29c5246bd756b3f88bf9a1, type: 3}
+  - species: male
+    id: undershirt
+    color: yellow
+    slot: 5
+    prefab: {fileID: 535786895491205285, guid: 26729c14ed0349c4f83a7207c0d7522c, type: 3}
+  - species: female
+    id: tee
+    color: black
+    slot: 5
+    prefab: {fileID: 1421788844339482457, guid: 0942d84e1d8704a40a768efea765b1dd, type: 3}
+  - species: female
+    id: tee
+    color: blue
+    slot: 5
+    prefab: {fileID: 7953914004424529877, guid: 57d45c707aec838449b1727cb93ab228, type: 3}
+  - species: female
+    id: tee
+    color: green
+    slot: 5
+    prefab: {fileID: 4674571431651582366, guid: 1fa0ed16bee606049a2d48f79bfa549f, type: 3}
+  - species: female
+    id: tee
+    color: red
+    slot: 5
+    prefab: {fileID: 6286879885934764277, guid: 6c72775184940934d9ce7bcb3e6cb426, type: 3}
+  - species: female
+    id: tee
+    color: white
+    slot: 5
+    prefab: {fileID: 1854374046669367602, guid: 2565adc41d41cc34aa899018e294ad4c, type: 3}
+  - species: female
+    id: tee
+    color: yellow
+    slot: 5
+    prefab: {fileID: 6514666322078921613, guid: 63721920aefd78c48b22356fed5a565a, type: 3}
+  - species: female
+    id: sweatshirt
+    color: black
+    slot: 5
+    prefab: {fileID: 5618084966464428600, guid: f44c4041755e71541a7cb9e5fedced38, type: 3}
+  - species: female
+    id: sweatshirt
+    color: blue
+    slot: 5
+    prefab: {fileID: 5865878736035183235, guid: 67b0cf78ec737594e93bd51c536c42c1, type: 3}
+  - species: female
+    id: sweatshirt
+    color: green
+    slot: 5
+    prefab: {fileID: 8456851027256617280, guid: a5914d624b448d44587d8fbbc230ea92, type: 3}
+  - species: female
+    id: sweatshirt
+    color: red
+    slot: 5
+    prefab: {fileID: 2458970625982600218, guid: 0249fc847dc84314990cb34de47c98e1, type: 3}
+  - species: female
+    id: sweatshirt
+    color: white
+    slot: 5
+    prefab: {fileID: 4408478708066556817, guid: fd5b56cb2463b204a97b6244517203db, type: 3}
+  - species: female
+    id: sweatshirt
+    color: yellow
+    slot: 5
+    prefab: {fileID: 2825101055242567541, guid: 2c5678a28b181fd488cf222c454dbfc4, type: 3}
+  - species: female
+    id: undershirt
+    color: black
+    slot: 5
+    prefab: {fileID: 3984040061389456042, guid: d68038f8d15ca8a4c954b5d9fd17fa13, type: 3}
+  - species: female
+    id: undershirt
+    color: blue
+    slot: 5
+    prefab: {fileID: 4605383714337813515, guid: 87d1ddf8466fbfd4887386f7a8a35cfa, type: 3}
+  - species: female
+    id: undershirt
+    color: green
+    slot: 5
+    prefab: {fileID: 1777581186265873231, guid: a61fbafd5e6fce4478339515a923552f, type: 3}
+  - species: female
+    id: undershirt
+    color: red
+    slot: 5
+    prefab: {fileID: 4789234974145127374, guid: c7cd0dc3e3b68a54d84130d8e3ba5d07, type: 3}
+  - species: female
+    id: undershirt
+    color: white
+    slot: 5
+    prefab: {fileID: 7390113856932980098, guid: 51be171ed006a9b42ba0dd399ef03a10, type: 3}
+  - species: female
+    id: undershirt
+    color: yellow
+    slot: 5
+    prefab: {fileID: 4699843330095925324, guid: 42ad0039f0986334485f43f4e79d6131, type: 3}
+  - species: devil
+    id: tee
+    color: black
+    slot: 5
+    prefab: {fileID: 2596937809776008057, guid: d8ef1c021331f644c8458a2053a4bab4, type: 3}
+  - species: devil
+    id: tee
+    color: blue
+    slot: 5
+    prefab: {fileID: 1781685451088455320, guid: 40e52a50e1d01a746ba5e47ae77aac6e, type: 3}
+  - species: devil
+    id: tee
+    color: green
+    slot: 5
+    prefab: {fileID: 6465230809241013824, guid: f93224fcf7294534191e9766e1499892, type: 3}
+  - species: devil
+    id: tee
+    color: red
+    slot: 5
+    prefab: {fileID: 2338319816891763924, guid: 7364252e161cb014b93bc5f509ee1b01, type: 3}
+  - species: devil
+    id: tee
+    color: white
+    slot: 5
+    prefab: {fileID: 1404109668178246035, guid: 9be9d0c02f1d3d145b87e78c6a3ff2eb, type: 3}
+  - species: devil
+    id: tee
+    color: yellow
+    slot: 5
+    prefab: {fileID: 339591517663167530, guid: 0cd697fe8b43b5e489fbd70f13418540, type: 3}
+  - species: devil
+    id: sweatshirt
+    color: black
+    slot: 5
+    prefab: {fileID: 363189040495946569, guid: ebccf2b1e41c3bd46a5df5cd173ea693, type: 3}
+  - species: devil
+    id: sweatshirt
+    color: blue
+    slot: 5
+    prefab: {fileID: 944971634252248152, guid: 30307db4c56be684ab7febea7d52570c, type: 3}
+  - species: devil
+    id: sweatshirt
+    color: green
+    slot: 5
+    prefab: {fileID: 3444113529139918161, guid: c987942693cb532419a3766078da81f1, type: 3}
+  - species: devil
+    id: sweatshirt
+    color: red
+    slot: 5
+    prefab: {fileID: 181689030015513908, guid: e4e6ff2caf9e59842a0117eec5034b35, type: 3}
+  - species: devil
+    id: sweatshirt
+    color: white
+    slot: 5
+    prefab: {fileID: 6707608842841133932, guid: 8aed4b8bb4f9cc74698aa70076866dd5, type: 3}
+  - species: devil
+    id: sweatshirt
+    color: yellow
+    slot: 5
+    prefab: {fileID: 1614700226695484442, guid: b8da6cde6d9b74047a8451768fbb74e2, type: 3}
+  - species: devil
+    id: undershirt
+    color: black
+    slot: 5
+    prefab: {fileID: 8950810675340903938, guid: cdeaaf5944a375e4ba756e94c8f0d451, type: 3}
+  - species: devil
+    id: undershirt
+    color: blue
+    slot: 5
+    prefab: {fileID: 1640855821798273946, guid: 8c0db00c1c24b6340bab3264df09b161, type: 3}
+  - species: devil
+    id: undershirt
+    color: green
+    slot: 5
+    prefab: {fileID: 1616223410754739030, guid: 8dae0b83f0ee4f242b6471b7367af03c, type: 3}
+  - species: devil
+    id: undershirt
+    color: red
+    slot: 5
+    prefab: {fileID: 4742627645748298242, guid: 221d854db00eb074597e8ccac00e8190, type: 3}
+  - species: devil
+    id: undershirt
+    color: white
+    slot: 5
+    prefab: {fileID: 4736914395920866883, guid: 1e5813ae02d6067418255a72d217915e, type: 3}
+  - species: devil
+    id: undershirt
+    color: yellow
+    slot: 5
+    prefab: {fileID: 827018572758401083, guid: f6510626afe9ac84ca0e7fd41d299a30, type: 3}
   pantsPrefabs:
-  - id: jeans
+  - species: male
+    id: jeans
+    color: denim
     slot: 6
-    prefab: {fileID: 4039664385727590375, guid: 5d4cede945acc6a4ea9d7c09d4f04617, type: 3}
-  - id: training
+    prefab: {fileID: 5321219935668144185, guid: d4092d6fd98a3d04aa0e24add1dbb5a7, type: 3}
+  - species: male
+    id: cargo
+    color: black
     slot: 6
-    prefab: {fileID: 7686228436789678552, guid: 46202dafba8ec594cb1238c586b86adc, type: 3}
-  - id: shorts
+    prefab: {fileID: 7830806763665867709, guid: 71da97fc2909e7649bfbfeda637811ed, type: 3}
+  - species: male
+    id: cargo
+    color: blue
     slot: 6
-    prefab: {fileID: 1218458175910804270, guid: 121ec19ee5784a84b895258c60845fae, type: 3}
-  - id: skirt
+    prefab: {fileID: 2397540168221426431, guid: 244b4274d7512fa438aa0998d42ebe30, type: 3}
+  - species: male
+    id: cargo
+    color: green
     slot: 6
-    prefab: {fileID: 2909752034608544376, guid: 70d350eedfc1e2444b7546033d3b3d34, type: 3}
-  - id: cargo
+    prefab: {fileID: 8553909477281164960, guid: 344319260b2da0d4e922c71e15b1440b, type: 3}
+  - species: male
+    id: cargo
+    color: red
     slot: 6
-    prefab: {fileID: 6553156617477837080, guid: 0e07b14fc3b7e5b4e9686ed613c7b29a, type: 3}
-  - id: leggings
+    prefab: {fileID: 4612782927948743725, guid: 520ffeb7f82fd844396e08d936bee42d, type: 3}
+  - species: male
+    id: cargo
+    color: white
     slot: 6
-    prefab: {fileID: 9160539786065477591, guid: d5a1c404d04ed5a43a8ea97fcfb89c0f, type: 3}
+    prefab: {fileID: 1506288552107088740, guid: 87e2b082e78daf24e913127ab8f08cd8, type: 3}
+  - species: male
+    id: cargo
+    color: yellow
+    slot: 6
+    prefab: {fileID: 6007823992454592027, guid: 87e7a2fb833db754bac819659e0ce32e, type: 3}
+  - species: male
+    id: sports
+    color: black
+    slot: 6
+    prefab: {fileID: 3980378219339088458, guid: 0705f5ff07caa704a99f6a5460744df5, type: 3}
+  - species: male
+    id: sports
+    color: blue
+    slot: 6
+    prefab: {fileID: 6169617145270920764, guid: fc2d1bd107906fc4fa08c055dc0ef8e4, type: 3}
+  - species: male
+    id: sports
+    color: green
+    slot: 6
+    prefab: {fileID: 8175403639590907777, guid: f80ae590f1f69604d8ae422a69787904, type: 3}
+  - species: male
+    id: sports
+    color: red
+    slot: 6
+    prefab: {fileID: 6852597950464312276, guid: 8969c3bec49d7024cadae030e8ca4574, type: 3}
+  - species: male
+    id: sports
+    color: white
+    slot: 6
+    prefab: {fileID: 4496062698491441189, guid: 89b01a9a4bbc9b743adba50094faae4f, type: 3}
+  - species: male
+    id: sports
+    color: yellow
+    slot: 6
+    prefab: {fileID: 4642885066693980677, guid: 82cfaba13501d5c40a290797cd1b86c2, type: 3}
+  - species: female
+    id: jeans
+    color: denim
+    slot: 6
+    prefab: {fileID: 7945825025897006929, guid: 4c0b1662634637d42917836543d9b06a, type: 3}
+  - species: female
+    id: cargo
+    color: black
+    slot: 6
+    prefab: {fileID: 1188005553078476824, guid: 003f7b8ac43df6546a5bfaac9a5d0c41, type: 3}
+  - species: female
+    id: cargo
+    color: blue
+    slot: 6
+    prefab: {fileID: 2194589983031282791, guid: 562044172b534a74e9d06b9efe9863f0, type: 3}
+  - species: female
+    id: cargo
+    color: green
+    slot: 6
+    prefab: {fileID: 8923644120406151249, guid: 32ba0eaee7c1af84295d11966c9df2ea, type: 3}
+  - species: female
+    id: cargo
+    color: red
+    slot: 6
+    prefab: {fileID: 4747236314385861635, guid: 893485919f2e66641a2870b86df82e7c, type: 3}
+  - species: female
+    id: cargo
+    color: white
+    slot: 6
+    prefab: {fileID: 7419314794385827749, guid: 03f3c68996eef7b40a47691b2fe9e51a, type: 3}
+  - species: female
+    id: cargo
+    color: yellow
+    slot: 6
+    prefab: {fileID: 8496187762860315829, guid: 635470a3bc45cba47aabbbe216fda1bd, type: 3}
+  - species: female
+    id: sports
+    color: black
+    slot: 6
+    prefab: {fileID: 8973887570194794343, guid: 80b1490b4b05c56449469bfd60354ffd, type: 3}
+  - species: female
+    id: sports
+    color: blue
+    slot: 6
+    prefab: {fileID: 6653588039773429035, guid: fe4b1107395803647aacf43825fd3b6e, type: 3}
+  - species: female
+    id: sports
+    color: green
+    slot: 6
+    prefab: {fileID: 600991593273907049, guid: 0fef706f9275c9a4f801f96b80eb6f20, type: 3}
+  - species: female
+    id: sports
+    color: red
+    slot: 6
+    prefab: {fileID: 8492609434745668947, guid: 4a7c351d0c0e7cb4985c218912b7e484, type: 3}
+  - species: female
+    id: sports
+    color: white
+    slot: 6
+    prefab: {fileID: 5688443388731339114, guid: e522961257a29284db4467ab57a163bc, type: 3}
+  - species: female
+    id: sports
+    color: yellow
+    slot: 6
+    prefab: {fileID: 9118590530343765949, guid: c2876c995e087094faa60cdebac043b1, type: 3}
+  - species: devil
+    id: jeans
+    color: denim
+    slot: 6
+    prefab: {fileID: 2616720623656132319, guid: 1446631ca44e80e44a3c571d9997c05e, type: 3}
+  - species: devil
+    id: cargo
+    color: black
+    slot: 6
+    prefab: {fileID: 3303692638248785961, guid: 6c57681ee9935084ea88968417a48331, type: 3}
+  - species: devil
+    id: cargo
+    color: blue
+    slot: 6
+    prefab: {fileID: 7384245222668346251, guid: 68eb2af157ec97a4abb9d5415dd7638b, type: 3}
+  - species: devil
+    id: cargo
+    color: green
+    slot: 6
+    prefab: {fileID: 8192078612898856357, guid: fa7a8f1cfe0901c4e9ed59e6111c5c62, type: 3}
+  - species: devil
+    id: cargo
+    color: red
+    slot: 6
+    prefab: {fileID: 8115804749786402871, guid: ebec94b231a5581438098e6a89d7a8c4, type: 3}
+  - species: devil
+    id: cargo
+    color: white
+    slot: 6
+    prefab: {fileID: 3993164005938093040, guid: a0838d93c0011e84690ad36bc66f5dbb, type: 3}
+  - species: devil
+    id: cargo
+    color: yellow
+    slot: 6
+    prefab: {fileID: 4276135357555653803, guid: 52862c6b199782d4988db6169f0e940a, type: 3}
+  - species: devil
+    id: sports
+    color: black
+    slot: 6
+    prefab: {fileID: 7030786965668899569, guid: bfda42485e31b2542b063bcf76bd826f, type: 3}
+  - species: devil
+    id: sports
+    color: blue
+    slot: 6
+    prefab: {fileID: 4848090994698210368, guid: 19fb5ea2af84f9f4183c3065ea17162f, type: 3}
+  - species: devil
+    id: sports
+    color: green
+    slot: 6
+    prefab: {fileID: 3833433189093538911, guid: 22598f16fdac1fc4da9c89d7b9640025, type: 3}
+  - species: devil
+    id: sports
+    color: red
+    slot: 6
+    prefab: {fileID: 7979160444511107273, guid: 329999284bb578a4d98c2f831dcd8d71, type: 3}
+  - species: devil
+    id: sports
+    color: white
+    slot: 6
+    prefab: {fileID: 763135168467787514, guid: b071043648c94a8448faeeac95ec9b6e, type: 3}
+  - species: devil
+    id: sports
+    color: yellow
+    slot: 6
+    prefab: {fileID: 1446643409757819967, guid: ed894fc6e1e531b43995d17f90765dc5, type: 3}
   shoePrefabs:
-  - id: sneakers
+  - species: male
+    id: sneakers
+    color: black
     slot: 7
-    prefab: {fileID: 2911490275499581057, guid: 4114e24d292438d4ebc461e6fcf3d43a, type: 3}
-  - id: sneakers
-    slot: 8
-    prefab: {fileID: 2911490275499581057, guid: 4114e24d292438d4ebc461e6fcf3d43a, type: 3}
-  - id: boots
+    prefab: {fileID: 6880784197831316761, guid: 1ac1d09ef355b264480b7324e61edeba, type: 3}
+  - species: male
+    id: sneakers
+    color: blue
     slot: 7
-    prefab: {fileID: 878754386166213150, guid: 2c3f78971a6290744b39a706011f4427, type: 3}
-  - id: boots
-    slot: 8
-    prefab: {fileID: 878754386166213150, guid: 2c3f78971a6290744b39a706011f4427, type: 3}
-  - id: sandals
+    prefab: {fileID: 7408284286555575724, guid: 2bb7df03453465f4b961ceb146178498, type: 3}
+  - species: male
+    id: sneakers
+    color: green
     slot: 7
-    prefab: {fileID: 7520866037776888950, guid: 7b59fd1c53093a746a0315e628e4d350, type: 3}
-  - id: sandals
-    slot: 8
-    prefab: {fileID: 7520866037776888950, guid: 7b59fd1c53093a746a0315e628e4d350, type: 3}
-  - id: slippers
+    prefab: {fileID: 4816880239633043847, guid: ddd71e8e152c06b4091c548cb5018210, type: 3}
+  - species: male
+    id: sneakers
+    color: red
     slot: 7
-    prefab: {fileID: 2841509063214666702, guid: 642455a27bd739b40a4c00dbff42237d, type: 3}
-  - id: slippers
-    slot: 8
-    prefab: {fileID: 2841509063214666702, guid: 642455a27bd739b40a4c00dbff42237d, type: 3}
+    prefab: {fileID: 3976280681091095740, guid: 2f5e5865e03cd87438c83b439bcba670, type: 3}
+  - species: male
+    id: sneakers
+    color: white
+    slot: 7
+    prefab: {fileID: 198110169061390221, guid: 061270b8802a52e4ba8f76988da6a1ee, type: 3}
+  - species: male
+    id: sneakers
+    color: yellow
+    slot: 7
+    prefab: {fileID: 3255685935844578812, guid: da0c8ccc8ec1af24ea26fb26fe68656a, type: 3}
+  - species: male
+    id: boots
+    color: black
+    slot: 7
+    prefab: {fileID: 3059182877109546972, guid: cd48088ee4b1c87458be4981903474e3, type: 3}
+  - species: male
+    id: boots
+    color: blue
+    slot: 7
+    prefab: {fileID: 7653385065592214276, guid: 7caaa901a0be9f14493be64218f779a2, type: 3}
+  - species: male
+    id: boots
+    color: green
+    slot: 7
+    prefab: {fileID: 3295129127114315576, guid: 989ae15224e94ae468f72efd5ddf61ee, type: 3}
+  - species: male
+    id: boots
+    color: red
+    slot: 7
+    prefab: {fileID: 6714822266123296017, guid: 74436bdc9651fce4d9b4749f9001e2bb, type: 3}
+  - species: male
+    id: boots
+    color: white
+    slot: 7
+    prefab: {fileID: 388561186214751039, guid: 5c0ead3514568a443b0bc2aecea341b8, type: 3}
+  - species: male
+    id: boots
+    color: yellow
+    slot: 7
+    prefab: {fileID: 3213482490692610253, guid: ad03eb31f7b7f1143b4268f09cb9d8e5, type: 3}
+  - species: male
+    id: space-shoes
+    color: black
+    slot: 7
+    prefab: {fileID: 2167154946075005234, guid: dd0937706fee8954c9a2cd62deb63df5, type: 3}
+  - species: male
+    id: space-shoes
+    color: blue
+    slot: 7
+    prefab: {fileID: 7114046091045680171, guid: a8938e951943beb4f87afaba463f03b4, type: 3}
+  - species: male
+    id: space-shoes
+    color: green
+    slot: 7
+    prefab: {fileID: 8357852846750585726, guid: 62b992c0ab5944e4ab163a902ba763f0, type: 3}
+  - species: male
+    id: space-shoes
+    color: red
+    slot: 7
+    prefab: {fileID: 8443185830877250028, guid: 7491997222438fe489390be423676e33, type: 3}
+  - species: male
+    id: space-shoes
+    color: white
+    slot: 7
+    prefab: {fileID: 2321326767688708261, guid: 7472d952496efa5439226fed242633f8, type: 3}
+  - species: male
+    id: space-shoes
+    color: yellow
+    slot: 7
+    prefab: {fileID: 2554659251158120112, guid: 6c70f276513cfdf40b9d795fac5c8ee9, type: 3}
+  - species: female
+    id: sneakers
+    color: black
+    slot: 7
+    prefab: {fileID: 3562518294212059494, guid: 9881fff71fd560543a76778301c8ed5a, type: 3}
+  - species: female
+    id: sneakers
+    color: blue
+    slot: 7
+    prefab: {fileID: 1966000710577132025, guid: 022e77f73fb238c448470cabc08cbdec, type: 3}
+  - species: female
+    id: sneakers
+    color: green
+    slot: 7
+    prefab: {fileID: 5453447143284271209, guid: b65bc0038bc911746baab47dad43e301, type: 3}
+  - species: female
+    id: sneakers
+    color: red
+    slot: 7
+    prefab: {fileID: 1641203218059228858, guid: fd343674e769afd4dbc3ca5b146b5d76, type: 3}
+  - species: female
+    id: sneakers
+    color: white
+    slot: 7
+    prefab: {fileID: 8012914027928301573, guid: a7f43a27871c6ea41b25bb122658efb3, type: 3}
+  - species: female
+    id: sneakers
+    color: yellow
+    slot: 7
+    prefab: {fileID: 6100043850760292120, guid: 97c3377f7c3b6e44abe5294e63d77d87, type: 3}
+  - species: female
+    id: boots
+    color: black
+    slot: 7
+    prefab: {fileID: 3447869104757471005, guid: ca1934ab174f3404081dbab0deedd233, type: 3}
+  - species: female
+    id: boots
+    color: blue
+    slot: 7
+    prefab: {fileID: 7102580718172850092, guid: d8f82aa49801cf24f8f49d9af85cdff9, type: 3}
+  - species: female
+    id: boots
+    color: green
+    slot: 7
+    prefab: {fileID: 5394283793843131776, guid: 0a3471f4befd6cb4698a754aec6ee41f, type: 3}
+  - species: female
+    id: boots
+    color: red
+    slot: 7
+    prefab: {fileID: 2844011833225398829, guid: 43c2554a0b8a2744b82cbb8468131b16, type: 3}
+  - species: female
+    id: boots
+    color: white
+    slot: 7
+    prefab: {fileID: 6094567958708079863, guid: 371ef6116bbb508449356924167fea6c, type: 3}
+  - species: female
+    id: boots
+    color: yellow
+    slot: 7
+    prefab: {fileID: 5942745179803603670, guid: 823b33233dbbf8a459df3955c5a3801e, type: 3}
+  - species: female
+    id: space-shoes
+    color: black
+    slot: 7
+    prefab: {fileID: 5252855996269872651, guid: 537309473a9fc3e459134c5811df0e1d, type: 3}
+  - species: female
+    id: space-shoes
+    color: blue
+    slot: 7
+    prefab: {fileID: 2766825864917111453, guid: 6f27e7458dd536a48a010843e941dca6, type: 3}
+  - species: female
+    id: space-shoes
+    color: green
+    slot: 7
+    prefab: {fileID: 760812080061801634, guid: 01228310d8ab7a040b315b00b4b39fe3, type: 3}
+  - species: female
+    id: space-shoes
+    color: red
+    slot: 7
+    prefab: {fileID: 981156768523348754, guid: 91073683c17176149992ef914ea60af1, type: 3}
+  - species: female
+    id: space-shoes
+    color: white
+    slot: 7
+    prefab: {fileID: 8916227501957157620, guid: de12b9317981dec498cc523c29cb0b88, type: 3}
+  - species: female
+    id: space-shoes
+    color: yellow
+    slot: 7
+    prefab: {fileID: 2515351157098978803, guid: 3367ab03321b0b24abe4d1fdf6e0a7be, type: 3}
+  - species: devil
+    id: sneakers
+    color: black
+    slot: 7
+    prefab: {fileID: 7985902711399259692, guid: d68ae138fa1aacd4a807196cf3fa98aa, type: 3}
+  - species: devil
+    id: sneakers
+    color: blue
+    slot: 7
+    prefab: {fileID: 356030547189404325, guid: caf19bccd058f2d4da21d66e8c00b488, type: 3}
+  - species: devil
+    id: sneakers
+    color: green
+    slot: 7
+    prefab: {fileID: 4872179634060915452, guid: 70b3f279bf7fa6b47a643a699f79c951, type: 3}
+  - species: devil
+    id: sneakers
+    color: red
+    slot: 7
+    prefab: {fileID: 2829640197923501291, guid: 966b3491940a1a1478e252e558533139, type: 3}
+  - species: devil
+    id: sneakers
+    color: white
+    slot: 7
+    prefab: {fileID: 898485087614608304, guid: 86145e91dde57ae4f93ccf1d0a35e84a, type: 3}
+  - species: devil
+    id: sneakers
+    color: yellow
+    slot: 7
+    prefab: {fileID: 6284409164924776889, guid: 4ecca996df59fab45858c9fbff75d603, type: 3}
+  - species: devil
+    id: boots
+    color: black
+    slot: 7
+    prefab: {fileID: 4026251370820402790, guid: 1b28fb4d031ed8848a6abb420efc565d, type: 3}
+  - species: devil
+    id: boots
+    color: blue
+    slot: 7
+    prefab: {fileID: 4838046960637195576, guid: 7799dead54c5606408b2bdbc8f4ac7f5, type: 3}
+  - species: devil
+    id: boots
+    color: green
+    slot: 7
+    prefab: {fileID: 8948296435697365439, guid: 2f8ae0704b8c3764199a33f34bf41bd8, type: 3}
+  - species: devil
+    id: boots
+    color: red
+    slot: 7
+    prefab: {fileID: 6356888451140325157, guid: 595cdee905601824f9304598444eb35d, type: 3}
+  - species: devil
+    id: boots
+    color: white
+    slot: 7
+    prefab: {fileID: 754928220931195695, guid: a4623bd0a5f882c4494426a7f231569a, type: 3}
+  - species: devil
+    id: boots
+    color: yellow
+    slot: 7
+    prefab: {fileID: 569841339261758927, guid: 355c95043b1f73e4eb094411c50d3893, type: 3}
+  - species: devil
+    id: space-shoes
+    color: black
+    slot: 7
+    prefab: {fileID: 9005051975115380389, guid: 7e10e9fb381e3dc4e8c5b47aec4445ea, type: 3}
+  - species: devil
+    id: space-shoes
+    color: blue
+    slot: 7
+    prefab: {fileID: 3381608818201612789, guid: 6cd639593c3bd384991a3c8af24c7802, type: 3}
+  - species: devil
+    id: space-shoes
+    color: green
+    slot: 7
+    prefab: {fileID: 4128936773925029591, guid: 02b412da4e261cc4db360c2124c96edf, type: 3}
+  - species: devil
+    id: space-shoes
+    color: red
+    slot: 7
+    prefab: {fileID: 8740562115980634827, guid: 856157556123c4043bf057c6479aa342, type: 3}
+  - species: devil
+    id: space-shoes
+    color: white
+    slot: 7
+    prefab: {fileID: 2276786794632077496, guid: f342d0ad122c46748a71c7e8353ee91d, type: 3}
+  - species: devil
+    id: space-shoes
+    color: yellow
+    slot: 7
+    prefab: {fileID: 390582114849729604, guid: 9a52a91e80a86504d83ecc24f0c2d69c, type: 3}
   currentAvatar: {fileID: 0}
 --- !u!4 &445680495
 Transform:

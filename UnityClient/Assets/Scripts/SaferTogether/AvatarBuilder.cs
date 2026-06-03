@@ -7,13 +7,15 @@ namespace SaferTogether.UnityClient
     [Serializable]
     public sealed class AvatarPartPrefab
     {
+        public string species;
         public string id;
+        public string color;
         public AvatarAttachmentSlot slot;
         public GameObject prefab;
     }
 
     /// <summary>
-    /// Switches avatar prefabs and attaches selected accessories/clothes to their body points.
+    /// Switches the selected avatar prefab and attaches the avatar-specific clothing/accessory prefab layers.
     /// </summary>
     public sealed class AvatarBuilder : MonoBehaviour
     {
@@ -24,11 +26,9 @@ namespace SaferTogether.UnityClient
 
         [Header("Avatar Objects")]
         public GameObject dragonAvatar;
-        public GameObject humanAvatar;
-        public GameObject bearAvatar;
-        public GameObject elephantAvatar;
+        public GameObject maleAvatar;
+        public GameObject femaleAvatar;
         public GameObject devilAvatar;
-        public GameObject angelAvatar;
 
         [Header("Part Prefabs")]
         public AvatarPartPrefab[] accessoryPrefabs;
@@ -40,14 +40,18 @@ namespace SaferTogether.UnityClient
         public GameObject currentAvatar;
 
         private readonly Dictionary<AvatarAttachmentSlot, GameObject> attachedParts = new Dictionary<AvatarAttachmentSlot, GameObject>();
+        private readonly Dictionary<string, Texture2D> runtimeTextureCache = new Dictionary<string, Texture2D>();
         private AvatarAttachmentSet currentAttachmentSet;
+        private string currentSpecies = CharacterAvatarOptions.Male;
+        private static readonly Vector3 FemaleAvatarRootPosition = new Vector3(0.1f, 0.3f, 0f);
+        private static readonly Vector3 FemaleAvatarRootScale = new Vector3(0.6f, 0.6f, 1f);
         private string selectedAccessory = CharacterAvatarOptions.NoAccessory;
         private string selectedShirt = CharacterAvatarOptions.Tee;
+        private string selectedShirtColor = CharacterAvatarOptions.Black;
         private string selectedPants = CharacterAvatarOptions.Jeans;
+        private string selectedPantsColor = CharacterAvatarOptions.Denim;
         private string selectedShoes = CharacterAvatarOptions.Sneakers;
-        private Color shirtColor = new Color32(102, 217, 239, 255);
-        private Color pantsColor = new Color32(65, 105, 168, 255);
-        private Color shoeColor = new Color32(248, 250, 252, 255);
+        private string selectedShoeColor = CharacterAvatarOptions.Black;
         private bool resourcesLoaded;
 
         private void Start()
@@ -56,7 +60,7 @@ namespace SaferTogether.UnityClient
 
             if (currentAvatar == null)
             {
-                SelectAvatar(CharacterAvatarOptions.Human);
+                SelectAvatar(CharacterAvatarOptions.Male);
             }
         }
 
@@ -65,12 +69,8 @@ namespace SaferTogether.UnityClient
             EnsureResourcesLoaded();
             EnsureAvatarRoot();
 
-            GameObject selectedAvatar = AvatarObjectFor(avatarName);
-
-            if (selectedAvatar == null)
-            {
-                selectedAvatar = humanAvatar;
-            }
+            currentSpecies = CharacterAvatarId.NormalizeSpecies(avatarName);
+            GameObject selectedAvatar = AvatarObjectFor(currentSpecies) ?? maleAvatar;
 
             if (instantiateAvatarPrefabs)
             {
@@ -82,23 +82,27 @@ namespace SaferTogether.UnityClient
                 currentAvatar = selectedAvatar != null
                     ? Instantiate(selectedAvatar, avatarRoot)
                     : null;
+
                 if (currentAvatar != null)
                 {
-                    currentAvatar.transform.localPosition = Vector3.zero;
-                    currentAvatar.transform.localRotation = Quaternion.identity;
-                    currentAvatar.transform.localScale = Vector3.one;
+                    ApplyAvatarRootTransform(currentAvatar.transform, currentSpecies);
+                    ApplyRuntimeTextures(currentAvatar);
                 }
             }
             else
             {
                 SetAvatarActive(dragonAvatar, false);
-                SetAvatarActive(humanAvatar, false);
-                SetAvatarActive(bearAvatar, false);
-                SetAvatarActive(elephantAvatar, false);
+                SetAvatarActive(maleAvatar, false);
+                SetAvatarActive(femaleAvatar, false);
                 SetAvatarActive(devilAvatar, false);
-                SetAvatarActive(angelAvatar, false);
                 currentAvatar = selectedAvatar;
                 SetAvatarActive(currentAvatar, true);
+
+                if (currentAvatar != null)
+                {
+                    ApplyAvatarRootTransform(currentAvatar.transform, currentSpecies);
+                    ApplyRuntimeTextures(currentAvatar);
+                }
             }
 
             currentAttachmentSet = currentAvatar != null
@@ -121,10 +125,24 @@ namespace SaferTogether.UnityClient
             RebuildClothes();
         }
 
+        public void SelectShirtColor(string colorId)
+        {
+            EnsureResourcesLoaded();
+            selectedShirtColor = NormalizeClothingColor(colorId, CharacterAvatarOptions.Black, false);
+            RebuildClothes();
+        }
+
         public void SelectPants(string pantsName)
         {
             EnsureResourcesLoaded();
             selectedPants = NormalizeId(pantsName, CharacterAvatarOptions.Jeans);
+            RebuildClothes();
+        }
+
+        public void SelectPantsColor(string colorId)
+        {
+            EnsureResourcesLoaded();
+            selectedPantsColor = NormalizeClothingColor(colorId, CharacterAvatarOptions.Blue, true);
             RebuildClothes();
         }
 
@@ -135,22 +153,11 @@ namespace SaferTogether.UnityClient
             RebuildClothes();
         }
 
-        public void SetShirtColor(Color color)
+        public void SelectShoeColor(string colorId)
         {
-            shirtColor = color;
-            ColorSlots(color, AvatarAttachmentSlot.Shirt);
-        }
-
-        public void SetPantsColor(Color color)
-        {
-            pantsColor = color;
-            ColorSlots(color, AvatarAttachmentSlot.Pants);
-        }
-
-        public void SetShoeColor(Color color)
-        {
-            shoeColor = color;
-            ColorSlots(color, AvatarAttachmentSlot.LeftShoe, AvatarAttachmentSlot.RightShoe);
+            EnsureResourcesLoaded();
+            selectedShoeColor = NormalizeClothingColor(colorId, CharacterAvatarOptions.Black, false);
+            RebuildClothes();
         }
 
         private void RebuildAttachedParts()
@@ -169,36 +176,44 @@ namespace SaferTogether.UnityClient
                 return;
             }
 
-            AttachMatchingParts(accessoryPrefabs, selectedAccessory);
+            AttachMatchingParts(accessoryPrefabs, selectedAccessory, "");
         }
 
         private void RebuildClothes()
         {
-            ClearSlots(AvatarAttachmentSlot.Shirt, AvatarAttachmentSlot.Pants, AvatarAttachmentSlot.LeftShoe, AvatarAttachmentSlot.RightShoe);
+            ClearSlots(
+                AvatarAttachmentSlot.Shirt,
+                AvatarAttachmentSlot.Pants,
+                AvatarAttachmentSlot.Shoes,
+                AvatarAttachmentSlot.LeftShoe,
+                AvatarAttachmentSlot.RightShoe
+            );
 
-            AttachMatchingParts(shirtPrefabs, selectedShirt);
-            AttachMatchingParts(pantsPrefabs, selectedPants);
-
-            if (selectedShoes != CharacterAvatarOptions.NoShoes)
-            {
-                AttachMatchingParts(shoePrefabs, selectedShoes);
-            }
-
-            ColorSlots(shirtColor, AvatarAttachmentSlot.Shirt);
-            ColorSlots(pantsColor, AvatarAttachmentSlot.Pants);
-            ColorSlots(shoeColor, AvatarAttachmentSlot.LeftShoe, AvatarAttachmentSlot.RightShoe);
+            AttachMatchingParts(shirtPrefabs, selectedShirt, selectedShirtColor);
+            AttachMatchingParts(pantsPrefabs, selectedPants, PantsColorForSelection());
+            AttachMatchingParts(shoePrefabs, selectedShoes, selectedShoeColor);
         }
 
-        private void AttachMatchingParts(AvatarPartPrefab[] catalog, string selectedId)
+        private string PantsColorForSelection()
+        {
+            return selectedPants == CharacterAvatarOptions.Jeans
+                ? CharacterAvatarOptions.Denim
+                : NormalizeClothingColor(selectedPantsColor, CharacterAvatarOptions.Blue, false);
+        }
+
+        private void AttachMatchingParts(AvatarPartPrefab[] catalog, string selectedId, string selectedColor)
         {
             if (catalog == null || currentAttachmentSet == null)
             {
                 return;
             }
 
+            string normalizedId = NormalizeId(selectedId, "");
+            string normalizedColor = NormalizeId(selectedColor, "");
+
             foreach (AvatarPartPrefab part in catalog)
             {
-                if (part == null || part.prefab == null || NormalizeId(part.id, "") != selectedId)
+                if (!PartMatches(part, normalizedId, normalizedColor))
                 {
                     continue;
                 }
@@ -211,27 +226,156 @@ namespace SaferTogether.UnityClient
                 }
 
                 GameObject instance = Instantiate(part.prefab, point);
-                instance.transform.localPosition = Vector3.zero;
-                instance.transform.localRotation = Quaternion.identity;
-                instance.transform.localScale = Vector3.one;
+                if (!UsesPrefabTransform(part))
+                {
+                    instance.transform.localPosition = Vector3.zero;
+                    instance.transform.localRotation = Quaternion.identity;
+                    instance.transform.localScale = Vector3.one;
+                }
+
+                ApplyRuntimeTextures(instance);
                 attachedParts[part.slot] = instance;
             }
         }
 
-        private void ColorSlots(Color color, params AvatarAttachmentSlot[] slots)
+        private bool UsesPrefabTransform(AvatarPartPrefab part)
         {
-            foreach (AvatarAttachmentSlot slot in slots)
+            string partId = NormalizeId(part.id, "");
+            string partSpecies = NormalizeId(part.species, "");
+            string partColor = NormalizeId(part.color, "");
+            if (partSpecies == CharacterAvatarOptions.Male && partId == CharacterAvatarOptions.Jeans)
             {
-                if (!attachedParts.TryGetValue(slot, out GameObject part) || part == null)
-                {
-                    continue;
-                }
-
-                foreach (Renderer renderer in part.GetComponentsInChildren<Renderer>(true))
-                {
-                    renderer.material.color = color;
-                }
+                return true;
             }
+
+            if (partSpecies == CharacterAvatarOptions.Male
+                && partId == CharacterAvatarOptions.Tee
+                && (partColor == CharacterAvatarOptions.Blue
+                    || partColor == CharacterAvatarOptions.White))
+            {
+                return true;
+            }
+
+            if (partSpecies == CharacterAvatarOptions.Male
+                && partId == CharacterAvatarOptions.Sweatshirt)
+            {
+                return true;
+            }
+
+            if (partSpecies == CharacterAvatarOptions.Female
+                && partId == CharacterAvatarOptions.Tee
+                && (partColor == CharacterAvatarOptions.Red
+                    || partColor == CharacterAvatarOptions.White
+                    || partColor == CharacterAvatarOptions.Yellow
+                    || partColor == CharacterAvatarOptions.Blue))
+            {
+                return true;
+            }
+
+            if (partSpecies == CharacterAvatarOptions.Female
+                && partId == CharacterAvatarOptions.SportsPants)
+            {
+                return true;
+            }
+
+            if (partSpecies == CharacterAvatarOptions.Female
+                && partId == CharacterAvatarOptions.Jeans)
+            {
+                return true;
+            }
+
+            if (partSpecies == CharacterAvatarOptions.Female
+                && (partId == CharacterAvatarOptions.Sweatshirt
+                    || partId == CharacterAvatarOptions.Undershirt))
+            {
+                return true;
+            }
+
+            if (partSpecies == CharacterAvatarOptions.Female
+                && partId == CharacterAvatarOptions.Boots)
+            {
+                return true;
+            }
+
+            if (partSpecies == CharacterAvatarOptions.Female
+                && partId == CharacterAvatarOptions.SpaceShoes)
+            {
+                return true;
+            }
+
+            if (partSpecies == CharacterAvatarOptions.Female
+                && (partId == CharacterAvatarOptions.Crown
+                    || partId == CharacterAvatarOptions.Bandana
+                    || partId == CharacterAvatarOptions.Glasses
+                    || partId == CharacterAvatarOptions.Mask))
+            {
+                return true;
+            }
+
+            if (partSpecies == CharacterAvatarOptions.Dragon
+                && (partId == CharacterAvatarOptions.Crown
+                    || partId == CharacterAvatarOptions.Bandana
+                    || partId == CharacterAvatarOptions.Glasses
+                    || partId == CharacterAvatarOptions.Mask))
+            {
+                return true;
+            }
+
+            if (partSpecies == CharacterAvatarOptions.Male
+                && partId == CharacterAvatarOptions.Cargo
+                && (partColor == CharacterAvatarOptions.Blue
+                    || partColor == CharacterAvatarOptions.Red))
+            {
+                return true;
+            }
+
+            if (partSpecies == CharacterAvatarOptions.Male
+                && partId == CharacterAvatarOptions.SpaceShoes)
+            {
+                return true;
+            }
+
+            if (partSpecies == CharacterAvatarOptions.Male
+                && partId == CharacterAvatarOptions.Boots)
+            {
+                return true;
+            }
+
+            if (partSpecies == CharacterAvatarOptions.Male
+                && (partId == CharacterAvatarOptions.Glasses
+                    || partId == CharacterAvatarOptions.Bandana
+                    || partId == CharacterAvatarOptions.Mask))
+            {
+                return true;
+            }
+
+            return partSpecies == CharacterAvatarOptions.Devil
+                && (partId == CharacterAvatarOptions.Undershirt
+                    || partId == CharacterAvatarOptions.Sweatshirt
+                    || partId == CharacterAvatarOptions.Cargo
+                    || partId == CharacterAvatarOptions.SportsPants
+                    || partId == CharacterAvatarOptions.Boots
+                    || partId == CharacterAvatarOptions.SpaceShoes
+                    || partId == CharacterAvatarOptions.Bandana
+                    || partId == CharacterAvatarOptions.Glasses
+                    || partId == CharacterAvatarOptions.Mask);
+        }
+
+        private bool PartMatches(AvatarPartPrefab part, string selectedId, string selectedColor)
+        {
+            if (part == null || part.prefab == null || NormalizeId(part.id, "") != selectedId)
+            {
+                return false;
+            }
+
+            string partSpecies = NormalizeId(part.species, "");
+            if (!string.IsNullOrEmpty(partSpecies) && partSpecies != currentSpecies)
+            {
+                return false;
+            }
+
+            string partColor = NormalizeId(part.color, "");
+            return string.IsNullOrEmpty(partColor) || string.IsNullOrEmpty(selectedColor) || partColor == selectedColor;
         }
 
         private void ClearSlots(params AvatarAttachmentSlot[] slots)
@@ -264,21 +408,39 @@ namespace SaferTogether.UnityClient
 
         private GameObject AvatarObjectFor(string avatarName)
         {
-            switch (NormalizeId(avatarName, CharacterAvatarOptions.Human))
+            switch (CharacterAvatarId.NormalizeSpecies(avatarName))
             {
+                case CharacterAvatarOptions.Male:
+                    return maleAvatar;
+                case CharacterAvatarOptions.Female:
+                    return femaleAvatar;
                 case CharacterAvatarOptions.Dragon:
                     return dragonAvatar;
-                case CharacterAvatarOptions.Bear:
-                    return bearAvatar;
-                case CharacterAvatarOptions.Elephant:
-                    return elephantAvatar;
                 case CharacterAvatarOptions.Devil:
                     return devilAvatar;
-                case CharacterAvatarOptions.Angel:
-                    return angelAvatar;
                 default:
-                    return humanAvatar;
+                    return maleAvatar;
             }
+        }
+
+        private static void ApplyAvatarRootTransform(Transform avatarTransform, string species)
+        {
+            if (avatarTransform == null)
+            {
+                return;
+            }
+
+            if (species == CharacterAvatarOptions.Female)
+            {
+                avatarTransform.localPosition = FemaleAvatarRootPosition;
+                avatarTransform.localRotation = Quaternion.identity;
+                avatarTransform.localScale = FemaleAvatarRootScale;
+                return;
+            }
+
+            avatarTransform.localPosition = Vector3.zero;
+            avatarTransform.localRotation = Quaternion.identity;
+            avatarTransform.localScale = Vector3.one;
         }
 
         private static void SetAvatarActive(GameObject avatar, bool active)
@@ -308,12 +470,10 @@ namespace SaferTogether.UnityClient
                 return;
             }
 
-            humanAvatar = humanAvatar != null ? humanAvatar : LoadAvatar(CharacterAvatarOptions.Human);
+            maleAvatar = maleAvatar != null ? maleAvatar : LoadAvatar(CharacterAvatarOptions.Male);
+            femaleAvatar = femaleAvatar != null ? femaleAvatar : LoadAvatar(CharacterAvatarOptions.Female);
             dragonAvatar = dragonAvatar != null ? dragonAvatar : LoadAvatar(CharacterAvatarOptions.Dragon);
-            bearAvatar = bearAvatar != null ? bearAvatar : LoadAvatar(CharacterAvatarOptions.Bear);
-            elephantAvatar = elephantAvatar != null ? elephantAvatar : LoadAvatar(CharacterAvatarOptions.Elephant);
             devilAvatar = devilAvatar != null ? devilAvatar : LoadAvatar(CharacterAvatarOptions.Devil);
-            angelAvatar = angelAvatar != null ? angelAvatar : LoadAvatar(CharacterAvatarOptions.Angel);
 
             if (accessoryPrefabs == null || accessoryPrefabs.Length == 0)
             {
@@ -322,17 +482,17 @@ namespace SaferTogether.UnityClient
 
             if (shirtPrefabs == null || shirtPrefabs.Length == 0)
             {
-                shirtPrefabs = BuildCatalog("Parts/Shirts", AvatarAttachmentSlot.Shirt, CharacterAvatarOptions.Tops);
+                shirtPrefabs = BuildColorCatalog("Parts/Shirts", AvatarAttachmentSlot.Shirt, CharacterAvatarOptions.Tops);
             }
 
             if (pantsPrefabs == null || pantsPrefabs.Length == 0)
             {
-                pantsPrefabs = BuildCatalog("Parts/Pants", AvatarAttachmentSlot.Pants, CharacterAvatarOptions.Bottoms);
+                pantsPrefabs = BuildColorCatalog("Parts/Pants", AvatarAttachmentSlot.Pants, CharacterAvatarOptions.Bottoms);
             }
 
             if (shoePrefabs == null || shoePrefabs.Length == 0)
             {
-                shoePrefabs = BuildShoeCatalog();
+                shoePrefabs = BuildColorCatalog("Parts/Shoes", AvatarAttachmentSlot.Shoes, CharacterAvatarOptions.Shoes);
             }
 
             resourcesLoaded = true;
@@ -343,30 +503,38 @@ namespace SaferTogether.UnityClient
             return Resources.Load<GameObject>(resourcesRoot + "/Avatars/" + id);
         }
 
-        private GameObject LoadPart(string category, string id)
+        private GameObject LoadPart(string category, string species, string id)
         {
-            return Resources.Load<GameObject>(resourcesRoot + "/" + category + "/" + id);
+            return Resources.Load<GameObject>(resourcesRoot + "/" + category + "/" + species + "/" + id);
         }
 
-        private AvatarPartPrefab[] BuildCatalog(string category, AvatarAttachmentSlot slot, string[] ids)
+        private AvatarPartPrefab[] BuildColorCatalog(string category, AvatarAttachmentSlot slot, string[] ids)
         {
             var catalog = new List<AvatarPartPrefab>();
 
-            foreach (string id in ids)
+            foreach (string species in CharacterAvatarOptions.Species)
             {
-                GameObject prefab = LoadPart(category, id);
-
-                if (prefab == null)
+                foreach (string id in ids)
                 {
-                    continue;
+                    foreach (string color in ColorsForPart(id))
+                    {
+                        GameObject prefab = LoadPart(category, species, id + "-" + color);
+
+                        if (prefab == null)
+                        {
+                            continue;
+                        }
+
+                        catalog.Add(new AvatarPartPrefab
+                        {
+                            species = species,
+                            id = id,
+                            color = color,
+                            slot = slot,
+                            prefab = prefab
+                        });
+                    }
                 }
-
-                catalog.Add(new AvatarPartPrefab
-                {
-                    id = id,
-                    slot = slot,
-                    prefab = prefab
-                });
             }
 
             return catalog.ToArray();
@@ -375,64 +543,260 @@ namespace SaferTogether.UnityClient
         private AvatarPartPrefab[] BuildAccessoryCatalog()
         {
             var catalog = new List<AvatarPartPrefab>();
-            AddPart(catalog, CharacterAvatarOptions.Glasses, AvatarAttachmentSlot.Face, "Parts/Accessories");
-            AddPart(catalog, CharacterAvatarOptions.Cap, AvatarAttachmentSlot.Hat, "Parts/Accessories");
-            AddPart(catalog, CharacterAvatarOptions.Crown, AvatarAttachmentSlot.Hat, "Parts/Accessories");
-            AddPart(catalog, CharacterAvatarOptions.Mask, AvatarAttachmentSlot.Face, "Parts/Accessories");
-            AddPart(catalog, CharacterAvatarOptions.Headphones, AvatarAttachmentSlot.Face, "Parts/Accessories");
-            AddPart(catalog, CharacterAvatarOptions.Wings, AvatarAttachmentSlot.Wings, "Parts/Accessories");
-            AddPart(catalog, CharacterAvatarOptions.Halo, AvatarAttachmentSlot.Hat, "Parts/Accessories");
-            AddPart(catalog, CharacterAvatarOptions.Horns, AvatarAttachmentSlot.Horns, "Parts/Accessories");
-            AddPart(catalog, CharacterAvatarOptions.Tail, AvatarAttachmentSlot.Tail, "Parts/Accessories");
-            return catalog.ToArray();
-        }
 
-        private AvatarPartPrefab[] BuildShoeCatalog()
-        {
-            var catalog = new List<AvatarPartPrefab>();
-
-            foreach (string id in CharacterAvatarOptions.Shoes)
+            foreach (string species in CharacterAvatarOptions.Species)
             {
-                if (id == CharacterAvatarOptions.NoShoes)
+                foreach (string id in CharacterAvatarOptions.Accessories)
                 {
-                    continue;
+                    if (id == CharacterAvatarOptions.NoAccessory)
+                    {
+                        continue;
+                    }
+
+                    GameObject prefab = LoadPart("Parts/Accessories", species, id);
+
+                    if (prefab == null)
+                    {
+                        continue;
+                    }
+
+                    catalog.Add(new AvatarPartPrefab
+                    {
+                        species = species,
+                        id = id,
+                        slot = SlotForAccessory(id),
+                        prefab = prefab
+                    });
                 }
-
-                GameObject prefab = LoadPart("Parts/Shoes", id);
-
-                if (prefab == null)
-                {
-                    continue;
-                }
-
-                catalog.Add(new AvatarPartPrefab { id = id, slot = AvatarAttachmentSlot.LeftShoe, prefab = prefab });
-                catalog.Add(new AvatarPartPrefab { id = id, slot = AvatarAttachmentSlot.RightShoe, prefab = prefab });
             }
 
             return catalog.ToArray();
         }
 
-        private void AddPart(List<AvatarPartPrefab> catalog, string id, AvatarAttachmentSlot slot, string category)
+        private static AvatarAttachmentSlot SlotForAccessory(string id)
         {
-            GameObject prefab = LoadPart(category, id);
-
-            if (prefab == null)
+            switch (id)
             {
-                return;
+                case CharacterAvatarOptions.Crown:
+                    return AvatarAttachmentSlot.Hat;
+                default:
+                    return AvatarAttachmentSlot.Face;
+            }
+        }
+
+        private static string[] ColorsForPart(string id)
+        {
+            return id == CharacterAvatarOptions.Jeans
+                ? new[] { CharacterAvatarOptions.Denim }
+                : CharacterAvatarOptions.ClothingColors;
+        }
+
+        private static string NormalizeClothingColor(string value, string fallback, bool allowDenim)
+        {
+            string cleanValue = NormalizeId(value, "");
+
+            if (allowDenim && cleanValue == CharacterAvatarOptions.Denim)
+            {
+                return cleanValue;
             }
 
-            catalog.Add(new AvatarPartPrefab
+            foreach (string option in CharacterAvatarOptions.ClothingColors)
             {
-                id = id,
-                slot = slot,
-                prefab = prefab
-            });
+                if (option == cleanValue)
+                {
+                    return cleanValue;
+                }
+            }
+
+            return fallback;
         }
 
         private static string NormalizeId(string value, string fallback)
         {
             string cleanValue = string.IsNullOrWhiteSpace(value) ? "" : value.Trim().ToLowerInvariant();
             return string.IsNullOrEmpty(cleanValue) ? fallback : cleanValue;
+        }
+
+        private void ApplyRuntimeTextures(GameObject root)
+        {
+            if (root == null)
+            {
+                return;
+            }
+
+            foreach (Renderer renderer in root.GetComponentsInChildren<Renderer>(true))
+            {
+                Material[] materials = renderer.materials;
+                bool changed = false;
+
+                for (int index = 0; index < materials.Length; index++)
+                {
+                    Texture2D texture = TextureForMaterial(materials[index] != null ? materials[index].name : "");
+
+                    if (texture == null)
+                    {
+                        continue;
+                    }
+
+                    materials[index].mainTexture = texture;
+                    materials[index].SetTexture("_MainTex", texture);
+                    materials[index].color = Color.white;
+                    changed = true;
+                }
+
+                if (changed)
+                {
+                    renderer.materials = materials;
+                }
+            }
+        }
+
+        private Texture2D TextureForMaterial(string materialName)
+        {
+            string resourcePath = SourceImageResourcePathForMaterial(materialName);
+
+            if (string.IsNullOrEmpty(resourcePath))
+            {
+                return null;
+            }
+
+            if (!runtimeTextureCache.TryGetValue(resourcePath, out Texture2D texture))
+            {
+                texture = Resources.Load<Texture2D>(resourcePath);
+                runtimeTextureCache[resourcePath] = texture;
+            }
+
+            return texture;
+        }
+
+        private string SourceImageResourcePathForMaterial(string materialName)
+        {
+            string name = NormalizeMaterialName(materialName);
+
+            foreach (string species in CharacterAvatarOptions.Species)
+            {
+                if (name == "avatar-" + species)
+                {
+                    return resourcesRoot + "/SourceImages/" + species + "/" + Capitalize(species);
+                }
+
+                string accessoryPrefix = "accessory-" + species + "-";
+                if (name.StartsWith(accessoryPrefix, StringComparison.Ordinal))
+                {
+                    string accessory = name.Substring(accessoryPrefix.Length);
+                    return resourcesRoot + "/SourceImages/" + species + "/accesories/" + Capitalize(accessory);
+                }
+
+                string shirtPath = ClothingResourcePath(name, species, "part-shirts-" + species + "-", "shirts");
+                if (!string.IsNullOrEmpty(shirtPath))
+                {
+                    return shirtPath;
+                }
+
+                string pantsPath = ClothingResourcePath(name, species, "part-pants-" + species + "-", "pants");
+                if (!string.IsNullOrEmpty(pantsPath))
+                {
+                    return pantsPath;
+                }
+
+                string shoesPath = ClothingResourcePath(name, species, "part-shoes-" + species + "-", "shoes");
+                if (!string.IsNullOrEmpty(shoesPath))
+                {
+                    return shoesPath;
+                }
+            }
+
+            return "";
+        }
+
+        private string ClothingResourcePath(string materialName, string species, string prefix, string category)
+        {
+            if (!materialName.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                return "";
+            }
+
+            string partAndColor = materialName.Substring(prefix.Length);
+            int colorSeparator = partAndColor.LastIndexOf('-');
+
+            if (colorSeparator <= 0)
+            {
+                return "";
+            }
+
+            string id = partAndColor.Substring(0, colorSeparator);
+            string color = partAndColor.Substring(colorSeparator + 1);
+            string colorName = Capitalize(color);
+            string sourceRoot = resourcesRoot + "/SourceImages/" + species;
+
+            if (category == "shirts")
+            {
+                if (id == CharacterAvatarOptions.Tee)
+                {
+                    return sourceRoot + "/shirts/T-shirts/T-shirts " + colorName;
+                }
+
+                if (id == CharacterAvatarOptions.Sweatshirt)
+                {
+                    return sourceRoot + "/shirts/Sweatshirt/Sweatshirt " + colorName;
+                }
+
+                if (id == CharacterAvatarOptions.Undershirt)
+                {
+                    return sourceRoot + "/shirts/Undershirt/Undershirt " + colorName;
+                }
+            }
+
+            if (category == "pants")
+            {
+                if (id == CharacterAvatarOptions.Jeans)
+                {
+                    return sourceRoot + "/pants/Jeans/Jeans";
+                }
+
+                if (id == CharacterAvatarOptions.Cargo)
+                {
+                    return sourceRoot + "/pants/Cargo pants/Cargo pants " + colorName;
+                }
+
+                if (id == CharacterAvatarOptions.SportsPants)
+                {
+                    return sourceRoot + "/pants/Sports pants/Sports pants " + colorName;
+                }
+            }
+
+            if (category == "shoes")
+            {
+                if (id == CharacterAvatarOptions.Sneakers)
+                {
+                    return sourceRoot + "/shoes/Sneakres/Sneakres " + colorName;
+                }
+
+                if (id == CharacterAvatarOptions.Boots)
+                {
+                    return sourceRoot + "/shoes/Boots/Boots " + colorName;
+                }
+
+                if (id == CharacterAvatarOptions.SpaceShoes)
+                {
+                    return sourceRoot + "/shoes/Space shoes/Space shoes " + colorName;
+                }
+            }
+
+            return "";
+        }
+
+        private static string NormalizeMaterialName(string value)
+        {
+            string name = NormalizeId(value, "");
+            return name.Replace(" (instance)", "");
+        }
+
+        private static string Capitalize(string value)
+        {
+            return string.IsNullOrEmpty(value)
+                ? ""
+                : char.ToUpperInvariant(value[0]) + value.Substring(1);
         }
     }
 }

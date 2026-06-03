@@ -18,6 +18,7 @@ namespace SaferTogether.UnityClient
 
         [SerializeField] private string gatewayBaseUrl = "http://localhost:5173";
         [SerializeField] private bool buildRuntimeUi = true;
+        private const float AvatarEditorTabContentHeight = 190f;
 
         private SaferTogetherApiClient apiClient;
         private Dropdown speciesDropdown;
@@ -30,12 +31,24 @@ namespace SaferTogether.UnityClient
         private Dropdown accessoryDropdown;
         private AvatarView avatarView;
         private AvatarBuilder avatarBuilder;
+        private Camera avatarPreviewCamera;
+        private RawImage avatarPreviewImage;
         private RenderTexture avatarPreviewTexture;
+        private Coroutine avatarPreviewRenderCoroutine;
         private Text statusText;
         private Button saveAvatarButton;
         private Button backButton;
+        private Button avatarTabButton;
+        private Button shirtsTabButton;
+        private Button pantsTabButton;
+        private Button accessoriesTabButton;
+        private GameObject avatarTabPanel;
+        private GameObject shirtsTabPanel;
+        private GameObject pantsTabPanel;
+        private GameObject accessoriesTabPanel;
         private UserProfile currentProfile;
         private string returnUrl = "signup.html";
+        private string activeTabId = "avatar";
 
         /// <summary>
         /// This function initializes the API client and optional generated UI.
@@ -54,6 +67,12 @@ namespace SaferTogether.UnityClient
 
         private void OnDestroy()
         {
+            if (avatarPreviewRenderCoroutine != null)
+            {
+                StopCoroutine(avatarPreviewRenderCoroutine);
+                avatarPreviewRenderCoroutine = null;
+            }
+
             if (avatarPreviewTexture == null)
             {
                 return;
@@ -124,7 +143,18 @@ namespace SaferTogether.UnityClient
 
             foreach (Dropdown dropdown in AvatarDropdowns())
             {
-                dropdown?.onValueChanged.AddListener(_ => PreviewAvatar());
+                if (dropdown == null)
+                {
+                    continue;
+                }
+
+                if (dropdown == speciesDropdown)
+                {
+                    dropdown.onValueChanged.AddListener(_ => OnSpeciesChanged());
+                    continue;
+                }
+
+                dropdown.onValueChanged.AddListener(_ => PreviewAvatar());
             }
         }
 
@@ -167,30 +197,276 @@ namespace SaferTogether.UnityClient
 
             statusText = CreateText(panel, "Choose an avatar, then save", 16, TextAnchor.MiddleCenter);
             statusText.color = new Color32(190, 205, 220, 255);
+            ApplyDefaultSelections();
+            UpdateTabAvailability();
             PreviewAvatar();
         }
 
         /// <summary>
-        /// This function builds the reduced editor surface: avatar type, clothes, colors, and accessory.
+        /// This function builds the avatar editor as tabs: avatar, shirts, pants, and accessories.
         /// </summary>
         private void CreateAvatarEditorControls(Transform parent)
         {
-            CreateSectionLabel(parent, "Choose Avatar");
-            RectTransform avatarRow = CreateOptionRow(parent);
-            speciesDropdown = CreateCompactDropdownField(avatarRow, "Avatar", new List<string>(CharacterAvatarOptions.Species));
-            accessoryDropdown = CreateCompactDropdownField(avatarRow, "Accessory", new List<string>(CharacterAvatarOptions.Accessories));
+            CreateTabBar(parent);
 
-            CreateSectionLabel(parent, "Clothes");
-            RectTransform clothesRow = CreateOptionRow(parent);
-            topDropdown = CreateCompactDropdownField(clothesRow, "Shirt", new List<string>(CharacterAvatarOptions.Tops));
-            bottomDropdown = CreateCompactDropdownField(clothesRow, "Pants", new List<string>(CharacterAvatarOptions.Bottoms));
-            shoesDropdown = CreateCompactDropdownField(clothesRow, "Shoes", new List<string>(CharacterAvatarOptions.Shoes));
+            RectTransform content = CreateTabContent(parent);
+            avatarTabPanel = CreateTabPanel(content, "Avatar Tab");
+            shirtsTabPanel = CreateTabPanel(content, "Shirts Tab");
+            pantsTabPanel = CreateTabPanel(content, "Pants Tab");
+            accessoriesTabPanel = CreateTabPanel(content, "Accessories Tab");
 
-            CreateSectionLabel(parent, "Colors");
-            RectTransform colorRow = CreateOptionRow(parent);
-            topColorDropdown = CreateCompactDropdownField(colorRow, "Shirt", new List<string>(CharacterAvatarOptions.ClothingColors));
-            bottomColorDropdown = CreateCompactDropdownField(colorRow, "Pants", new List<string>(CharacterAvatarOptions.ClothingColors));
-            shoeColorDropdown = CreateCompactDropdownField(colorRow, "Shoes", new List<string>(CharacterAvatarOptions.ClothingColors));
+            CreateAvatarTab(avatarTabPanel.transform);
+            CreateShirtsTab(shirtsTabPanel.transform);
+            CreatePantsTab(pantsTabPanel.transform);
+            CreateAccessoriesTab(accessoriesTabPanel.transform);
+
+            SelectTab("avatar");
+        }
+
+        /// <summary>
+        /// This function creates the tab bar used to switch between avatar sections.
+        /// </summary>
+        private void CreateTabBar(Transform parent)
+        {
+            RectTransform row = CreateRow(parent);
+            row.name = "Avatar Tabs";
+            row.GetComponent<HorizontalLayoutGroup>().spacing = 6;
+            row.GetComponent<HorizontalLayoutGroup>().childForceExpandWidth = true;
+
+            avatarTabButton = CreateTabButton(row, "Avatar", () => SelectTab("avatar"));
+            shirtsTabButton = CreateTabButton(row, "Shirts", () => SelectTab("shirts"));
+            pantsTabButton = CreateTabButton(row, "Pants", () => SelectTab("pants"));
+            accessoriesTabButton = CreateTabButton(row, "Accessories", () => SelectTab("accessories"));
+        }
+
+        /// <summary>
+        /// This function creates the container that hosts the tab panels.
+        /// </summary>
+        private RectTransform CreateTabContent(Transform parent)
+        {
+            var contentObject = new GameObject("Tab Content", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(LayoutElement));
+            contentObject.transform.SetParent(parent, false);
+
+            VerticalLayoutGroup layout = contentObject.GetComponent<VerticalLayoutGroup>();
+            layout.spacing = 8;
+            layout.childAlignment = TextAnchor.UpperCenter;
+            layout.childControlWidth = true;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+
+            LayoutElement layoutElement = contentObject.GetComponent<LayoutElement>();
+            layoutElement.preferredHeight = AvatarEditorTabContentHeight;
+            layoutElement.flexibleWidth = 1;
+
+            return contentObject.GetComponent<RectTransform>();
+        }
+
+        /// <summary>
+        /// This function creates one tab panel.
+        /// </summary>
+        private GameObject CreateTabPanel(Transform parent, string name)
+        {
+            var panelObject = new GameObject(name, typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(LayoutElement));
+            panelObject.transform.SetParent(parent, false);
+
+            VerticalLayoutGroup layout = panelObject.GetComponent<VerticalLayoutGroup>();
+            layout.spacing = 8;
+            layout.childAlignment = TextAnchor.UpperCenter;
+            layout.childControlWidth = true;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+
+            LayoutElement layoutElement = panelObject.GetComponent<LayoutElement>();
+            layoutElement.preferredHeight = AvatarEditorTabContentHeight;
+            layoutElement.flexibleWidth = 1;
+
+            return panelObject;
+        }
+
+        /// <summary>
+        /// This function creates a tab button with active and inactive states.
+        /// </summary>
+        private Button CreateTabButton(Transform parent, string label, UnityEngine.Events.UnityAction onClick)
+        {
+            var buttonObject = new GameObject(label + " Tab", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
+            buttonObject.transform.SetParent(parent, false);
+
+            Image image = buttonObject.GetComponent<Image>();
+            image.color = new Color32(42, 61, 86, 255);
+
+            Button button = buttonObject.GetComponent<Button>();
+            button.targetGraphic = image;
+            button.onClick.AddListener(onClick);
+
+            Text text = CreateText(buttonObject.transform, label, 17, TextAnchor.MiddleCenter);
+            text.fontStyle = FontStyle.Bold;
+            text.color = new Color32(238, 244, 250, 255);
+            RectTransform textRect = text.GetComponent<RectTransform>();
+            textRect.anchorMin = Vector2.zero;
+            textRect.anchorMax = Vector2.one;
+            textRect.offsetMin = Vector2.zero;
+            textRect.offsetMax = Vector2.zero;
+
+            LayoutElement layoutElement = buttonObject.GetComponent<LayoutElement>();
+            layoutElement.preferredHeight = 38;
+            layoutElement.flexibleWidth = 1;
+
+            return button;
+        }
+
+        /// <summary>
+        /// This function creates the Avatar tab with species selection.
+        /// </summary>
+        private void CreateAvatarTab(Transform parent)
+        {
+            CreateSectionLabel(parent, "Avatar");
+            RectTransform row = CreateOptionRow(parent);
+            speciesDropdown = CreateCompactDropdownField(row, "Avatar", new List<string>(CharacterAvatarOptions.Species));
+        }
+
+        /// <summary>
+        /// This function creates the Shirts tab.
+        /// </summary>
+        private void CreateShirtsTab(Transform parent)
+        {
+            CreateSectionLabel(parent, "Shirts");
+            RectTransform row = CreateOptionRow(parent);
+            topDropdown = CreateCompactDropdownField(row, "Shirt", new List<string>(CharacterAvatarOptions.Tops));
+            topColorDropdown = CreateCompactDropdownField(row, "Color", new List<string>(CharacterAvatarOptions.ClothingColors));
+        }
+
+        /// <summary>
+        /// This function creates the Pants tab, including shoes for the lower-body outfit.
+        /// </summary>
+        private void CreatePantsTab(Transform parent)
+        {
+            CreateSectionLabel(parent, "Pants");
+            RectTransform pantsRow = CreateOptionRow(parent);
+            bottomDropdown = CreateCompactDropdownField(pantsRow, "Pants", new List<string>(CharacterAvatarOptions.Bottoms));
+            bottomColorDropdown = CreateCompactDropdownField(pantsRow, "Color", new List<string>(CharacterAvatarOptions.ClothingColors));
+
+            CreateSectionLabel(parent, "Shoes");
+            RectTransform shoesRow = CreateOptionRow(parent);
+            shoesDropdown = CreateCompactDropdownField(shoesRow, "Shoes", new List<string>(CharacterAvatarOptions.Shoes));
+            shoeColorDropdown = CreateCompactDropdownField(shoesRow, "Color", new List<string>(CharacterAvatarOptions.ClothingColors));
+        }
+
+        /// <summary>
+        /// This function creates the Accessories tab.
+        /// </summary>
+        private void CreateAccessoriesTab(Transform parent)
+        {
+            CreateSectionLabel(parent, "Accessories");
+            RectTransform row = CreateOptionRow(parent);
+            accessoryDropdown = CreateCompactDropdownField(row, "Accessory", new List<string>(CharacterAvatarOptions.Accessories));
+        }
+
+        /// <summary>
+        /// This function responds to the avatar species tab and locks the clothes tabs for dragon.
+        /// </summary>
+        private void OnSpeciesChanged()
+        {
+            UpdateTabAvailability();
+            PreviewAvatar();
+        }
+
+        /// <summary>
+        /// This function chooses which tab is visible and highlights its button.
+        /// </summary>
+        private void SelectTab(string tabId)
+        {
+            bool dragon = IsDragonSelected();
+
+            if (dragon && (tabId == "shirts" || tabId == "pants"))
+            {
+                tabId = "avatar";
+            }
+
+            activeTabId = tabId;
+            UpdateTabAvailability();
+        }
+
+        /// <summary>
+        /// This function applies the tab lock state for dragon and keeps only the allowed tabs visible.
+        /// </summary>
+        private void UpdateTabAvailability()
+        {
+            bool dragon = IsDragonSelected();
+
+            SetTabVisible(avatarTabButton, avatarTabPanel, true, activeTabId == "avatar");
+            SetTabVisible(accessoriesTabButton, accessoriesTabPanel, true, activeTabId == "accessories");
+            SetTabVisible(shirtsTabButton, shirtsTabPanel, !dragon, activeTabId == "shirts" && !dragon);
+            SetTabVisible(pantsTabButton, pantsTabPanel, !dragon, activeTabId == "pants" && !dragon);
+
+            if (dragon && (activeTabId == "shirts" || activeTabId == "pants"))
+            {
+                activeTabId = "avatar";
+                SetTabVisible(avatarTabButton, avatarTabPanel, true, true);
+            }
+
+            SetControlInteractivity();
+        }
+
+        /// <summary>
+        /// This function sets one tab button/panel pair visible or hidden.
+        /// </summary>
+        private void SetTabVisible(Button button, GameObject panel, bool visible, bool active)
+        {
+            if (button != null)
+            {
+                button.gameObject.SetActive(visible);
+                Image image = button.GetComponent<Image>();
+                if (image != null)
+                {
+                    image.color = active
+                        ? new Color32(18, 154, 228, 255)
+                        : new Color32(42, 61, 86, 255);
+                }
+            }
+
+            if (panel != null)
+            {
+                panel.SetActive(visible && active);
+            }
+        }
+
+        /// <summary>
+        /// This function disables shirt and pants controls when the dragon avatar is active.
+        /// </summary>
+        private void SetControlInteractivity()
+        {
+            bool dragon = IsDragonSelected();
+            bool enabled = !dragon;
+
+            if (topDropdown != null) topDropdown.interactable = enabled;
+            if (topColorDropdown != null) topColorDropdown.interactable = enabled;
+            if (bottomDropdown != null) bottomDropdown.interactable = enabled;
+            if (bottomColorDropdown != null) bottomColorDropdown.interactable = enabled;
+            if (shoesDropdown != null) shoesDropdown.interactable = enabled;
+            if (shoeColorDropdown != null) shoeColorDropdown.interactable = enabled;
+        }
+
+        /// <summary>
+        /// This function returns whether the selected avatar is dragon.
+        /// </summary>
+        private bool IsDragonSelected()
+        {
+            return SelectedDropdownValue(speciesDropdown, CharacterAvatarOptions.Male) == CharacterAvatarOptions.Dragon;
+        }
+
+        /// <summary>
+        /// This function applies the default black outfit used by non-dragon avatars.
+        /// </summary>
+        private void ApplyDefaultSelections()
+        {
+            SetDropdownValue(speciesDropdown, CharacterAvatarOptions.Male);
+            SetDropdownValue(topDropdown, CharacterAvatarOptions.Tee);
+            SetDropdownValue(topColorDropdown, CharacterAvatarOptions.Black);
+            SetDropdownValue(bottomDropdown, CharacterAvatarOptions.Jeans);
+            SetDropdownValue(bottomColorDropdown, CharacterAvatarOptions.Denim);
+            SetDropdownValue(shoesDropdown, CharacterAvatarOptions.Sneakers);
+            SetDropdownValue(shoeColorDropdown, CharacterAvatarOptions.Black);
+            SetDropdownValue(accessoryDropdown, CharacterAvatarOptions.NoAccessory);
         }
 
         /// <summary>
@@ -527,16 +803,20 @@ namespace SaferTogether.UnityClient
             layoutElement.preferredWidth = 300;
             layoutElement.preferredHeight = 350;
 
-            avatarPreviewTexture = new RenderTexture(768, 768, 24, RenderTextureFormat.ARGB32)
+            avatarPreviewTexture = new RenderTexture(512, 512, 24, RenderTextureFormat.ARGB32)
             {
                 name = "Avatar Builder Preview Texture",
-                antiAliasing = 4
+                antiAliasing = 1,
+                useMipMap = false,
+                autoGenerateMips = false
             };
             avatarPreviewTexture.Create();
 
             RawImage image = previewObject.GetComponent<RawImage>();
             image.texture = avatarPreviewTexture;
             image.color = Color.white;
+            image.raycastTarget = false;
+            avatarPreviewImage = image;
 
             AvatarBuilder builder = Object.FindAnyObjectByType<AvatarBuilder>();
 
@@ -571,8 +851,10 @@ namespace SaferTogether.UnityClient
             camera.nearClipPlane = 0.1f;
             camera.farClipPlane = 30f;
             camera.targetTexture = avatarPreviewTexture;
+            camera.enabled = true;
             camera.transform.position = new Vector3(0, 0.55f, -6.2f);
             camera.transform.rotation = Quaternion.Euler(3f, 0, 0);
+            avatarPreviewCamera = camera;
 
             var lightObject = new GameObject("AvatarPreviewKeyLight", typeof(Light));
             Light light = lightObject.GetComponent<Light>();
@@ -843,7 +1125,18 @@ namespace SaferTogether.UnityClient
 
             SetBusy(true);
             SetStatus("Saving avatar...");
-            StartCoroutine(apiClient.UpdateAvatar(avatar, profile =>
+            StartCoroutine(SaveAvatarWithPreviewImage(avatar));
+        }
+
+        /// <summary>
+        /// This function saves both the avatar id and a PNG snapshot of the Unity preview for web cards.
+        /// </summary>
+        private IEnumerator SaveAvatarWithPreviewImage(string avatar)
+        {
+            yield return null;
+
+            string avatarImage = CaptureAvatarPreviewImage();
+            yield return apiClient.UpdateAvatar(avatar, avatarImage, profile =>
             {
                 ApplyProfile(profile);
                 SetStatus("Avatar saved");
@@ -853,7 +1146,7 @@ namespace SaferTogether.UnityClient
             {
                 SetStatus(message);
                 SetBusy(false);
-            }));
+            });
         }
 
         /// <summary>
@@ -887,6 +1180,7 @@ namespace SaferTogether.UnityClient
             SetDropdownValue(shoesDropdown, spec.shoes);
             SetDropdownValue(shoeColorDropdown, spec.shoeColor);
             SetDropdownValue(accessoryDropdown, spec.accessory);
+            UpdateTabAvailability();
             PreviewAvatar();
         }
 
@@ -905,12 +1199,119 @@ namespace SaferTogether.UnityClient
                 avatarBuilder.SelectShirt(spec.top);
                 avatarBuilder.SelectPants(spec.bottom);
                 avatarBuilder.SelectShoes(spec.shoes);
-                avatarBuilder.SetShirtColor(ColorForAvatarOption(spec.topColor));
-                avatarBuilder.SetPantsColor(ColorForAvatarOption(spec.bottomColor));
-                avatarBuilder.SetShoeColor(ColorForAvatarOption(spec.shoeColor));
+                avatarBuilder.SelectShirtColor(spec.topColor);
+                avatarBuilder.SelectPantsColor(spec.bottomColor);
+                avatarBuilder.SelectShoeColor(spec.shoeColor);
             }
 
             avatarView?.SetAvatar(currentProfile != null ? currentProfile.username : "", avatar);
+            RequestAvatarPreviewRender();
+        }
+
+        /// <summary>
+        /// This function schedules a render texture refresh after dropdown-driven avatar changes settle.
+        /// </summary>
+        private void RequestAvatarPreviewRender()
+        {
+            if (!isActiveAndEnabled || avatarPreviewCamera == null || avatarPreviewTexture == null)
+            {
+                return;
+            }
+
+            if (avatarPreviewRenderCoroutine != null)
+            {
+                StopCoroutine(avatarPreviewRenderCoroutine);
+            }
+
+            avatarPreviewRenderCoroutine = StartCoroutine(RenderAvatarPreviewNextFrame());
+        }
+
+        /// <summary>
+        /// This function renders the avatar preview on the next frame so spawned clothing is included.
+        /// </summary>
+        private IEnumerator RenderAvatarPreviewNextFrame()
+        {
+            yield return null;
+
+            if (avatarPreviewCamera == null || avatarPreviewTexture == null)
+            {
+                avatarPreviewRenderCoroutine = null;
+                yield break;
+            }
+
+            if (!avatarPreviewTexture.IsCreated())
+            {
+                avatarPreviewTexture.Create();
+            }
+
+            if (avatarPreviewImage != null && avatarPreviewImage.texture != avatarPreviewTexture)
+            {
+                avatarPreviewImage.texture = avatarPreviewTexture;
+            }
+
+            RenderAvatarPreviewNow();
+            avatarPreviewRenderCoroutine = null;
+        }
+
+        /// <summary>
+        /// This function forces the preview camera to update its render texture immediately.
+        /// </summary>
+        private void RenderAvatarPreviewNow()
+        {
+            if (avatarPreviewCamera == null || avatarPreviewTexture == null)
+            {
+                return;
+            }
+
+            RenderTexture previousTexture = RenderTexture.active;
+            try
+            {
+                avatarPreviewCamera.targetTexture = avatarPreviewTexture;
+                avatarPreviewCamera.Render();
+            }
+            finally
+            {
+                RenderTexture.active = previousTexture;
+            }
+        }
+
+        /// <summary>
+        /// This function reads the Unity preview render texture into a PNG data URL for the web UI.
+        /// </summary>
+        private string CaptureAvatarPreviewImage()
+        {
+            if (avatarPreviewCamera == null || avatarPreviewTexture == null)
+            {
+                return "";
+            }
+
+            if (!avatarPreviewTexture.IsCreated())
+            {
+                avatarPreviewTexture.Create();
+            }
+
+            RenderAvatarPreviewNow();
+
+            var texture = new Texture2D(avatarPreviewTexture.width, avatarPreviewTexture.height, TextureFormat.RGBA32, false);
+            RenderTexture previousTexture = RenderTexture.active;
+            byte[] pngBytes;
+
+            try
+            {
+                RenderTexture.active = avatarPreviewTexture;
+                texture.ReadPixels(new Rect(0, 0, avatarPreviewTexture.width, avatarPreviewTexture.height), 0, 0);
+                texture.Apply();
+                pngBytes = texture.EncodeToPNG();
+            }
+            finally
+            {
+                Destroy(texture);
+                RenderTexture.active = previousTexture;
+            }
+
+            return pngBytes == null || pngBytes.Length == 0
+                ? ""
+                : "data:image/png;base64," + System.Convert.ToBase64String(pngBytes);
         }
 
         /// <summary>
@@ -933,17 +1334,22 @@ namespace SaferTogether.UnityClient
         /// </summary>
         private string SelectedAvatarId()
         {
-            string species = SelectedDropdownValue(speciesDropdown, CharacterAvatarOptions.Human);
+            string species = SelectedDropdownValue(speciesDropdown, CharacterAvatarOptions.Male);
+            string sex = species == CharacterAvatarOptions.Female
+                ? CharacterAvatarOptions.Female
+                : CharacterAvatarOptions.Male;
             string top = SelectedDropdownValue(topDropdown, CharacterAvatarOptions.Tee);
-            string topColor = SelectedDropdownValue(topColorDropdown, AvatarIds.Aqua);
+            string topColor = SelectedDropdownValue(topColorDropdown, CharacterAvatarOptions.Black);
             string bottom = SelectedDropdownValue(bottomDropdown, CharacterAvatarOptions.Jeans);
-            string bottomColor = SelectedDropdownValue(bottomColorDropdown, CharacterAvatarOptions.Denim);
+            string bottomColor = bottom == CharacterAvatarOptions.Jeans
+                ? CharacterAvatarOptions.Denim
+                : SelectedDropdownValue(bottomColorDropdown, CharacterAvatarOptions.Black);
             string shoes = SelectedDropdownValue(shoesDropdown, CharacterAvatarOptions.Sneakers);
-            string shoeColor = SelectedDropdownValue(shoeColorDropdown, CharacterAvatarOptions.White);
+            string shoeColor = SelectedDropdownValue(shoeColorDropdown, CharacterAvatarOptions.Black);
             string accessory = SelectedDropdownValue(accessoryDropdown, CharacterAvatarOptions.NoAccessory);
             return CharacterAvatarId.Build(
                 species,
-                CharacterAvatarOptions.Female,
+                sex,
                 CharacterAvatarOptions.Tan,
                 CharacterAvatarOptions.Soft,
                 CharacterAvatarOptions.Almond,
@@ -973,47 +1379,6 @@ namespace SaferTogether.UnityClient
 
             int index = Mathf.Clamp(dropdown.value, 0, dropdown.options.Count - 1);
             return dropdown.options[index].text;
-        }
-
-        private static Color ColorForAvatarOption(string value)
-        {
-            switch (value)
-            {
-                case AvatarIds.Aqua:
-                    return new Color32(102, 217, 239, 255);
-                case AvatarIds.Mint:
-                    return new Color32(115, 226, 167, 255);
-                case AvatarIds.Sun:
-                    return new Color32(255, 211, 106, 255);
-                case AvatarIds.Rose:
-                    return new Color32(255, 155, 176, 255);
-                case AvatarIds.Violet:
-                    return new Color32(196, 167, 255, 255);
-                case AvatarIds.Steel:
-                    return new Color32(184, 199, 217, 255);
-                case CharacterAvatarOptions.Coral:
-                    return new Color32(255, 132, 115, 255);
-                case CharacterAvatarOptions.Lime:
-                    return new Color32(174, 230, 111, 255);
-                case CharacterAvatarOptions.Sky:
-                    return new Color32(120, 198, 255, 255);
-                case CharacterAvatarOptions.Peach:
-                    return new Color32(255, 187, 143, 255);
-                case CharacterAvatarOptions.Navy:
-                    return new Color32(32, 58, 99, 255);
-                case CharacterAvatarOptions.White:
-                    return new Color32(248, 250, 252, 255);
-                case CharacterAvatarOptions.Black:
-                    return new Color32(34, 40, 49, 255);
-                case CharacterAvatarOptions.Red:
-                    return new Color32(224, 79, 95, 255);
-                case CharacterAvatarOptions.Green:
-                    return new Color32(47, 158, 68, 255);
-                case CharacterAvatarOptions.Denim:
-                    return new Color32(65, 105, 168, 255);
-                default:
-                    return new Color32(102, 217, 239, 255);
-            }
         }
 
         /// <summary>

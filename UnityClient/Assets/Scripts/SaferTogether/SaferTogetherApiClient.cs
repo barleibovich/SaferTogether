@@ -66,11 +66,12 @@ namespace SaferTogether.UnityClient
         /// <summary>
         /// This function updates the current user's avatar.
         /// </summary>
-        public IEnumerator UpdateAvatar(string avatar, Action<UserProfile> onSuccess, Action<string> onError)
+        public IEnumerator UpdateAvatar(string avatar, string avatarImage, Action<UserProfile> onSuccess, Action<string> onError)
         {
             var body = new AvatarUpdateRequest
             {
-                avatar = avatar
+                avatar = avatar,
+                avatarImage = avatarImage
             };
 
             yield return SendJson<ProfileResponse>("/api/auth/profile", "PATCH", body, response =>

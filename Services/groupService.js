@@ -20,6 +20,10 @@ function mapGroup(group, role, pendingRequests = [], members = []) {
   };
 }
 
+function profileAvatarImage(profile) {
+  return profile?.avatar_image || profile?.avatarImage || "";
+}
+
 // This function makes sure only admins can manage groups.
 async function requireAdminContext(accessToken) {
   const context = await getSessionContext(accessToken);
@@ -166,6 +170,7 @@ async function getGroupMembers(client, groups, currentUser, currentProfile) {
     return {
       alertLocation: locationMap.get(member.user_id) || null,
       avatar: normalizeAvatar(avatar, username),
+      avatarImage: profileAvatarImage(isCurrentUser ? currentProfile : profile),
       groupId: member.group_id,
       id: member.user_id,
       role: isGroupOwner ? "admin" : (profile?.role || (isCurrentUser ? currentProfile.role : "user")),
@@ -203,6 +208,7 @@ async function addMissingGroupOwnersAsMembers(client, groups, members, currentUs
         isCurrentUser ? (currentUser?.user_metadata?.avatar || currentProfile.avatar) : profile?.avatar,
         username
       ),
+      avatarImage: profileAvatarImage(isCurrentUser ? currentProfile : profile),
       groupId: group.id,
       id: group.created_by,
       role: "admin",

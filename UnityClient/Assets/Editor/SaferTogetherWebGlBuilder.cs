@@ -34,7 +34,7 @@ namespace SaferTogether.UnityClient.Editor
                 }
 
                 EnsureRuntimeScene();
-                SaferTogetherGeneratedAvatarInstaller.GenerateAssets(false);
+                SaferTogetherGeneratedAvatarInstaller.GenerateAssets(true);
                 SaferTogetherGeneratedAvatarInstaller.InstallBuilderInRuntimeScene();
 
                 BuildPipeline.BuildPlayer(new BuildPlayerOptions

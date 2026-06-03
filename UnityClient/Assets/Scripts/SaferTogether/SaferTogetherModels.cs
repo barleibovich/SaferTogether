@@ -341,6 +341,7 @@ namespace SaferTogether.UnityClient
         public const string Shirt = "shirt";
         public const string Hoodie = "hoodie";
         public const string Sweatshirt = "sweatshirt";
+        public const string Undershirt = "undershirt";
         public const string Jacket = "jacket";
         public const string Vest = "vest";
         public const string Armor = "armor";
@@ -351,12 +352,14 @@ namespace SaferTogether.UnityClient
         public const string Shorts = "shorts";
         public const string Skirt = "skirt";
         public const string Cargo = "cargo";
+        public const string SportsPants = "sports";
         public const string Leggings = "leggings";
 
         public const string Sneakers = "sneakers";
         public const string Boots = "boots";
         public const string Sandals = "sandals";
         public const string Slippers = "slippers";
+        public const string SpaceShoes = "space-shoes";
         public const string NoShoes = "none";
 
         public const string NoAccessory = "none";
@@ -364,6 +367,7 @@ namespace SaferTogether.UnityClient
         public const string Cap = "cap";
         public const string Crown = "crown";
         public const string Mask = "mask";
+        public const string Bandana = "bandana";
         public const string Headphones = "headphones";
         public const string Wings = "wings";
         public const string Halo = "halo";
@@ -376,15 +380,15 @@ namespace SaferTogether.UnityClient
         public const string Peach = "peach";
         public const string Navy = "navy";
         public const string Denim = "denim";
+        public const string Blue = "blue";
+        public const string Yellow = "yellow";
 
         public static readonly string[] Species =
         {
-            Human,
+            Male,
+            Female,
             Dragon,
-            Bear,
-            Elephant,
-            Devil,
-            Angel
+            Devil
         };
 
         public static readonly string[] Sexes =
@@ -464,46 +468,31 @@ namespace SaferTogether.UnityClient
         public static readonly string[] Tops =
         {
             Tee,
-            Shirt,
-            Hoodie,
             Sweatshirt,
-            Jacket,
-            Vest,
-            Armor,
-            Dress
+            Undershirt
         };
 
         public static readonly string[] Bottoms =
         {
             Jeans,
-            Training,
-            Shorts,
-            Skirt,
             Cargo,
-            Leggings
+            SportsPants
         };
 
         public static readonly string[] Shoes =
         {
             Sneakers,
             Boots,
-            Sandals,
-            Slippers,
-            NoShoes
+            SpaceShoes
         };
 
         public static readonly string[] Accessories =
         {
             NoAccessory,
-            Glasses,
-            Cap,
             Crown,
+            Bandana,
+            Glasses,
             Mask,
-            Headphones,
-            Wings,
-            Halo,
-            Horns,
-            Tail
         };
 
         public static readonly string[] Colors =
@@ -521,13 +510,23 @@ namespace SaferTogether.UnityClient
             Navy,
             White,
             Black,
+            Blue,
             Red,
             Green,
+            Yellow,
             Denim
         };
 
         public static readonly string[] Backgrounds = Colors;
-        public static readonly string[] ClothingColors = Colors;
+        public static readonly string[] ClothingColors =
+        {
+            Black,
+            Blue,
+            Green,
+            Red,
+            White,
+            Yellow
+        };
     }
 
     /// <summary>
@@ -639,29 +638,31 @@ namespace SaferTogether.UnityClient
                 parts[17]
             );
 
-            if (normalized != value)
+            string legacyHumanValue = normalized.Replace(":v2:" + CharacterAvatarOptions.Male + ":", ":v2:" + CharacterAvatarOptions.Human + ":");
+
+            if (normalized != value && legacyHumanValue != value)
             {
                 return false;
             }
 
             spec = new CharacterAvatarSpec
             {
-                species = parts[2],
-                sex = parts[3],
-                skin = parts[4],
-                face = parts[5],
-                eyes = parts[6],
-                eyeColor = parts[7],
-                hair = parts[8],
-                hairColor = parts[9],
-                top = parts[10],
-                topColor = parts[11],
-                bottom = parts[12],
-                bottomColor = parts[13],
-                shoes = parts[14],
-                shoeColor = parts[15],
-                accessory = parts[16],
-                background = parts[17]
+                species = NormalizeSpecies(parts[2]),
+                sex = NormalizeSex(parts[3]),
+                skin = NormalizeSkin(parts[4]),
+                face = NormalizeFace(parts[5]),
+                eyes = NormalizeEyes(parts[6]),
+                eyeColor = NormalizeEyeColor(parts[7]),
+                hair = NormalizeHair(parts[8]),
+                hairColor = NormalizeHairColor(parts[9]),
+                top = NormalizeTop(parts[10]),
+                topColor = NormalizeColor(parts[11]),
+                bottom = NormalizeBottom(parts[12]),
+                bottomColor = NormalizeColor(parts[13]),
+                shoes = NormalizeShoes(parts[14]),
+                shoeColor = NormalizeColor(parts[15]),
+                accessory = NormalizeAccessory(parts[16]),
+                background = NormalizeColor(parts[17])
             };
             return true;
         }
@@ -687,8 +688,8 @@ namespace SaferTogether.UnityClient
 
             return new CharacterAvatarSpec
             {
-                species = CharacterAvatarOptions.Human,
-                sex = CharacterAvatarOptions.Female,
+                species = CharacterAvatarOptions.Male,
+                sex = CharacterAvatarOptions.Male,
                 skin = CharacterAvatarOptions.Tan,
                 face = CharacterAvatarOptions.Soft,
                 eyes = builderSpec.eyes == AvatarBuilderOptions.Wink
@@ -702,7 +703,7 @@ namespace SaferTogether.UnityClient
                 bottom = CharacterAvatarOptions.Jeans,
                 bottomColor = CharacterAvatarOptions.Denim,
                 shoes = CharacterAvatarOptions.Sneakers,
-                shoeColor = CharacterAvatarOptions.White,
+                shoeColor = CharacterAvatarOptions.Black,
                 accessory = CharacterAvatarOptions.NoAccessory,
                 background = NormalizeColor(builderSpec.accentColor)
             };
@@ -739,8 +740,8 @@ namespace SaferTogether.UnityClient
 
             spec = new CharacterAvatarSpec
             {
-                species = CharacterAvatarOptions.Human,
-                sex = CharacterAvatarOptions.Female,
+                species = CharacterAvatarOptions.Male,
+                sex = CharacterAvatarOptions.Male,
                 skin = skin,
                 face = CharacterAvatarOptions.Soft,
                 eyes = eyes,
@@ -752,7 +753,7 @@ namespace SaferTogether.UnityClient
                 bottom = CharacterAvatarOptions.Jeans,
                 bottomColor = CharacterAvatarOptions.Denim,
                 shoes = CharacterAvatarOptions.Sneakers,
-                shoeColor = CharacterAvatarOptions.White,
+                shoeColor = CharacterAvatarOptions.Black,
                 accessory = accessory,
                 background = background
             };
@@ -761,7 +762,13 @@ namespace SaferTogether.UnityClient
 
         public static string NormalizeSpecies(string value)
         {
-            return NormalizeOption(value, CharacterAvatarOptions.Species, CharacterAvatarOptions.Human);
+            string cleanValue = NormalizeValue(value);
+            if (cleanValue == CharacterAvatarOptions.Human)
+            {
+                return CharacterAvatarOptions.Male;
+            }
+
+            return NormalizeOption(cleanValue, CharacterAvatarOptions.Species, CharacterAvatarOptions.Male);
         }
 
         public static string NormalizeSex(string value)
@@ -903,6 +910,7 @@ namespace SaferTogether.UnityClient
         public string username;
         public string role;
         public string avatar;
+        public string avatarImage;
     }
 
     /// <summary>
@@ -946,6 +954,7 @@ namespace SaferTogether.UnityClient
     public class AvatarUpdateRequest
     {
         public string avatar;
+        public string avatarImage;
     }
 
     /// <summary>

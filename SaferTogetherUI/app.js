@@ -35,68 +35,20 @@ const LEGACY_CHARACTER_HAIR_STYLES = ["short", "bob", "curls", "spiky", "hijab",
 const LEGACY_CHARACTER_MOUTHS = ["smile", "calm", "open", "flat"];
 const LEGACY_CHARACTER_SHIRTS = ["tee", "hoodie", "jacket", "vest"];
 const LEGACY_CHARACTER_SKINS = ["light", "tan", "brown", "deep"];
-const CHARACTER_ACCESSORIES = ["none", "glasses", "cap", "crown", "mask", "headphones", "wings", "halo", "horns", "tail"];
+const CHARACTER_ACCESSORIES = ["none", "bandana", "crown", "glasses", "mask"];
 const CHARACTER_BACKGROUNDS = [...AVATAR_BUILDER_COLORS, "navy", "white", "black", "red", "green", "denim"];
-const CHARACTER_BOTTOMS = ["jeans", "training", "shorts", "skirt", "cargo", "leggings"];
-const CHARACTER_CLOTHING_COLORS = CHARACTER_BACKGROUNDS;
+const CHARACTER_BOTTOMS = ["jeans", "cargo", "sports"];
+const CHARACTER_CLOTHING_COLORS = ["black", "blue", "green", "red", "white", "yellow"];
 const CHARACTER_EYE_COLORS = ["brown", "blue", "green", "hazel", "violet", "amber", "gray"];
 const CHARACTER_EYES = ["dot", "almond", "happy", "focused", "sleepy"];
 const CHARACTER_FACE_SHAPES = ["round", "soft", "sharp", "snout", "long"];
 const CHARACTER_HAIR_COLORS = ["black", "brown", "blonde", "red", "blue", "pink", "silver", "white"];
 const CHARACTER_HAIR_STYLES = ["short", "bob", "curls", "spiky", "long", "ponytail", "bun", "mohawk", "hijab", "none"];
 const CHARACTER_SEXES = ["female", "male"];
-const CHARACTER_SHOES = ["sneakers", "boots", "sandals", "slippers", "none"];
+const CHARACTER_SHOES = ["sneakers", "boots", "space-shoes"];
 const CHARACTER_SKINS = ["porcelain", "light", "tan", "brown", "deep", "green", "red", "gray", "gold"];
-const CHARACTER_SPECIES = ["human", "dragon", "bear", "elephant", "devil", "angel"];
-const CHARACTER_TOPS = ["tee", "shirt", "hoodie", "sweatshirt", "jacket", "vest", "armor", "dress"];
-const AVATAR_COLOR_VALUES = {
-  aqua: "#66d9ef",
-  black: "#222831",
-  coral: "#ff8473",
-  denim: "#4169a8",
-  green: "#2f9e44",
-  lime: "#aee66f",
-  mint: "#73e2a7",
-  navy: "#203a63",
-  peach: "#ffbb8f",
-  red: "#e04f5f",
-  rose: "#ff9bb0",
-  sky: "#78c6ff",
-  steel: "#b8c7d9",
-  sun: "#ffd36a",
-  violet: "#c4a7ff",
-  white: "#f8fafc"
-};
-const CHARACTER_HAIR_COLOR_VALUES = {
-  black: "#231f20",
-  blonde: "#eac15d",
-  blue: "#366ab8",
-  brown: "#5b3724",
-  pink: "#d96fb1",
-  red: "#ac4831",
-  silver: "#c2c5cb",
-  white: "#f3f4f6"
-};
-const CHARACTER_EYE_COLOR_VALUES = {
-  amber: "#d48b28",
-  blue: "#2f80ed",
-  brown: "#5b3724",
-  gray: "#7b8794",
-  green: "#2f9e44",
-  hazel: "#8a6f2a",
-  violet: "#7c5cff"
-};
-const CHARACTER_SKIN_VALUES = {
-  brown: "#a76947",
-  deep: "#693f2d",
-  gold: "#d8aa45",
-  gray: "#9aa4ad",
-  green: "#59b06f",
-  light: "#ffd6b9",
-  porcelain: "#ffe6d5",
-  red: "#c94f45",
-  tan: "#da9a69"
-};
+const CHARACTER_SPECIES = ["male", "female", "dragon", "devil"];
+const CHARACTER_TOPS = ["tee", "sweatshirt", "undershirt"];
 const DEFAULT_CHARACTER_SPEC = {
   accessory: "none",
   background: "sky",
@@ -107,13 +59,13 @@ const DEFAULT_CHARACTER_SPEC = {
   face: "soft",
   hair: "short",
   hairColor: "brown",
-  sex: "female",
+  sex: "male",
   shoes: "sneakers",
   shoeColor: "white",
   skin: "tan",
-  species: "human",
+  species: "male",
   top: "tee",
-  topColor: "aqua"
+  topColor: "blue"
 };
 const DEFAULT_FAMILY = [
   { id: "1", name: "×“×§×œ", role: "×™×œ×“", status: "offline", avatar: "ðŸ¯" },
@@ -206,7 +158,33 @@ function loadState() {
 
 // This function saves the current app state to local storage.
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(stateForStorage()));
+}
+
+// This function keeps large generated avatar PNGs out of browser storage.
+function stateForStorage() {
+  const snapshot = copy(state);
+
+  if (snapshot.user) {
+    delete snapshot.user.avatarImage;
+  }
+
+  snapshot.groups = (snapshot.groups || []).map(group => ({
+    ...group,
+    members: (group.members || []).map(member => {
+      const cleanMember = { ...member };
+      delete cleanMember.avatarImage;
+      return cleanMember;
+    })
+  }));
+
+  snapshot.familyMembers = (snapshot.familyMembers || []).map(member => {
+    const cleanMember = { ...member };
+    delete cleanMember.avatarImage;
+    return cleanMember;
+  });
+
+  return snapshot;
 }
 
 // This function stores an avatar coming back from Unity so signup can use it before an account exists.
@@ -281,23 +259,31 @@ function optionValue(value, options, fallback) {
   return options.includes(cleanValue) ? cleanValue : fallback;
 }
 
+function characterSpeciesValue(value) {
+  const cleanValue = String(value || "").trim().toLowerCase();
+  if (cleanValue === "human") return "male";
+  return optionValue(cleanValue, CHARACTER_SPECIES, DEFAULT_CHARACTER_SPEC.species);
+}
+
 // This function normalizes a complete character spec.
 function normalizeCharacterSpec(spec = {}) {
+  const species = characterSpeciesValue(spec.species);
+  const bottom = optionValue(spec.bottom, CHARACTER_BOTTOMS, DEFAULT_CHARACTER_SPEC.bottom);
   return {
     accessory: optionValue(spec.accessory, CHARACTER_ACCESSORIES, DEFAULT_CHARACTER_SPEC.accessory),
     background: optionValue(spec.background, CHARACTER_BACKGROUNDS, DEFAULT_CHARACTER_SPEC.background),
-    bottom: optionValue(spec.bottom, CHARACTER_BOTTOMS, DEFAULT_CHARACTER_SPEC.bottom),
-    bottomColor: optionValue(spec.bottomColor, CHARACTER_CLOTHING_COLORS, DEFAULT_CHARACTER_SPEC.bottomColor),
+    bottom,
+    bottomColor: bottom === "jeans" ? "denim" : optionValue(spec.bottomColor, CHARACTER_CLOTHING_COLORS, "blue"),
     eyeColor: optionValue(spec.eyeColor, CHARACTER_EYE_COLORS, DEFAULT_CHARACTER_SPEC.eyeColor),
     eyes: optionValue(spec.eyes, CHARACTER_EYES, DEFAULT_CHARACTER_SPEC.eyes),
     face: optionValue(spec.face, CHARACTER_FACE_SHAPES, DEFAULT_CHARACTER_SPEC.face),
     hair: optionValue(spec.hair, CHARACTER_HAIR_STYLES, DEFAULT_CHARACTER_SPEC.hair),
     hairColor: optionValue(spec.hairColor, CHARACTER_HAIR_COLORS, DEFAULT_CHARACTER_SPEC.hairColor),
-    sex: optionValue(spec.sex, CHARACTER_SEXES, DEFAULT_CHARACTER_SPEC.sex),
+    sex: species === "female" ? "female" : species === "male" ? "male" : optionValue(spec.sex, CHARACTER_SEXES, DEFAULT_CHARACTER_SPEC.sex),
     shoes: optionValue(spec.shoes, CHARACTER_SHOES, DEFAULT_CHARACTER_SPEC.shoes),
     shoeColor: optionValue(spec.shoeColor, CHARACTER_CLOTHING_COLORS, DEFAULT_CHARACTER_SPEC.shoeColor),
     skin: optionValue(spec.skin, CHARACTER_SKINS, DEFAULT_CHARACTER_SPEC.skin),
-    species: optionValue(spec.species, CHARACTER_SPECIES, DEFAULT_CHARACTER_SPEC.species),
+    species,
     top: optionValue(spec.top, CHARACTER_TOPS, DEFAULT_CHARACTER_SPEC.top),
     topColor: optionValue(spec.topColor, CHARACTER_CLOTHING_COLORS, DEFAULT_CHARACTER_SPEC.topColor)
   };
@@ -468,67 +454,17 @@ function parseCharacterAvatar(avatar) {
     topColor: parts[11]
   });
 
-  if (buildCharacterAvatar(spec) !== cleanAvatar) {
+  const normalizedId = buildCharacterAvatar(spec);
+  const legacyHumanId = normalizedId.replace(":v2:male:", ":v2:human:");
+
+  if (normalizedId !== cleanAvatar && legacyHumanId !== cleanAvatar) {
     return null;
   }
 
   return {
     ...spec,
-    id: buildCharacterAvatar(spec)
+    id: normalizedId
   };
-}
-
-// This function maps old character ids to the complete editor model.
-function legacyCharacterToSpec(legacyAvatar) {
-  if (!legacyAvatar) return null;
-
-  return normalizeCharacterSpec({
-    ...DEFAULT_CHARACTER_SPEC,
-    accessory: legacyAvatar.accessory === "badge" ? "crown" : legacyAvatar.accessory,
-    background: legacyAvatar.background,
-    eyes: legacyAvatar.eyes === "line" ? "sleepy" : legacyAvatar.eyes,
-    hair: legacyAvatar.hair,
-    hairColor: legacyAvatar.hairColor,
-    skin: legacyAvatar.skin,
-    top: legacyAvatar.shirt === "tee" ? "tee" : legacyAvatar.shirt,
-    topColor: legacyAvatar.shirtColor
-  });
-}
-
-// This function maps builder ids and color presets to the complete editor model.
-function compactAvatarToSpec(avatar, username) {
-  const cleanAvatar = String(avatar || "").trim().toLowerCase();
-  const builderAvatar = parseBuilderAvatar(cleanAvatar);
-  const baseColor = builderAvatar?.baseColor || (AVATAR_OPTIONS.includes(cleanAvatar) ? cleanAvatar : "");
-  const accentColor = builderAvatar?.accentColor || "";
-
-  if (!baseColor) {
-    return avatarSpecFromUsername(username);
-  }
-
-  return normalizeCharacterSpec({
-    ...avatarSpecFromUsername(username),
-    background: accentColor || "sky",
-    eyes: builderAvatar?.eyes === "wink" ? "focused" : "happy",
-    topColor: baseColor
-  });
-}
-
-// This function returns the complete character spec for any supported avatar id.
-function avatarSpecFromAvatar(avatar, username) {
-  const cleanAvatar = String(avatar || "").trim().toLowerCase();
-  const characterAvatar = parseCharacterAvatar(cleanAvatar);
-  const legacyCharacterAvatar = parseLegacyCharacterAvatar(cleanAvatar);
-
-  if (characterAvatar) {
-    return characterAvatar;
-  }
-
-  if (legacyCharacterAvatar) {
-    return legacyCharacterToSpec(legacyCharacterAvatar);
-  }
-
-  return compactAvatarToSpec(cleanAvatar, username);
 }
 
 // This function accepts known preset, old builder, and character avatar ids.
@@ -557,90 +493,28 @@ function normalizeAvatar(avatar, username) {
   return avatarFromUsername(username);
 }
 
-// This function returns the CSS class for an avatar id.
-function avatarClass(avatar, username) {
-  const spec = avatarSpecFromAvatar(avatar, username);
-  return [
-    "avatar-character-v2",
-    "avatar-illustrated",
-    `avatar-species-${spec.species}`,
-    `avatar-sex-${spec.sex}`,
-    `avatar-face-${spec.face}`,
-    `avatar-eyes-${spec.eyes}`,
-    `avatar-hair-${spec.hair}`,
-    `avatar-top-${spec.top}`,
-    `avatar-bottom-${spec.bottom}`,
-    `avatar-shoes-${spec.shoes}`,
-    `avatar-accessory-${spec.accessory}`
-  ].join(" ");
-}
-
-function avatarArtPath(avatar, username) {
-  const spec = avatarSpecFromAvatar(avatar, username);
-  return `assets/avatar-art/${spec.species}.png`;
-}
-
-// This function returns CSS variables for an avatar.
-function avatarStyle(avatar, username) {
-  const spec = avatarSpecFromAvatar(avatar, username);
-  return ` style="--avatar-bg:${AVATAR_COLOR_VALUES[spec.background]};--avatar-skin:${CHARACTER_SKIN_VALUES[spec.skin]};--avatar-eye:${CHARACTER_EYE_COLOR_VALUES[spec.eyeColor]};--avatar-hair:${CHARACTER_HAIR_COLOR_VALUES[spec.hairColor]};--avatar-top:${AVATAR_COLOR_VALUES[spec.topColor]};--avatar-bottom:${AVATAR_COLOR_VALUES[spec.bottomColor]};--avatar-shoe:${AVATAR_COLOR_VALUES[spec.shoeColor]};"`;
-}
-
 // This function chooses a readable initial for the avatar badge.
 function avatarInitial(username) {
   return String(username || "?").trim().charAt(0).toUpperCase() || "?";
 }
 
-// This function renders the CSS-built character avatar from the saved avatar id.
-function renderAvatarBadge(username, avatar, className = "profile-avatar") {
+function isAvatarImage(value) {
+  return /^data:image\/png;base64,[a-zA-Z0-9+/=]+$/.test(String(value || "").trim());
+}
+
+// This function uses the Unity-rendered PNG when available.
+function renderAvatarBadge(username, className = "profile-avatar", avatarImage = "") {
+  if (isAvatarImage(avatarImage)) {
+    return `
+      <span class="${className} avatar-image-badge">
+        <img class="avatar-image-render" src="${escapeHtml(avatarImage)}" alt="" aria-hidden="true">
+      </span>
+    `;
+  }
+
   return `
-    <span class="${className} ${avatarClass(avatar, username)}"${avatarStyle(avatar, username)}>
-      <img class="avatar-art-image" src="${avatarArtPath(avatar, username)}" alt="" aria-hidden="true">
-      <span class="avatar-art-overlay" aria-hidden="true">
-        <span class="avatar-art-wing"></span>
-        <span class="avatar-art-tail"></span>
-        <span class="avatar-art-arm avatar-art-arm-left"></span>
-        <span class="avatar-art-arm avatar-art-arm-right"></span>
-        <span class="avatar-art-top"></span>
-        <span class="avatar-art-bottom"></span>
-        <span class="avatar-art-leg avatar-art-leg-left"></span>
-        <span class="avatar-art-leg avatar-art-leg-right"></span>
-        <span class="avatar-art-shoe avatar-art-shoe-left"></span>
-        <span class="avatar-art-shoe avatar-art-shoe-right"></span>
-        <span class="avatar-art-initial">${escapeHtml(avatarInitial(username))}</span>
-        <span class="avatar-art-accessory"></span>
-        <span class="avatar-art-accessory-detail avatar-art-accessory-detail-left"></span>
-        <span class="avatar-art-accessory-detail avatar-art-accessory-detail-right"></span>
-      </span>
-      <span class="avatar-v2-shadow"></span>
-      <span class="avatar-v2-wings"></span>
-      <span class="avatar-v2-tail"></span>
-      <span class="avatar-v2-arm avatar-v2-arm-left"></span>
-      <span class="avatar-v2-arm avatar-v2-arm-right"></span>
-      <span class="avatar-v2-body">
-        <span class="avatar-v2-neck"></span>
-        <span class="avatar-v2-bottom"></span>
-        <span class="avatar-v2-leg avatar-v2-leg-left"></span>
-        <span class="avatar-v2-leg avatar-v2-leg-right"></span>
-        <span class="avatar-v2-shoe avatar-v2-shoe-left"></span>
-        <span class="avatar-v2-shoe avatar-v2-shoe-right"></span>
-        <span class="avatar-v2-ear avatar-v2-ear-left avatar-v2-ear-outer"></span>
-        <span class="avatar-v2-ear avatar-v2-ear-right avatar-v2-ear-outer"></span>
-        <span class="avatar-v2-hair avatar-v2-hair-outer"></span>
-        <span class="avatar-v2-head">
-          <span class="avatar-v2-ear avatar-v2-ear-left"></span>
-          <span class="avatar-v2-ear avatar-v2-ear-right"></span>
-          <span class="avatar-v2-hair"></span>
-          <span class="avatar-v2-trunk"></span>
-          <span class="avatar-v2-face-mark"></span>
-          <span class="avatar-v2-eyes"></span>
-          <span class="avatar-v2-nose"></span>
-          <span class="avatar-v2-mouth"></span>
-          <span class="avatar-v2-accessory"></span>
-        </span>
-        <span class="avatar-v2-accessory avatar-v2-accessory-outer"></span>
-        <span class="avatar-v2-badge">${escapeHtml(avatarInitial(username))}</span>
-      </span>
+    <span class="${className} avatar-initial-badge">
+      ${escapeHtml(avatarInitial(username))}
     </span>
   `;
 }
@@ -724,11 +598,12 @@ function initSignup() {
 }
 
 // This function saves the logged-in user profile in local state.
-function setSessionUser(username, role, userId, avatar, alertLocation = null) {
+function setSessionUser(username, role, userId, avatar, avatarImage = "", alertLocation = null) {
   const cleanRole = role === "admin" ? "admin" : "user";
 
   state.user = {
     avatar: normalizeAvatar(avatar, username),
+    avatarImage: isAvatarImage(avatarImage) ? avatarImage : "",
     userId,
     username,
     name: username,
@@ -748,7 +623,7 @@ async function loadSessionIntoState() {
     return null;
   }
 
-  setSessionUser(profile.username, profile.role, profile.id, profile.avatar, profile.alertLocation);
+  setSessionUser(profile.username, profile.role, profile.id, profile.avatar, profile.avatarImage, profile.alertLocation);
   state.groups = [];
   await refreshCurrentUserGroups(profile.role);
   return profile;
@@ -769,7 +644,10 @@ async function refreshCurrentUserGroups(role = state.user?.role || "user") {
           alertLocation: member.alertLocation || null,
           avatar: member.id === state.user?.userId
             ? normalizeAvatar(state.user.avatar, member.username)
-            : normalizeAvatar(member.avatar, member.username)
+            : normalizeAvatar(member.avatar, member.username),
+          avatarImage: member.id === state.user?.userId
+            ? (state.user.avatarImage || member.avatarImage || "")
+            : (member.avatarImage || "")
         }))
         : [],
       name: group.name || "Untitled group",
@@ -884,8 +762,8 @@ function renderCurrentAvatar() {
 
   const summaryMarkup = renderAvatarBadge(
     state.user.username || state.user.name,
-    state.user.avatar,
-    "profile-avatar avatar-unity-preview"
+    "profile-avatar avatar-unity-preview",
+    state.user.avatarImage
   );
 
   document.querySelectorAll("[data-current-avatar-summary]").forEach(preview => {
@@ -1386,7 +1264,7 @@ function renderBoardMembers(group) {
 
     return `
       <article class="member-card ${isCurrentMember ? "member-card-current" : ""} ${liveStatus?.status === "alert" ? "member-card-alert" : ""}">
-        ${renderAvatarBadge(member.username, member.avatar, "member-avatar avatar-unity-preview")}
+        ${renderAvatarBadge(member.username, "member-avatar avatar-unity-preview", member.avatarImage)}
         <div class="member-main">
           <p class="member-name">
             ${escapeHtml(member.username)}
@@ -1960,7 +1838,7 @@ function renderFamilyList(container) {
 
   container.innerHTML = state.familyMembers.map(member => `
     <article class="member-card">
-      ${renderAvatarBadge(member.name, member.avatar, `avatar-badge ${member.status}`)}
+      ${renderAvatarBadge(member.name, `avatar-badge ${member.status}`, member.avatarImage)}
       <div class="member-main">
         <p class="member-name">${escapeHtml(member.name)}</p>
         <p class="member-role">${escapeHtml(member.alertLocation?.areaName || member.role)}</p>
@@ -2114,6 +1992,7 @@ function buildEmergencyMembers(orefStatus = null) {
     return {
       alertLocation: liveStatus?.alertLocation || member.alertLocation || null,
       avatar: member.avatar,
+      avatarImage: member.avatarImage,
       id: member.id,
       name: member.username,
       role: member.role === "admin" ? "Admin" : "User",

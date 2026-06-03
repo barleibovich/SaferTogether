@@ -26,15 +26,10 @@ const LEGACY_CHARACTER_SKINS = ["light", "tan", "brown", "deep"];
 
 const CHARACTER_ACCESSORIES = [
   "none",
-  "glasses",
-  "cap",
+  "bandana",
   "crown",
-  "mask",
-  "headphones",
-  "wings",
-  "halo",
-  "horns",
-  "tail"
+  "glasses",
+  "mask"
 ];
 const CHARACTER_BACKGROUNDS = [
   ...AVATAR_BUILDER_COLORS,
@@ -45,8 +40,8 @@ const CHARACTER_BACKGROUNDS = [
   "green",
   "denim"
 ];
-const CHARACTER_BOTTOMS = ["jeans", "training", "shorts", "skirt", "cargo", "leggings"];
-const CHARACTER_CLOTHING_COLORS = CHARACTER_BACKGROUNDS;
+const CHARACTER_BOTTOMS = ["jeans", "cargo", "sports"];
+const CHARACTER_CLOTHING_COLORS = ["black", "blue", "green", "red", "white", "yellow", "denim"];
 const CHARACTER_EYE_COLORS = ["brown", "blue", "green", "hazel", "violet", "amber", "gray"];
 const CHARACTER_EYES = ["dot", "almond", "happy", "focused", "sleepy"];
 const CHARACTER_FACE_SHAPES = ["round", "soft", "sharp", "snout", "long"];
@@ -64,10 +59,10 @@ const CHARACTER_HAIR_STYLES = [
   "none"
 ];
 const CHARACTER_SEXES = ["female", "male"];
-const CHARACTER_SHOES = ["sneakers", "boots", "sandals", "slippers", "none"];
+const CHARACTER_SHOES = ["sneakers", "boots", "space-shoes"];
 const CHARACTER_SKINS = ["porcelain", "light", "tan", "brown", "deep", "green", "red", "gray", "gold"];
-const CHARACTER_SPECIES = ["human", "dragon", "bear", "elephant", "devil", "angel"];
-const CHARACTER_TOPS = ["tee", "shirt", "hoodie", "sweatshirt", "jacket", "vest", "armor", "dress"];
+const CHARACTER_SPECIES = ["male", "female", "dragon", "devil"];
+const CHARACTER_TOPS = ["tee", "sweatshirt", "undershirt"];
 
 const DEFAULT_CHARACTER_V2 = {
   accessory: "none",
@@ -79,11 +74,11 @@ const DEFAULT_CHARACTER_V2 = {
   face: "soft",
   hair: "short",
   hairColor: "brown",
-  sex: "female",
+  sex: "male",
   shoes: "sneakers",
   shoeColor: "white",
   skin: "tan",
-  species: "human",
+  species: "male",
   top: "tee",
   topColor: "aqua"
 };
@@ -119,6 +114,12 @@ function buildCharacterAvatarV2(spec) {
     spec.accessory,
     spec.background
   ].join(":");
+}
+
+function normalizeCharacterSpecies(value) {
+  const cleanValue = String(value || "").trim().toLowerCase();
+  if (cleanValue === "human") return "male";
+  return CHARACTER_SPECIES.includes(cleanValue) ? cleanValue : DEFAULT_CHARACTER_V2.species;
 }
 
 // This function creates a stable default avatar from the username.
@@ -256,10 +257,11 @@ function parseCharacterAvatar(avatar) {
     shoes: parts[14],
     shoeColor: parts[15],
     skin: parts[4],
-    species: parts[2],
+    species: normalizeCharacterSpecies(parts[2]),
     top: parts[10],
     topColor: parts[11]
   };
+  spec.sex = spec.species === "female" ? "female" : spec.species === "male" ? "male" : spec.sex;
 
   if (!CHARACTER_SPECIES.includes(spec.species) || !CHARACTER_SEXES.includes(spec.sex)) {
     return "";

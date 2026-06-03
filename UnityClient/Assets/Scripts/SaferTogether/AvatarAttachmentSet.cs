@@ -11,6 +11,7 @@ namespace SaferTogether.UnityClient
         Tail,
         Shirt,
         Pants,
+        Shoes,
         LeftShoe,
         RightShoe
     }
@@ -30,6 +31,7 @@ namespace SaferTogether.UnityClient
         [Header("Clothing Points")]
         public Transform shirtPoint;
         public Transform pantsPoint;
+        public Transform shoesPoint;
         public Transform leftShoePoint;
         public Transform rightShoePoint;
 
@@ -51,6 +53,8 @@ namespace SaferTogether.UnityClient
                     return shirtPoint;
                 case AvatarAttachmentSlot.Pants:
                     return pantsPoint;
+                case AvatarAttachmentSlot.Shoes:
+                    return shoesPoint != null ? shoesPoint : transform;
                 case AvatarAttachmentSlot.LeftShoe:
                     return leftShoePoint;
                 case AvatarAttachmentSlot.RightShoe:

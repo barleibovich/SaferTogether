@@ -24,6 +24,21 @@ function validateRole(role) {
   return ["admin", "user"].includes(role);
 }
 
+// This function accepts only compact Unity PNG snapshots for profile cards.
+function normalizeAvatarImage(avatarImage) {
+  const value = String(avatarImage || "").trim();
+
+  if (!value) {
+    return "";
+  }
+
+  if (value.length > 1500000 || !/^data:image\/png;base64,[a-zA-Z0-9+/=]+$/.test(value)) {
+    throw httpError(400, "Avatar image must be a PNG data URL");
+  }
+
+  return value;
+}
+
 // This function builds the synthetic email Supabase auth uses for username login.
 function usernameToAuthEmail(username, domain = AUTH_EMAIL_DOMAINS[0]) {
   return `${normalizeUsername(username)}@${domain}`;
@@ -36,7 +51,8 @@ function buildProfile(profile, user, alertLocation = null) {
   return {
     ...profile,
     alertLocation,
-    avatar: normalizeAvatar(avatar, profile?.username)
+    avatar: normalizeAvatar(avatar, profile?.username),
+    avatarImage: profile?.avatar_image || ""
   };
 }
 
@@ -56,15 +72,36 @@ function isProfileAvatarSetupError(error) {
 }
 
 // This function mirrors the selected avatar onto public profiles for group member cards.
-async function saveProfileAvatar(client, userId, avatar) {
+async function saveProfileAvatar(client, userId, avatar, avatarImage = undefined, options = {}) {
+  const payload = { avatar };
+
+  if (avatarImage !== undefined) {
+    payload.avatar_image = avatarImage;
+  }
+
   const { data, error } = await client
     .from("profiles")
-    .update({ avatar })
+    .update(payload)
     .eq("id", userId)
     .select("*")
     .maybeSingle();
 
   if (error) {
+    if (avatarImage !== undefined && isProfileAvatarSetupError(error)) {
+      // The avatar image column or its row policy is missing. When the caller
+      // explicitly asked to store the image (the avatar editor), fail loudly so
+      // the snapshot is not silently dropped, leaving group cards on the initial
+      // letter. Otherwise (signup) degrade gracefully and keep the text avatar.
+      if (options.requireAvatarImage) {
+        throw httpError(
+          503,
+          "Avatar image storage is not set up. Apply supabase/profile_avatars.sql to your Supabase project, then save the avatar again."
+        );
+      }
+
+      return saveProfileAvatar(client, userId, avatar);
+    }
+
     if (isProfileAvatarSetupError(error)) {
       return null;
     }
@@ -119,10 +156,11 @@ async function signInWithKnownDomains(client, username, password) {
 }
 
 // This function creates a Supabase auth user and a matching app profile.
-async function signUpWithUsername({ username, password, role = "user", avatar }) {
+async function signUpWithUsername({ username, password, role = "user", avatar, avatarImage }) {
   const cleanUsername = normalizeUsername(username);
   const cleanRole = validateRole(role) ? role : "user";
   const cleanAvatar = normalizeAvatar(avatar, cleanUsername);
+  const cleanAvatarImage = normalizeAvatarImage(avatarImage);
 
   if (!validateUsername(cleanUsername)) {
     throw httpError(
@@ -180,7 +218,7 @@ async function signUpWithUsername({ username, password, role = "user", avatar })
     throw profileError;
   }
 
-  await saveProfileAvatar(userClient, authData.user.id, cleanAvatar);
+  await saveProfileAvatar(userClient, authData.user.id, cleanAvatar, cleanAvatarImage || undefined);
   const profile = await getCurrentUserProfile(session.access_token);
 
   return {
@@ -230,16 +268,19 @@ async function getCurrentUserProfile(accessToken) {
 }
 
 // This function updates the logged-in user's avatar choice.
-async function updateCurrentUserAvatar(accessToken, { avatar }) {
+async function updateCurrentUserAvatar(accessToken, { avatar, avatarImage }) {
   const context = await getSessionContext(accessToken);
   const cleanAvatar = normalizeAvatar(avatar, context.profile.username);
+  const cleanAvatarImage = normalizeAvatarImage(avatarImage);
   const metadata = {
     ...(context.user.user_metadata || {}),
     avatar: cleanAvatar
   };
 
   const user = await updateAuthUserMetadata(accessToken, metadata);
-  const profile = await saveProfileAvatar(context.client, context.user.id, cleanAvatar) || context.profile;
+  const profile = await saveProfileAvatar(context.client, context.user.id, cleanAvatar, cleanAvatarImage, {
+    requireAvatarImage: Boolean(cleanAvatarImage)
+  }) || context.profile;
   const alertLocation = await getLocationForUser(context.client, context.user.id);
   return buildProfile(profile, user, alertLocation);
 }
