@@ -7,10 +7,14 @@ const {
 const {
   createGroupForCurrentUser,
   deleteOwnedGroup,
+  endGroupDrill,
+  getDrillStatus,
   getVisibleGroups,
   leaveGroup,
+  markMemberDrillSafe,
   requestJoinByCode,
   reviewJoinRequest,
+  startGroupDrill,
   updateOwnedGroup
 } = require("../../Services/groupService");
 
@@ -18,8 +22,11 @@ const {
 async function handleGroupRoute(request, response, pathname) {
   const accessToken = getAccessTokenFromRequest(request);
   const groupMatch = pathname.match(/^\/api\/groups\/([^/]+)$/);
+  const drillMatch = pathname.match(/^\/api\/groups\/([^/]+)\/drill$/);
   const joinRequestMatch = pathname.match(/^\/api\/groups\/([^/]+)\/join-requests\/([^/]+)$/);
   const leaveMemberMatch = pathname.match(/^\/api\/groups\/([^/]+)\/members\/me$/);
+  const drillSafeMatch = pathname.match(/^\/api\/groups\/([^/]+)\/drill\/safe$/);
+  const drillStatusMatch = pathname.match(/^\/api\/groups\/([^/]+)\/drill\/status$/);
 
   try {
     if (pathname === "/api/groups" && request.method === "GET") {
@@ -70,6 +77,30 @@ async function handleGroupRoute(request, response, pathname) {
     if (groupMatch && request.method === "DELETE") {
       const result = await deleteOwnedGroup(accessToken, groupMatch[1]);
       sendJson(response, 200, result);
+      return true;
+    }
+
+    if (drillSafeMatch && request.method === "POST") {
+      const result = await markMemberDrillSafe(accessToken, drillSafeMatch[1]);
+      sendJson(response, 200, result);
+      return true;
+    }
+
+    if (drillStatusMatch && request.method === "GET") {
+      const result = await getDrillStatus(accessToken, drillStatusMatch[1]);
+      sendJson(response, 200, result);
+      return true;
+    }
+
+    if (drillMatch && request.method === "POST") {
+      const group = await startGroupDrill(accessToken, drillMatch[1]);
+      sendJson(response, 200, { group });
+      return true;
+    }
+
+    if (drillMatch && request.method === "DELETE") {
+      const group = await endGroupDrill(accessToken, drillMatch[1]);
+      sendJson(response, 200, { group });
       return true;
     }
   } catch (error) {

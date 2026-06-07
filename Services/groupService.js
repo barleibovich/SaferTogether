@@ -11,6 +11,8 @@ function createJoinCode() {
 // This function changes a group from the database to the format the UI uses.
 function mapGroup(group, role, pendingRequests = [], members = []) {
   return {
+    drillActive: group.drill_active || false,
+    drillStartedAt: group.drill_started_at || null,
     id: group.id,
     joinCode: group.join_code || "",
     members,
@@ -226,7 +228,7 @@ async function getVisibleGroups(accessToken) {
   if (context.profile.role === "admin") {
     const { data: ownedGroups, error } = await context.client
       .from("groups")
-      .select("id, name, description, created_by, join_code")
+      .select("id, name, description, created_by, join_code, drill_active, drill_started_at")
       .eq("created_by", context.user.id)
       .order("created_at", { ascending: false });
 
@@ -242,7 +244,9 @@ async function getVisibleGroups(accessToken) {
           name,
           description,
           created_by,
-          join_code
+          join_code,
+          drill_active,
+          drill_started_at
         )
       `)
       .eq("user_id", context.user.id);
@@ -278,19 +282,24 @@ async function getVisibleGroups(accessToken) {
       context.user,
       context.profile
     );
+    const ownedGroupIds = groups
+      .filter(group => group.created_by === context.user.id)
+      .map(group => group.id);
+
     const pendingRequests = await getPendingRequests(
       context.client,
-      groups.map(group => group.id)
+      ownedGroupIds
     );
 
-    return groups.map(group => (
-      mapGroup(
+    return groups.map(group => {
+      const isOwner = group.created_by === context.user.id;
+      return mapGroup(
         group,
-        "admin",
-        pendingRequests.filter(request => request.groupId === group.id),
+        isOwner ? "admin" : "user",
+        isOwner ? pendingRequests.filter(request => request.groupId === group.id) : [],
         members.filter(member => member.groupId === group.id)
-      )
-    ));
+      );
+    });
   }
 
   const { data, error } = await context.client
@@ -301,7 +310,9 @@ async function getVisibleGroups(accessToken) {
         name,
         description,
         created_by,
-        join_code
+        join_code,
+        drill_active,
+        drill_started_at
       )
     `)
     .eq("user_id", context.user.id);
@@ -652,12 +663,85 @@ async function deleteOwnedGroup(accessToken, groupId) {
   return { success: true };
 }
 
+// This function starts a drill for a group (admin only).
+async function startGroupDrill(accessToken, groupId) {
+  const context = await requireAdminContext(accessToken);
+  await getManageableGroupRecord(context.client, context.user.id, groupId);
+
+  await context.client
+    .from("group_drill_safe_users")
+    .delete()
+    .eq("group_id", groupId);
+
+  const { data: group, error } = await context.client
+    .from("groups")
+    .update({ drill_active: true, drill_started_at: new Date().toISOString() })
+    .eq("id", groupId)
+    .select("id, name, description, created_by, join_code, drill_active, drill_started_at")
+    .single();
+
+  if (error) throw error;
+  return mapGroup(group, "admin");
+}
+
+// This function ends a drill for a group (admin only).
+async function endGroupDrill(accessToken, groupId) {
+  const context = await requireAdminContext(accessToken);
+  await getManageableGroupRecord(context.client, context.user.id, groupId);
+
+  const { data: group, error } = await context.client
+    .from("groups")
+    .update({ drill_active: false, drill_started_at: null })
+    .eq("id", groupId)
+    .select("id, name, description, created_by, join_code, drill_active, drill_started_at")
+    .single();
+
+  if (error) throw error;
+  return mapGroup(group, "admin");
+}
+
+// This function marks the current user as safe in an active drill.
+async function markMemberDrillSafe(accessToken, groupId) {
+  const context = await getSessionContext(accessToken);
+
+  const { error } = await context.client
+    .from("group_drill_safe_users")
+    .upsert({ group_id: groupId, user_id: context.user.id }, { onConflict: "group_id,user_id", ignoreDuplicates: true });
+
+  if (error) throw error;
+
+  const { data: rows, error: fetchError } = await context.client
+    .from("group_drill_safe_users")
+    .select("user_id")
+    .eq("group_id", groupId);
+
+  if (fetchError) throw fetchError;
+  return { safeUsers: (rows || []).map(r => r.user_id) };
+}
+
+// This function returns the list of members who marked safe in the active drill.
+async function getDrillStatus(accessToken, groupId) {
+  const context = await getSessionContext(accessToken);
+
+  const { data: rows, error } = await context.client
+    .from("group_drill_safe_users")
+    .select("user_id")
+    .eq("group_id", groupId);
+
+  if (error) throw error;
+  return { safeUsers: (rows || []).map(r => r.user_id) };
+}
+
 module.exports = {
   createGroupForCurrentUser,
   deleteOwnedGroup,
+  endGroupDrill,
+  getDrillStatus,
   getVisibleGroups,
   leaveGroup,
+  markMemberDrillSafe,
   requestJoinByCode,
   reviewJoinRequest,
+  startGroupDrill,
   updateOwnedGroup
 };
