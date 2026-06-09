@@ -27,7 +27,7 @@ let pendingAlertsRequest = null;
 let pendingLocationsRequest = null;
 let pendingPolygonsRequest = null;
 
-// This function normalizes HFC area names for matching across English and Hebrew endpoint data.
+// clean up HFC area names so english/hebrew ones match
 function normalizeAreaName(value) {
   return String(value || "")
     .normalize("NFKC")
@@ -38,7 +38,7 @@ function normalizeAreaName(value) {
     .toLowerCase();
 }
 
-// This function returns the headers expected by the Home Front Command website endpoint.
+// headers the oref website endpoint expects
 function orefHeaders() {
   return {
     Accept: "application/json, text/plain, */*",
@@ -50,13 +50,13 @@ function orefHeaders() {
   };
 }
 
-// This function parses HFC responses, including the empty BOM payload returned when there are no alerts.
+// parse HFC responses, handle the empty BOM payload when theres no alerts
 function parseJsonPayload(text, emptyValue) {
   const cleanText = String(text || "").replace(/^\uFEFF/, "").trim();
   return cleanText ? JSON.parse(cleanText) : emptyValue;
 }
 
-// This function fetches JSON from an HFC endpoint with a short timeout.
+// fetch json from an HFC endpoint, short timeout
 async function fetchOrefJson(url, emptyValue) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 7000);
@@ -78,7 +78,7 @@ async function fetchOrefJson(url, emptyValue) {
   }
 }
 
-// This function fetches a binary resource with a short timeout.
+// fetch a binary resource, short timeout
 async function fetchBuffer(url) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -99,7 +99,7 @@ async function fetchBuffer(url) {
   }
 }
 
-// This function reads the local-file header for the single JSON file inside the HFC polygon zip.
+// pull the one json file out of the polygon zip
 function extractFirstJsonFromZip(zipBuffer) {
   const signature = zipBuffer.readUInt32LE(0);
 
@@ -125,7 +125,7 @@ function extractFirstJsonFromZip(zipBuffer) {
   throw new Error("Unsupported Home Front Command area map compression");
 }
 
-// This function turns the alert data payload into a clean list of affected areas.
+// turn the alert payload into a clean list of areas
 function normalizeAlertAreas(data) {
   if (Array.isArray(data)) {
     return data.map(area => String(area || "").trim()).filter(Boolean);
@@ -135,7 +135,7 @@ function normalizeAlertAreas(data) {
   return area ? [area] : [];
 }
 
-// This function maps a raw HFC alert into the public shape used by the app.
+// map a raw HFC alert into the shape the app uses
 function normalizeAlert(alert) {
   if (!alert || typeof alert !== "object") {
     return null;
@@ -156,7 +156,7 @@ function normalizeAlert(alert) {
   };
 }
 
-// This function gets active real alerts from the Home Front Command website endpoint.
+// get the live alerts from the oref website
 async function getCurrentOrefAlerts({ force = false } = {}) {
   const now = Date.now();
 
@@ -188,7 +188,7 @@ async function getCurrentOrefAlerts({ force = false } = {}) {
   return pendingAlertsRequest;
 }
 
-// This function maps the HFC location list into the public shape used by the app.
+// map the HFC location list into the shape the app uses
 function normalizeLocation(location) {
   const areaId = String(location?.id || "").trim();
   const areaName = String(location?.label || "").trim();
@@ -209,7 +209,7 @@ function normalizeLocation(location) {
   };
 }
 
-// This function loads and caches official HFC alert areas.
+// load + cache the official HFC alert areas
 async function getAllOrefLocations({ force = false } = {}) {
   const now = Date.now();
 
@@ -241,7 +241,7 @@ async function getAllOrefLocations({ force = false } = {}) {
   return pendingLocationsRequest;
 }
 
-// This function loads and caches alert-area polygons for GPS-to-area matching.
+// load + cache the area polygons, used for gps -> area matching
 async function getOrefAreaPolygons({ force = false } = {}) {
   const now = Date.now();
 
@@ -269,7 +269,7 @@ async function getOrefAreaPolygons({ force = false } = {}) {
   return pendingPolygonsRequest;
 }
 
-// This function finds the official HFC location record for a polygon area name.
+// find the HFC location record for a polygon area name
 async function findOrefLocationByAreaName(areaName) {
   const cleanAreaName = normalizeAreaName(areaName);
 
@@ -284,7 +284,7 @@ async function findOrefLocationByAreaName(areaName) {
   ].map(normalizeAreaName).includes(cleanAreaName)) || null;
 }
 
-// This function finds the official alert area containing a GPS coordinate.
+// find which alert area a gps coordinate falls in
 async function findOrefLocationByCoordinates({ latitude, longitude }) {
   const lat = Number(latitude);
   const lon = Number(longitude);
@@ -298,7 +298,7 @@ async function findOrefLocationByCoordinates({ latitude, longitude }) {
   }
 
   const polygons = await getOrefAreaPolygons();
-  // The polygon map is keyed by HFC area name; after the geometric match we load the full area record.
+  // polygon map is keyed by area name, then we grab the full area record
   const areaName = Object.keys(polygons).find(name => pointInPolygon([lat, lon], polygons[name]));
 
   if (!areaName) {
@@ -308,7 +308,7 @@ async function findOrefLocationByCoordinates({ latitude, longitude }) {
   return findOrefLocationByAreaName(areaName);
 }
 
-// This function uses ray casting to decide whether one GPS coordinate is inside an HFC polygon.
+// ray casting to check if a point is inside a polygon
 function pointInPolygon(point, polygon) {
   const [x, y] = point;
   let inside = false;
@@ -332,7 +332,7 @@ function pointInPolygon(point, polygon) {
   return inside;
 }
 
-// This function treats GPS points on an area border as inside the area.
+// points on the border count as inside
 function pointOnSegment(px, py, ax, ay, bx, by) {
   const squaredLength = ((bx - ax) ** 2) + ((by - ay) ** 2);
 
@@ -355,7 +355,7 @@ function pointOnSegment(px, py, ax, ay, bx, by) {
   return dot <= squaredLength;
 }
 
-// This function checks whether an active alert affects one saved member location.
+// check if any active alert hits a saved member location
 function getMatchingAlertsForLocation(alerts, location) {
   if (!location) {
     return [];
@@ -377,7 +377,7 @@ function getMatchingAlertsForLocation(alerts, location) {
   });
 }
 
-// This function annotates each group member with its live HFC alert state.
+// tag each group member with their current alert state
 function annotateMembersWithOrefAlerts(members, alerts) {
   return (members || []).map(member => {
     const matchingAlerts = getMatchingAlertsForLocation(alerts, member.alertLocation);

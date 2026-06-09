@@ -2,6 +2,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const { getConfig } = require("../Services/configService");
+const { handleActivityRoute } = require("./routes/activityRoutes");
 const { handleAuthRoute } = require("./routes/authRoutes");
 const { handleGroupRoute } = require("./routes/groupRoutes");
 const { handleOrefRoute } = require("./routes/orefRoutes");
@@ -21,9 +22,13 @@ const mimeTypes = {
   ".wasm": "application/wasm"
 };
 
-// This function sends API requests to the matching route handler.
-async function handleApiRoute(request, response, pathname) {
+// route the api request to whichever handler matches
+async function handleApiRoute(request, response, pathname, requestUrl) {
   if (await handleAuthRoute(request, response, pathname)) {
+    return true;
+  }
+
+  if (await handleActivityRoute(request, response, pathname, requestUrl)) {
     return true;
   }
 
@@ -38,14 +43,14 @@ async function handleApiRoute(request, response, pathname) {
   return false;
 }
 
-// This function returns the content type for regular and compressed static files.
+// content type for static files (handles .gz/.br too)
 function getStaticContentType(filePath) {
   const normalizedPath = filePath.replace(/\.(br|gz)$/i, "");
   const extension = path.extname(normalizedPath).toLowerCase();
   return mimeTypes[extension] || "application/octet-stream";
 }
 
-// This function returns the browser content encoding for compressed Unity files.
+// figure out the encoding for the compressed unity files
 function getStaticContentEncoding(filePath) {
   if (filePath.endsWith(".br")) {
     return "br";
@@ -58,7 +63,7 @@ function getStaticContentEncoding(filePath) {
   return "";
 }
 
-// This function serves static files from the frontend folder.
+// serve static files from the frontend folder
 function serveStaticFile(request, response) {
   const { frontendRoot } = getConfig();
   const requestUrl = new URL(request.url, `http://${request.headers.host}`);
@@ -72,6 +77,7 @@ function serveStaticFile(request, response) {
     return;
   }
 
+  // callback after we try reading the file off disk
   fs.readFile(filePath, (error, data) => {
     if (error) {
       response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
@@ -94,13 +100,14 @@ function serveStaticFile(request, response) {
   });
 }
 
-// This function creates the main HTTP server.
+// make the main http server
 function createServer() {
+  // runs for every incoming request, splits api vs static
   return http.createServer(async (request, response) => {
     const requestUrl = new URL(request.url, `http://${request.headers.host}`);
 
     if (requestUrl.pathname.startsWith("/api/")) {
-      const handled = await handleApiRoute(request, response, requestUrl.pathname);
+      const handled = await handleApiRoute(request, response, requestUrl.pathname, requestUrl);
       if (!handled) {
         response.writeHead(404, { "Content-Type": "application/json; charset=utf-8" });
         response.end(JSON.stringify({ error: "Not found" }));
@@ -112,7 +119,7 @@ function createServer() {
   });
 }
 
-// This function starts the server on the configured port only.
+// start it up on the port from config
 function startServer() {
   const { port } = getConfig();
   const server = createServer();

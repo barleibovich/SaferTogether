@@ -9,9 +9,7 @@ using UnityEngine.SceneManagement;
 
 namespace SaferTogether.UnityClient.Editor
 {
-    /// <summary>
-    /// Imports the user-provided avatar PNG pack and turns every avatar, clothing item, and accessory into prefab layers.
-    /// </summary>
+    // imports the avatar png pack and turns it into prefabs
     public static class SaferTogetherGeneratedAvatarInstaller
     {
         private const string RootPath = "Assets/Resources/GeneratedAvatarBuilder";
@@ -145,6 +143,7 @@ namespace SaferTogether.UnityClient.Editor
             new AccessorySource(CharacterAvatarOptions.Mask, "Mask", AvatarAttachmentSlot.Face)
         };
 
+        // generate the avatar prefabs once when Unity opens
         [InitializeOnLoadMethod]
         private static void AutoGenerateOnce()
         {
@@ -164,6 +163,7 @@ namespace SaferTogether.UnityClient.Editor
             };
         }
 
+        // regenerate prefabs and install the builder in the runtime scene
         [MenuItem("SaferTogether/Generate 3D Avatar Prefabs")]
         public static void GenerateAndInstall()
         {
@@ -171,6 +171,7 @@ namespace SaferTogether.UnityClient.Editor
             InstallBuilderInRuntimeScene();
         }
 
+        // build all avatar, clothing, shoe and accessory prefabs
         public static void GenerateAssets(bool overwrite)
         {
             if (overwrite)
@@ -190,6 +191,7 @@ namespace SaferTogether.UnityClient.Editor
             AssetDatabase.Refresh();
         }
 
+        // put the avatar builder into the scene that is open now
         public static void InstallBuilderInOpenScene()
         {
             Scene scene = SceneManager.GetActiveScene();
@@ -236,6 +238,7 @@ namespace SaferTogether.UnityClient.Editor
             }
         }
 
+        // open the runtime scene and install the builder there
         public static void InstallBuilderInRuntimeScene()
         {
             EnsureRuntimeScene();
@@ -243,6 +246,7 @@ namespace SaferTogether.UnityClient.Editor
             InstallBuilderInOpenScene();
         }
 
+        // make the runtime scene if it does not exist yet
         private static void EnsureRuntimeScene()
         {
             if (File.Exists(RuntimeScenePath))
@@ -256,6 +260,7 @@ namespace SaferTogether.UnityClient.Editor
             AssetDatabase.Refresh();
         }
 
+        // create one base avatar prefab for every species
         private static void CreateAvatarPrefabs(bool overwrite)
         {
             foreach (string species in CharacterAvatarOptions.Species)
@@ -271,6 +276,7 @@ namespace SaferTogether.UnityClient.Editor
             }
         }
 
+        // create the colored clothing prefabs for one category
         private static void CreateClothingPrefabs(string sourceCategory, string prefabCategory, StyleSource[] sources, AvatarAttachmentSlot slot, Vector2 size, bool overwrite)
         {
             foreach (string species in CharacterAvatarOptions.Species)
@@ -293,6 +299,7 @@ namespace SaferTogether.UnityClient.Editor
             }
         }
 
+        // create pants prefabs, including the special jeans option
         private static void CreatePantsPrefabs(bool overwrite)
         {
             CreateClothingPrefabs("pants", "Pants", PantsSources, AvatarAttachmentSlot.Pants, new Vector2(1.3f, 1.3f), overwrite);
@@ -309,6 +316,7 @@ namespace SaferTogether.UnityClient.Editor
             }
         }
 
+        // create accessory prefabs for every species
         private static void CreateAccessoryPrefabs(bool overwrite)
         {
             foreach (string species in CharacterAvatarOptions.Species)
@@ -324,6 +332,7 @@ namespace SaferTogether.UnityClient.Editor
             }
         }
 
+        // save one clothing or shoe prefab with the right transform
         private static void SaveImagePart(string species, string category, string id, string color, AvatarAttachmentSlot slot, string texturePath, Vector2 size, bool overwrite)
         {
             GameObject root = PartRoot(id + "-" + color);
@@ -434,6 +443,7 @@ namespace SaferTogether.UnityClient.Editor
             SavePrefab(root, PartPrefabPath(category, species, id + "-" + color), overwrite);
         }
 
+        // add one textured quad under a prefab root
         private static void AddTexturedPlane(Transform parent, string name, string texturePath, Vector3 position, Vector2 size, string materialName, bool centerVisiblePixels, bool preserveAspect)
         {
             Texture2D texture = LoadTexture(texturePath);
@@ -456,6 +466,7 @@ namespace SaferTogether.UnityClient.Editor
 
         }
 
+        // resize a plane so the texture keeps its shape
         private static Vector2 SizeWithTextureAspect(Texture2D texture, Vector2 requestedSize)
         {
             if (texture == null || texture.width <= 0 || texture.height <= 0)
@@ -466,6 +477,7 @@ namespace SaferTogether.UnityClient.Editor
             return new Vector2(requestedSize.x, requestedSize.x * texture.height / texture.width);
         }
 
+        // find how much the visible pixels should shift
         private static Vector3 VisiblePixelOffset(Texture2D texture, Vector2 renderSize)
         {
             if (texture == null)
@@ -479,7 +491,7 @@ namespace SaferTogether.UnityClient.Editor
             int maxX = -1;
             int maxY = -1;
 
-            // Aligns layers by the center of their non-transparent artwork, so PNG padding does not move clothes/accessories.
+            // center the real drawing so png padding does not move it
             for (int y = 0; y < texture.height; y++)
             {
                 int rowStart = y * texture.width;
@@ -513,6 +525,7 @@ namespace SaferTogether.UnityClient.Editor
             );
         }
 
+        // load a texture and make sure Unity can read it
         private static Texture2D LoadTexture(string assetPath)
         {
             TextureImporter importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
@@ -540,6 +553,7 @@ namespace SaferTogether.UnityClient.Editor
             return texture;
         }
 
+        // make or update the material for a texture
         private static Material MaterialForTexture(string name, Texture texture)
         {
             string path = MaterialPathRoot + "/" + Sanitize(name) + ".mat";
@@ -568,6 +582,7 @@ namespace SaferTogether.UnityClient.Editor
             return material;
         }
 
+        // find the source png for one color
         private static string ColoredSourcePath(string species, string category, string folder, string filePrefix, string colorName)
         {
             string folderAssetPath = SourceImageAssetRoot + "/" + species + "/" + category + "/" + folder;
@@ -589,6 +604,7 @@ namespace SaferTogether.UnityClient.Editor
             return FullPathToAssetPath(matches[0]);
         }
 
+        // get the attachment layout for one species
         private static AvatarProfile ProfileFor(string species)
         {
             switch (species)
@@ -657,6 +673,7 @@ namespace SaferTogether.UnityClient.Editor
             }
         }
 
+        // get the prefab size for one clothing part
         private static Vector2 PartSize(string species, string category, string id, Vector2 fallback)
         {
             if (species == CharacterAvatarOptions.Devil)
@@ -707,6 +724,7 @@ namespace SaferTogether.UnityClient.Editor
             }
         }
 
+        // check if this clothing uses the whole avatar canvas
         private static bool UsesFullCanvasClothingLayer(string species, string category, string id)
         {
             if (species != CharacterAvatarOptions.Devil)
@@ -717,6 +735,7 @@ namespace SaferTogether.UnityClient.Editor
             return category == "Shirts";
         }
 
+        // check if this is the devil undershirt fix
         private static bool UsesDevilUndershirtPrefabTransform(string species, string category, string id)
         {
             return species == CharacterAvatarOptions.Devil
@@ -724,6 +743,7 @@ namespace SaferTogether.UnityClient.Editor
                 && id == CharacterAvatarOptions.Undershirt;
         }
 
+        // check if this is the devil sweatshirt fix
         private static bool UsesDevilSweatshirtPrefabTransform(string species, string category, string id)
         {
             return species == CharacterAvatarOptions.Devil
@@ -731,6 +751,7 @@ namespace SaferTogether.UnityClient.Editor
                 && id == CharacterAvatarOptions.Sweatshirt;
         }
 
+        // check if this is the devil cargo pants fix
         private static bool UsesDevilCargoPantsPrefabTransform(string species, string category, string id)
         {
             return species == CharacterAvatarOptions.Devil
@@ -738,6 +759,7 @@ namespace SaferTogether.UnityClient.Editor
                 && id == CharacterAvatarOptions.Cargo;
         }
 
+        // check if this is the devil sports pants fix
         private static bool UsesDevilSportsPantsPrefabTransform(string species, string category, string id)
         {
             return species == CharacterAvatarOptions.Devil
@@ -745,6 +767,7 @@ namespace SaferTogether.UnityClient.Editor
                 && id == CharacterAvatarOptions.SportsPants;
         }
 
+        // check if this is the devil boots fix
         private static bool UsesDevilBootsPrefabTransform(string species, string category, string id)
         {
             return species == CharacterAvatarOptions.Devil
@@ -752,6 +775,7 @@ namespace SaferTogether.UnityClient.Editor
                 && id == CharacterAvatarOptions.Boots;
         }
 
+        // check if this is the devil space shoes fix
         private static bool UsesDevilSpaceShoesPrefabTransform(string species, string category, string id)
         {
             return species == CharacterAvatarOptions.Devil
@@ -759,6 +783,7 @@ namespace SaferTogether.UnityClient.Editor
                 && id == CharacterAvatarOptions.SpaceShoes;
         }
 
+        // check if this is the male jeans fix
         private static bool UsesMaleJeansPrefabTransform(string species, string category, string id)
         {
             return species == CharacterAvatarOptions.Male
@@ -766,6 +791,7 @@ namespace SaferTogether.UnityClient.Editor
                 && id == CharacterAvatarOptions.Jeans;
         }
 
+        // check if this is the blue male cargo fix
         private static bool UsesMaleCargoBluePrefabTransform(string species, string category, string id, string color)
         {
             return species == CharacterAvatarOptions.Male
@@ -774,6 +800,7 @@ namespace SaferTogether.UnityClient.Editor
                 && color == CharacterAvatarOptions.Blue;
         }
 
+        // check if this is the red male cargo fix
         private static bool UsesMaleCargoRedPrefabTransform(string species, string category, string id, string color)
         {
             return species == CharacterAvatarOptions.Male
@@ -782,6 +809,7 @@ namespace SaferTogether.UnityClient.Editor
                 && color == CharacterAvatarOptions.Red;
         }
 
+        // check if this is the male tee size fix
         private static bool UsesMaleTeeBlueWhitePrefabTransform(string species, string category, string id, string color)
         {
             return species == CharacterAvatarOptions.Male
@@ -791,6 +819,7 @@ namespace SaferTogether.UnityClient.Editor
                     || color == CharacterAvatarOptions.White);
         }
 
+        // check if this is the male sweatshirt fix
         private static bool UsesMaleSweatshirtPrefabTransform(string species, string category, string id)
         {
             return species == CharacterAvatarOptions.Male
@@ -798,6 +827,7 @@ namespace SaferTogether.UnityClient.Editor
                 && id == CharacterAvatarOptions.Sweatshirt;
         }
 
+        // get the male sweatshirt scale for this color
         private static Vector3 MaleSweatshirtPrefabScaleForColor(string color)
         {
             switch (color)
@@ -812,6 +842,7 @@ namespace SaferTogether.UnityClient.Editor
             }
         }
 
+        // check if this is the female tee size fix
         private static bool UsesFemaleTeePrefabTransform(string species, string category, string id, string color)
         {
             return species == CharacterAvatarOptions.Female
@@ -823,6 +854,7 @@ namespace SaferTogether.UnityClient.Editor
                     || color == CharacterAvatarOptions.Yellow);
         }
 
+        // check if this is the female sports pants fix
         private static bool UsesFemaleSportsPantsPrefabTransform(string species, string category, string id)
         {
             return species == CharacterAvatarOptions.Female
@@ -830,6 +862,7 @@ namespace SaferTogether.UnityClient.Editor
                 && id == CharacterAvatarOptions.SportsPants;
         }
 
+        // check if this is the female jeans fix
         private static bool UsesFemaleJeansPrefabTransform(string species, string category, string id)
         {
             return species == CharacterAvatarOptions.Female
@@ -837,6 +870,7 @@ namespace SaferTogether.UnityClient.Editor
                 && id == CharacterAvatarOptions.Jeans;
         }
 
+        // check if this is the female sweatshirt fix
         private static bool UsesFemaleSweatshirtPrefabTransform(string species, string category, string id)
         {
             return species == CharacterAvatarOptions.Female
@@ -844,6 +878,7 @@ namespace SaferTogether.UnityClient.Editor
                 && id == CharacterAvatarOptions.Sweatshirt;
         }
 
+        // check if this is the female undershirt fix
         private static bool UsesFemaleUndershirtPrefabTransform(string species, string category, string id)
         {
             return species == CharacterAvatarOptions.Female
@@ -851,6 +886,7 @@ namespace SaferTogether.UnityClient.Editor
                 && id == CharacterAvatarOptions.Undershirt;
         }
 
+        // check if this is the female boots fix
         private static bool UsesFemaleBootsPrefabTransform(string species, string category, string id)
         {
             return species == CharacterAvatarOptions.Female
@@ -858,6 +894,7 @@ namespace SaferTogether.UnityClient.Editor
                 && id == CharacterAvatarOptions.Boots;
         }
 
+        // check if this is the female space shoes fix
         private static bool UsesFemaleSpaceShoesPrefabTransform(string species, string category, string id)
         {
             return species == CharacterAvatarOptions.Female
@@ -865,6 +902,7 @@ namespace SaferTogether.UnityClient.Editor
                 && id == CharacterAvatarOptions.SpaceShoes;
         }
 
+        // check if this is the male boots fix
         private static bool UsesMaleBootsPrefabTransform(string species, string category, string id)
         {
             return species == CharacterAvatarOptions.Male
@@ -872,6 +910,7 @@ namespace SaferTogether.UnityClient.Editor
                 && id == CharacterAvatarOptions.Boots;
         }
 
+        // check if this is the male space shoes fix
         private static bool UsesMaleSpaceShoesPrefabTransform(string species, string category, string id)
         {
             return species == CharacterAvatarOptions.Male
@@ -879,14 +918,16 @@ namespace SaferTogether.UnityClient.Editor
                 && id == CharacterAvatarOptions.SpaceShoes;
         }
 
+        // dragon does not use clothing prefabs
         private static bool UsesClothing(string species)
         {
             return species != CharacterAvatarOptions.Dragon;
         }
 
+        // move accessory prefabs so they line up on each species
         private static void ApplyAccessoryPrefabTransform(GameObject root, string species, string id)
         {
-            // Species-specific accessory roots keep the large exported prefabs aligned with the avatar silhouette.
+            // each species needs a small manual offset
             if (species == CharacterAvatarOptions.Dragon)
             {
                 switch (id)
@@ -974,6 +1015,7 @@ namespace SaferTogether.UnityClient.Editor
             }
         }
 
+        // offset full-canvas clothing back onto the avatar art
         private static Vector3 FullCanvasClothingOffset(string species, AvatarAttachmentSlot slot)
         {
             if (UsesDevilShirtPointScale(species, slot))
@@ -986,7 +1028,7 @@ namespace SaferTogether.UnityClient.Editor
             Vector3 attachmentScale = AttachmentScaleFor(profile, slot);
             Vector3 canvasPosition = new Vector3(AvatarLayerPosition.x, AvatarLayerPosition.y, attachmentPosition.z);
 
-            // Full-avatar clothing PNGs are still parented to their slot, so this cancels the slot offset back to the avatar canvas.
+            // cancel the slot offset so the big clothing png sits on the avatar
             return new Vector3(
                 DivideByScale(canvasPosition.x - attachmentPosition.x, attachmentScale.x),
                 DivideByScale(canvasPosition.y - attachmentPosition.y, attachmentScale.y),
@@ -994,6 +1036,7 @@ namespace SaferTogether.UnityClient.Editor
             );
         }
 
+        // get the size for a full-canvas clothing layer
         private static Vector2 FullCanvasLayerSize(string species, AvatarAttachmentSlot slot)
         {
             if (UsesDevilShirtPointScale(species, slot))
@@ -1009,12 +1052,14 @@ namespace SaferTogether.UnityClient.Editor
             );
         }
 
+        // check if devil shirt uses its own point scale
         private static bool UsesDevilShirtPointScale(string species, AvatarAttachmentSlot slot)
         {
             return species == CharacterAvatarOptions.Devil
                 && slot == AvatarAttachmentSlot.Shirt;
         }
 
+        // get the attach point position for this slot
         private static Vector3 AttachmentPositionFor(AvatarProfile profile, AvatarAttachmentSlot slot)
         {
             switch (slot)
@@ -1030,6 +1075,7 @@ namespace SaferTogether.UnityClient.Editor
             }
         }
 
+        // get the attach point scale for this slot
         private static Vector3 AttachmentScaleFor(AvatarProfile profile, AvatarAttachmentSlot slot)
         {
             switch (slot)
@@ -1045,11 +1091,13 @@ namespace SaferTogether.UnityClient.Editor
             }
         }
 
+        // divide safely when a scale might be zero
         private static float DivideByScale(float value, float scale)
         {
             return Mathf.Approximately(scale, 0f) ? value : value / scale;
         }
 
+        // get the accessory size for one species
         private static Vector2 AccessorySize(string species, string id)
         {
             if (species == CharacterAvatarOptions.Dragon)
@@ -1097,6 +1145,7 @@ namespace SaferTogether.UnityClient.Editor
             }
         }
 
+        // get the accessory offset for one species
         private static Vector3 AccessoryOffset(string species, string id)
         {
             if (species == CharacterAvatarOptions.Dragon)
@@ -1144,6 +1193,7 @@ namespace SaferTogether.UnityClient.Editor
             }
         }
 
+        // add all attachment points to an avatar prefab
         private static void AddAttachmentSet(GameObject root, AvatarProfile profile)
         {
             AvatarAttachmentSet set = root.AddComponent<AvatarAttachmentSet>();
@@ -1159,11 +1209,13 @@ namespace SaferTogether.UnityClient.Editor
             set.rightShoePoint = Point("RightShoePoint", root.transform, profile.shoes + new Vector3(0.26f, 0, 0));
         }
 
+        // make a default attachment point
         private static Transform Point(string name, Transform parent, Vector3 position)
         {
             return Point(name, parent, position, Vector3.one);
         }
 
+        // make an attachment point with a custom scale
         private static Transform Point(string name, Transform parent, Vector3 position, Vector3 scale)
         {
             Transform point = new GameObject(name).transform;
@@ -1173,6 +1225,7 @@ namespace SaferTogether.UnityClient.Editor
             return point;
         }
 
+        // copy the source pngs into Unity's Resources folder
         private static void ImportSourceImages()
         {
             string sourcePath = ExternalAvatarSourcePath();
@@ -1198,6 +1251,7 @@ namespace SaferTogether.UnityClient.Editor
             AssetDatabase.Refresh();
         }
 
+        // save a prefab unless we are keeping the old one
         private static void SavePrefab(GameObject root, string path, bool overwrite)
         {
             if (!overwrite && File.Exists(path))
@@ -1211,6 +1265,7 @@ namespace SaferTogether.UnityClient.Editor
             UnityEngine.Object.DestroyImmediate(root);
         }
 
+        // build the catalog for colored clothes
         private static AvatarPartPrefab[] BuildColorCatalog(string category, AvatarAttachmentSlot slot, string[] ids)
         {
             var result = new List<AvatarPartPrefab>();
@@ -1241,6 +1296,7 @@ namespace SaferTogether.UnityClient.Editor
             return result.ToArray();
         }
 
+        // build the catalog for accessories
         private static AvatarPartPrefab[] BuildAccessoryCatalog()
         {
             var result = new List<AvatarPartPrefab>();
@@ -1262,6 +1318,7 @@ namespace SaferTogether.UnityClient.Editor
             return result.ToArray();
         }
 
+        // jeans only use denim, other parts use all colors
         private static string[] ColorsForPart(string id)
         {
             return id == CharacterAvatarOptions.Jeans
@@ -1269,26 +1326,31 @@ namespace SaferTogether.UnityClient.Editor
                 : ClothingColorIds;
         }
 
+        // load an avatar prefab by id
         private static GameObject LoadAvatar(string id)
         {
             return AssetDatabase.LoadAssetAtPath<GameObject>(AvatarPrefabPath(id));
         }
 
+        // load a part prefab by category and species
         private static GameObject LoadPart(string category, string species, string id)
         {
             return AssetDatabase.LoadAssetAtPath<GameObject>(PartPrefabPath(category, species, id));
         }
 
+        // build the path for an avatar prefab
         private static string AvatarPrefabPath(string id)
         {
             return AvatarPathRoot + "/" + id + ".prefab";
         }
 
+        // build the path for a part prefab
         private static string PartPrefabPath(string category, string species, string id)
         {
             return PartPathRoot + "/" + category + "/" + species + "/" + id + ".prefab";
         }
 
+        // make the root object for an avatar prefab
         private static GameObject AvatarRoot(string name)
         {
             GameObject root = new GameObject(name);
@@ -1296,6 +1358,7 @@ namespace SaferTogether.UnityClient.Editor
             return root;
         }
 
+        // get the root scale for an avatar prefab
         private static Vector3 AvatarRootScaleFor(string species)
         {
             return species == CharacterAvatarOptions.Female
@@ -1303,6 +1366,7 @@ namespace SaferTogether.UnityClient.Editor
                 : Vector3.one;
         }
 
+        // get the root position for an avatar prefab
         private static Vector3 AvatarRootPositionFor(string species)
         {
             return species == CharacterAvatarOptions.Female
@@ -1310,11 +1374,13 @@ namespace SaferTogether.UnityClient.Editor
                 : Vector3.zero;
         }
 
+        // make the root object for a part prefab
         private static GameObject PartRoot(string name)
         {
             return new GameObject(name);
         }
 
+        // delete the generated prefab folders before rebuilding
         private static void DeleteGeneratedCatalogFolders()
         {
             DeleteAssetIfExists(AvatarPathRoot);
@@ -1323,6 +1389,7 @@ namespace SaferTogether.UnityClient.Editor
             DeleteAssetIfExists(SourceImageAssetRoot);
         }
 
+        // delete an asset or folder if it exists
         private static void DeleteAssetIfExists(string assetPath)
         {
             if (AssetDatabase.IsValidFolder(assetPath) || File.Exists(assetPath))
@@ -1331,6 +1398,7 @@ namespace SaferTogether.UnityClient.Editor
             }
         }
 
+        // make all folders needed for generated assets
         private static void EnsureFolders()
         {
             EnsureFolder("Assets", "Resources");
@@ -1356,6 +1424,7 @@ namespace SaferTogether.UnityClient.Editor
             }
         }
 
+        // make one Unity asset folder if missing
         private static void EnsureFolder(string parent, string child)
         {
             string path = parent + "/" + child;
@@ -1366,16 +1435,19 @@ namespace SaferTogether.UnityClient.Editor
             }
         }
 
+        // get the folder where the source avatar pngs live
         private static string ExternalAvatarSourcePath()
         {
             return Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "Unity Avatars"));
         }
 
+        // turn a Unity asset path into a full disk path
         private static string AssetPathToFullPath(string assetPath)
         {
             return Path.GetFullPath(Path.Combine(ProjectRootPath(), assetPath));
         }
 
+        // turn a full disk path back into a Unity asset path
         private static string FullPathToAssetPath(string fullPath)
         {
             string normalizedRoot = ProjectRootPath().Replace("\\", "/").TrimEnd('/');
@@ -1385,11 +1457,13 @@ namespace SaferTogether.UnityClient.Editor
                 : normalizedPath;
         }
 
+        // get the Unity project root folder
         private static string ProjectRootPath()
         {
             return Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
         }
 
+        // clean a value so it works as an asset name
         private static string Sanitize(string value)
         {
             char[] chars = value.ToLowerInvariant().ToCharArray();
@@ -1412,6 +1486,7 @@ namespace SaferTogether.UnityClient.Editor
             public readonly string folder;
             public readonly string filePrefix;
 
+            // store one clothing source folder setup
             public StyleSource(string id, string folder, string filePrefix)
             {
                 this.id = id;
@@ -1426,6 +1501,7 @@ namespace SaferTogether.UnityClient.Editor
             public readonly string fileName;
             public readonly AvatarAttachmentSlot slot;
 
+            // store one accessory source setup
             public AccessorySource(string id, string fileName, AvatarAttachmentSlot slot)
             {
                 this.id = id;
@@ -1446,6 +1522,7 @@ namespace SaferTogether.UnityClient.Editor
             public readonly Vector3 shoes;
             public readonly Vector3 shoesScale;
 
+            // store all attach points for one avatar species
             public AvatarProfile(Vector3 face, Vector3 hat, Vector3 horns, Vector3 shirt, Vector3 shirtScale, Vector3 pants, Vector3 pantsScale, Vector3 shoes, Vector3 shoesScale)
             {
                 this.face = face;

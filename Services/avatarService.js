@@ -1,4 +1,4 @@
-// This module centralizes avatar parsing and normalization rules.
+// all the avatar parsing + normalize rules live here
 
 const AVATAR_OPTIONS = ["aqua", "mint", "sun", "rose", "violet", "steel"];
 const AVATAR_BUILDER_COLORS = [
@@ -83,7 +83,7 @@ const DEFAULT_CHARACTER_V2 = {
   topColor: "aqua"
 };
 
-// This function creates a deterministic number from a username.
+// turn a username into a stable number
 function seedFromUsername(username) {
   return String(username || "")
     .trim()
@@ -92,7 +92,7 @@ function seedFromUsername(username) {
     .reduce((sum, char) => sum + char.charCodeAt(0), 0);
 }
 
-// This function builds a normalized character:v2 avatar id from a spec object.
+// build a character:v2 id from a spec
 function buildCharacterAvatarV2(spec) {
   return [
     "character",
@@ -116,13 +116,14 @@ function buildCharacterAvatarV2(spec) {
   ].join(":");
 }
 
+// clean up the species, treat "human" as male
 function normalizeCharacterSpecies(value) {
   const cleanValue = String(value || "").trim().toLowerCase();
   if (cleanValue === "human") return "male";
   return CHARACTER_SPECIES.includes(cleanValue) ? cleanValue : DEFAULT_CHARACTER_V2.species;
 }
 
-// This function creates a stable default avatar from the username.
+// default avatar built off the username
 function avatarFromUsername(username) {
   const seed = seedFromUsername(username);
   const colors = CHARACTER_CLOTHING_COLORS;
@@ -136,7 +137,7 @@ function avatarFromUsername(username) {
   });
 }
 
-// This function validates and normalizes one composed avatar id.
+// check + normalize a builder avatar id
 function parseBuilderAvatar(avatar) {
   const value = String(avatar || "").trim().toLowerCase();
 
@@ -170,7 +171,7 @@ function parseBuilderAvatar(avatar) {
   return `builder:${shape}:${base}:${accent}:${eyes}`;
 }
 
-// This function validates and normalizes one legacy character avatar id.
+// check + normalize an old (v1) character id
 function parseLegacyCharacterAvatar(avatar) {
   const value = String(avatar || "").trim().toLowerCase();
 
@@ -229,7 +230,7 @@ function parseLegacyCharacterAvatar(avatar) {
   ].join(":");
 }
 
-// This function validates and normalizes one complete character avatar id.
+// check + normalize a full character id
 function parseCharacterAvatar(avatar) {
   const value = String(avatar || "").trim().toLowerCase();
 
@@ -298,7 +299,7 @@ function parseCharacterAvatar(avatar) {
   return buildCharacterAvatarV2(spec);
 }
 
-// This function accepts known avatar ids and otherwise uses the default.
+// keep known avatar ids, fall back to default otherwise
 function normalizeAvatar(avatar, username) {
   const cleanAvatar = String(avatar || "").trim().toLowerCase();
   const characterAvatar = parseCharacterAvatar(cleanAvatar);

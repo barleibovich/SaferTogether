@@ -24,25 +24,30 @@
           <h1>יצירת משימה</h1>
         </div>
       </header>
-      <p class="subtitle form-help">תרשום את תיאור והוראות המשימה ולאחר מכן תוכל להוסיף דוגמא לפתרון המשימה.</p>
+      <p class="subtitle form-help">בחרו אילו משימות יופיעו בחדר. רק המשימות שתסמנו יהיו פעילות.</p>
 
       <form class="form-panel" data-mission-form>
         <div class="input-group">
-          <label for="missionTitle">הוראות המשימה</label>
-          <input class="field" id="missionTitle" name="title" value="סגרו את החלון">
+          <label for="activityTitle">Game name</label>
+          <input class="field" id="activityTitle" name="activityTitle" data-activity-title value="New mission room">
         </div>
-        <div class="input-group">
-          <label for="missionDescription">תיאור המשימה</label>
-          <textarea class="text-field" id="missionDescription" name="description">ודאו שהחלון סגור לפני שמתיישבים.</textarea>
-        </div>
-        <button class="btn btn-secondary" type="button">הוספת דוגמא</button>
-        <button class="btn btn-primary" type="submit">הוסף משימה</button>
-      </form>
 
-      <section>
-        <h2>משימות</h2>
-        <div class="added-list" data-mission-list></div>
-      </section>
+        <fieldset class="task-select">
+          <legend>Tasks for this room</legend>
+          <label class="task-option"><input type="checkbox" data-task="door"> Close the door</label>
+          <label class="task-option"><input type="checkbox" data-task="window"> Close the window</label>
+          <label class="task-option"><input type="checkbox" data-task="radio"> Wire the radio</label>
+          <label class="task-option"><input type="checkbox" data-task="board"> Add exercises</label>
+        </fieldset>
+
+        <div class="input-group" data-exercise-editor hidden>
+          <label>Board exercises</label>
+          <input class="field" data-exercise-question placeholder="Exercise, e.g. How much is 7 + 8?">
+          <input class="field" data-exercise-answer placeholder="Answer (auto-filled for math, or type it)">
+          <button class="btn btn-secondary" type="button" data-add-exercise>Add exercise</button>
+          <div class="added-list" data-exercise-list></div>
+        </div>
+      </form>
 
       <div class="button-stack">
         <button class="btn btn-primary" type="button" data-save-missions>סיום ויצירת משימה</button>

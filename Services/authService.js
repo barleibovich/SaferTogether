@@ -9,22 +9,22 @@ const { createPublicClient, createUserClient, getSessionContext } = require("./s
 
 const AUTH_EMAIL_DOMAINS = ["safertogether.app", "safertogether.local"];
 
-// This function normalizes a username before validation or auth lookup.
+// clean up the username before validating or auth lookup
 function normalizeUsername(username) {
   return String(username || "").trim().toLowerCase();
 }
 
-// This function checks that a username can be safely used for login.
+// check the username is ok for login
 function validateUsername(username) {
   return /^[a-zA-Z0-9_]{3,30}$/.test(username);
 }
 
-// This function checks that the requested profile role is supported.
+// only admin/user roles allowed
 function validateRole(role) {
   return ["admin", "user"].includes(role);
 }
 
-// This function accepts only compact Unity PNG snapshots for profile cards.
+// only allow small unity png snapshots for profile cards
 function normalizeAvatarImage(avatarImage) {
   const value = String(avatarImage || "").trim();
 
@@ -39,12 +39,12 @@ function normalizeAvatarImage(avatarImage) {
   return value;
 }
 
-// This function builds the synthetic email Supabase auth uses for username login.
+// fake email supabase uses for username login
 function usernameToAuthEmail(username, domain = AUTH_EMAIL_DOMAINS[0]) {
   return `${normalizeUsername(username)}@${domain}`;
 }
 
-// This function combines the profile row with the avatar stored in auth metadata.
+// merge profile row with the avatar from auth metadata
 function buildProfile(profile, user, alertLocation = null) {
   const avatar = user?.user_metadata?.avatar || profile?.avatar;
 
@@ -56,7 +56,7 @@ function buildProfile(profile, user, alertLocation = null) {
   };
 }
 
-// This function recognizes Supabase projects that have not added profile avatar setup yet.
+// detect projects that havent set up profile avatars yet
 function isProfileAvatarSetupError(error) {
   const code = String(error?.code || "");
   const message = String(error?.message || "").toLowerCase();
@@ -71,7 +71,7 @@ function isProfileAvatarSetupError(error) {
   );
 }
 
-// This function mirrors the selected avatar onto public profiles for group member cards.
+// copy the chosen avatar onto the public profile so group cards show it
 async function saveProfileAvatar(client, userId, avatar, avatarImage = undefined, options = {}) {
   const payload = { avatar };
 
@@ -88,10 +88,8 @@ async function saveProfileAvatar(client, userId, avatar, avatarImage = undefined
 
   if (error) {
     if (avatarImage !== undefined && isProfileAvatarSetupError(error)) {
-      // The avatar image column or its row policy is missing. When the caller
-      // explicitly asked to store the image (the avatar editor), fail loudly so
-      // the snapshot is not silently dropped, leaving group cards on the initial
-      // letter. Otherwise (signup) degrade gracefully and keep the text avatar.
+      // avatar image column/policy is missing. if caller really wanted the image
+      // (avatar editor) throw so we dont silently drop it. otherwise (signup) just keep the text avatar.
       if (options.requireAvatarImage) {
         throw httpError(
           503,
@@ -112,7 +110,7 @@ async function saveProfileAvatar(client, userId, avatar, avatarImage = undefined
   return data;
 }
 
-// This function updates Supabase auth metadata with the current access token.
+// update supabase auth metadata using the access token
 async function updateAuthUserMetadata(accessToken, metadata) {
   const { supabaseAnonKey, supabaseUrl } = getConfig();
   const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
@@ -134,7 +132,7 @@ async function updateAuthUserMetadata(accessToken, metadata) {
   return payload;
 }
 
-// This function signs in by trying each supported synthetic email domain.
+// try logging in with each fake email domain we support
 async function signInWithKnownDomains(client, username, password) {
   let lastError = null;
 
@@ -155,7 +153,7 @@ async function signInWithKnownDomains(client, username, password) {
   throw lastError || httpError(401, "Invalid login credentials");
 }
 
-// This function creates a Supabase auth user and a matching app profile.
+// make a supabase auth user + matching profile
 async function signUpWithUsername({ username, password, role = "user", avatar, avatarImage }) {
   const cleanUsername = normalizeUsername(username);
   const cleanRole = validateRole(role) ? role : "user";
@@ -227,7 +225,7 @@ async function signUpWithUsername({ username, password, role = "user", avatar, a
   };
 }
 
-// This function logs in with a username and returns the current app profile.
+// login by username, return the profile
 async function loginWithUsername({ username, password }) {
   const cleanUsername = normalizeUsername(username);
 
@@ -250,7 +248,7 @@ async function loginWithUsername({ username, password }) {
   };
 }
 
-// This function signs the current user out of Supabase auth.
+// sign the user out of supabase
 async function logout(accessToken) {
   if (!accessToken) {
     return;
@@ -260,14 +258,14 @@ async function logout(accessToken) {
   await client.auth.signOut();
 }
 
-// This function returns the current profile with its selected avatar.
+// get the current profile + its avatar
 async function getCurrentUserProfile(accessToken) {
   const context = await getSessionContext(accessToken);
   const alertLocation = await getLocationForUser(context.client, context.user.id);
   return buildProfile(context.profile, context.user, alertLocation);
 }
 
-// This function updates the logged-in user's avatar choice.
+// update the logged-in user's avatar
 async function updateCurrentUserAvatar(accessToken, { avatar, avatarImage }) {
   const context = await getSessionContext(accessToken);
   const cleanAvatar = normalizeAvatar(avatar, context.profile.username);
@@ -285,7 +283,7 @@ async function updateCurrentUserAvatar(accessToken, { avatar, avatarImage }) {
   return buildProfile(profile, user, alertLocation);
 }
 
-// This function updates the logged-in user's Home Front Command alert area.
+// update the user's HFC alert area
 async function updateCurrentUserAlertLocation(accessToken, location) {
   return saveCurrentUserAlertLocation(accessToken, location);
 }

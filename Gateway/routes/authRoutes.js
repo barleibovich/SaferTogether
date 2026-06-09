@@ -15,7 +15,7 @@ const {
   updateCurrentUserAvatar
 } = require("../../Services/authService");
 
-// This function handles all the auth routes.
+// handle all the auth routes
 async function handleAuthRoute(request, response, pathname) {
   try {
     if (pathname === "/api/auth/signup" && request.method === "POST") {
@@ -45,7 +45,7 @@ async function handleAuthRoute(request, response, pathname) {
       try {
         await logout(accessToken);
       } catch {
-        // Clearing cookies is enough for the current prototype flow.
+        // just clearing the cookies is fine for now
       }
       clearAuthCookies(response);
       sendJson(response, 200, { success: true });

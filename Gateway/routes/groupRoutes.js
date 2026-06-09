@@ -18,7 +18,7 @@ const {
   updateOwnedGroup
 } = require("../../Services/groupService");
 
-// This function handles all the group routes.
+// handle all the group routes
 async function handleGroupRoute(request, response, pathname) {
   const accessToken = getAccessTokenFromRequest(request);
   const groupMatch = pathname.match(/^\/api\/groups\/([^/]+)$/);

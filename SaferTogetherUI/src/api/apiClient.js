@@ -8,7 +8,7 @@ export function setSessionToken(token) {
   }
 }
 
-// This function sends a JSON request and returns the parsed JSON response.
+// send a json request, get back parsed json
 async function requestJson(path, options = {}) {
   const token = sessionStorage.getItem(SESSION_TOKEN_KEY);
   const headers = {

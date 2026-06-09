@@ -1,4 +1,4 @@
-// This function creates an HTTP-friendly error object.
+// error object with a status code on it
 function httpError(statusCode, message) {
   const error = new Error(message);
   error.statusCode = statusCode;

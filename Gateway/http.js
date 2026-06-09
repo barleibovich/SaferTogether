@@ -1,6 +1,6 @@
 const { httpError } = require("../Services/errors");
 
-// This function reads and parses a JSON request body.
+// read the body and parse it as json
 function readJsonBody(request) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -27,7 +27,7 @@ function readJsonBody(request) {
   });
 }
 
-// This function sends a JSON response.
+// send back json
 function sendJson(response, statusCode, payload, extraHeaders = {}) {
   response.writeHead(statusCode, {
     "Content-Type": "application/json; charset=utf-8",
@@ -36,14 +36,14 @@ function sendJson(response, statusCode, payload, extraHeaders = {}) {
   response.end(JSON.stringify(payload));
 }
 
-// This function sends an error response for a route.
+// send an error response
 function sendRouteError(response, error) {
   const statusCode = error.statusCode || error.status || 500;
   const message = error.message || "Unexpected server error";
   sendJson(response, statusCode, { error: message });
 }
 
-// This function parses cookies from the request headers.
+// pull the cookies out of the request headers
 function parseCookies(request) {
   const cookieHeader = request.headers.cookie || "";
 
@@ -58,7 +58,7 @@ function parseCookies(request) {
   }, {});
 }
 
-// This function gets the access token from the request.
+// grab the access token from the request (header or cookie)
 function getAccessTokenFromRequest(request) {
   const authorization = request.headers.authorization || "";
 
@@ -70,7 +70,7 @@ function getAccessTokenFromRequest(request) {
   return cookies.safer_access_token || "";
 }
 
-// This function builds a cookie string with options.
+// build a cookie string with the given options
 function serializeCookie(name, value, options = {}) {
   const parts = [`${name}=${encodeURIComponent(value)}`];
 
@@ -88,7 +88,7 @@ function serializeCookie(name, value, options = {}) {
   return parts.join("; ");
 }
 
-// This function sets the auth cookies on the response.
+// set the auth cookies on the response
 function setAuthCookies(response, session) {
   const cookies = [
     serializeCookie("safer_access_token", session.access_token, {
@@ -104,7 +104,7 @@ function setAuthCookies(response, session) {
   response.setHeader("Set-Cookie", cookies);
 }
 
-// This function clears the auth cookies from the response.
+// wipe the auth cookies
 function clearAuthCookies(response) {
   response.setHeader("Set-Cookie", [
     serializeCookie("safer_access_token", "", { httpOnly: true, maxAge: 0 }),

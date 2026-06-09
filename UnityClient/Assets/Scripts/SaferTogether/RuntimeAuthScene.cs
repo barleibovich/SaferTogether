@@ -2,17 +2,18 @@ using UnityEngine;
 
 namespace SaferTogether.UnityClient
 {
-    /// <summary>
-    /// Creates a minimal auth UI automatically when the Unity project enters Play Mode.
-    /// </summary>
+    // auto-spawns the auth UI when we hit play mode
     public static class RuntimeAuthScene
     {
-        /// <summary>
-        /// This function creates the auth controller when none exists in the scene.
-        /// </summary>
+        // make the auth controller if the scene doesn't have one yet
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void CreateController()
         {
+            if (Application.productName == "mission-room" || Object.FindAnyObjectByType<MissionRoomController>() != null)
+            {
+                return;
+            }
+
             if (Object.FindAnyObjectByType<SaferTogetherAuthController>() != null)
             {
                 return;

@@ -4,7 +4,7 @@ const { getSessionContext } = require("./supabaseService");
 
 const LOCATION_TABLE = "profile_locations";
 
-// This function recognizes Supabase errors caused by the required location table not being installed.
+// is this error because the location table isn't set up yet?
 function isMissingLocationTableError(error) {
   const code = String(error?.code || "");
   const message = String(error?.message || "").toLowerCase();
@@ -19,7 +19,7 @@ function isMissingLocationTableError(error) {
   );
 }
 
-// This function turns a missing Supabase table into an actionable setup error.
+// missing table -> tell them how to fix it
 function missingLocationTableError() {
   return httpError(
     500,
@@ -27,7 +27,7 @@ function missingLocationTableError() {
   );
 }
 
-// This function maps a stored profile location into the public API shape.
+// db row -> the shape we send out
 function mapProfileLocation(row) {
   if (!row) {
     return null;
@@ -43,7 +43,7 @@ function mapProfileLocation(row) {
   };
 }
 
-// This function gets saved alert areas for a list of users.
+// get saved alert areas for a bunch of users
 async function getLocationsForUsers(client, userIds) {
   const ids = [...new Set((userIds || []).filter(Boolean))];
 
@@ -67,7 +67,7 @@ async function getLocationsForUsers(client, userIds) {
   return new Map((data || []).map(row => [row.user_id, mapProfileLocation(row)]));
 }
 
-// This function gets the current user's saved alert area.
+// get one user's saved alert area
 async function getLocationForUser(client, userId) {
   if (!userId) {
     return null;
@@ -90,7 +90,7 @@ async function getLocationForUser(client, userId) {
   return mapProfileLocation(data);
 }
 
-// This function saves the current user's official HFC alert area from GPS coordinates.
+// save the user's HFC alert area from their gps coords
 async function saveCurrentUserAlertLocation(accessToken, { latitude, longitude }) {
   const context = await getSessionContext(accessToken);
   const location = await findOrefLocationByCoordinates({ latitude, longitude });

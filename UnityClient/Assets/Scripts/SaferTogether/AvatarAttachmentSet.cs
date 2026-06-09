@@ -2,6 +2,7 @@ using UnityEngine;
 
 namespace SaferTogether.UnityClient
 {
+    // all the spots on the body where stuff can hang
     public enum AvatarAttachmentSlot
     {
         Face,
@@ -16,9 +17,7 @@ namespace SaferTogether.UnityClient
         RightShoe
     }
 
-    /// <summary>
-    /// Defines the body points that avatar parts should attach to on one avatar prefab.
-    /// </summary>
+    // holds the attach points for one avatar prefab so parts know where to go
     public sealed class AvatarAttachmentSet : MonoBehaviour
     {
         [Header("Accessory Points")]
@@ -35,6 +34,7 @@ namespace SaferTogether.UnityClient
         public Transform leftShoePoint;
         public Transform rightShoePoint;
 
+        // give back the transform for whatever slot you ask for
         public Transform PointFor(AvatarAttachmentSlot slot)
         {
             switch (slot)

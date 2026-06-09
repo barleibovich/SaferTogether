@@ -3,12 +3,12 @@ const { normalizeAvatar } = require("./avatarService");
 const { getLocationsForUsers } = require("./memberLocationService");
 const { getSessionContext } = require("./supabaseService");
 
-// This function creates a short code for joining a group.
+// make a short join code for a group
 function createJoinCode() {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
 
-// This function changes a group from the database to the format the UI uses.
+// turn a db group row into the shape the UI wants
 function mapGroup(group, role, pendingRequests = [], members = []) {
   return {
     drillActive: group.drill_active || false,
@@ -22,11 +22,12 @@ function mapGroup(group, role, pendingRequests = [], members = []) {
   };
 }
 
+// grab the avatar png from a profile, whatever key its under
 function profileAvatarImage(profile) {
   return profile?.avatar_image || profile?.avatarImage || "";
 }
 
-// This function makes sure only admins can manage groups.
+// only admins can manage groups
 async function requireAdminContext(accessToken) {
   const context = await getSessionContext(accessToken);
 
@@ -37,7 +38,7 @@ async function requireAdminContext(accessToken) {
   return context;
 }
 
-// This function checks whether an admin can manage one group.
+// check if this admin can manage the group
 async function getManageableGroupRecord(client, userId, groupId) {
   const { data, error } = await client
     .from("groups")
@@ -75,7 +76,7 @@ async function getManageableGroupRecord(client, userId, groupId) {
   return data;
 }
 
-// This function gets one group that belongs to the current admin.
+// get a group owned by the current admin
 async function getOwnedGroupRecord(client, userId, groupId) {
   const group = await getManageableGroupRecord(client, userId, groupId);
 
@@ -86,7 +87,7 @@ async function getOwnedGroupRecord(client, userId, groupId) {
   return group;
 }
 
-// This function gets the pending requests for admin groups.
+// get pending join requests for the admin's groups
 async function getPendingRequests(client, groupIds) {
   if (!groupIds.length) {
     return [];
@@ -112,7 +113,7 @@ async function getPendingRequests(client, groupIds) {
   }));
 }
 
-// This function reads profile rows when they are visible through the active RLS policies.
+// read profile rows that RLS lets us see
 async function getProfilesById(client, userIds) {
   const ids = [...new Set((userIds || []).filter(Boolean))];
 
@@ -132,7 +133,7 @@ async function getProfilesById(client, userIds) {
   return new Map((data || []).map(profile => [profile.id, profile]));
 }
 
-// This function gets the members of the groups.
+// get the members of the groups
 async function getGroupMembers(client, groups, currentUser, currentProfile) {
   const groupIds = (groups || []).map(group => group.id).filter(Boolean);
 
@@ -181,7 +182,7 @@ async function getGroupMembers(client, groups, currentUser, currentProfile) {
   });
 }
 
-// This function adds a group owner as a visible admin member when old groups are missing that row.
+// old groups might be missing the owner's member row, add it back as admin
 async function addMissingGroupOwnersAsMembers(client, groups, members, currentUser, currentProfile) {
   const existingMemberships = new Set(
     (members || []).map(member => `${member.groupId}:${member.id}`)
@@ -221,7 +222,7 @@ async function addMissingGroupOwnersAsMembers(client, groups, members, currentUs
   return [...members, ...ownerMembers];
 }
 
-// This function gets the groups of the current user.
+// get the current user's groups
 async function getVisibleGroups(accessToken) {
   const context = await getSessionContext(accessToken);
 
@@ -346,7 +347,7 @@ async function getVisibleGroups(accessToken) {
   ));
 }
 
-// This function creates a group and saves a join code for it.
+// create a group + give it a join code
 async function createGroupForCurrentUser(accessToken, { name }) {
   const context = await requireAdminContext(accessToken);
   const groupName = String(name || "").trim();
@@ -385,7 +386,7 @@ async function createGroupForCurrentUser(accessToken, { name }) {
   return mapGroup(group, "admin");
 }
 
-// This function sends a join request by code.
+// send a join request using a code
 async function requestJoinByCode(accessToken, { code }) {
   const context = await getSessionContext(accessToken);
   const joinCode = String(code || "").trim().toUpperCase();
@@ -475,7 +476,7 @@ async function requestJoinByCode(accessToken, { code }) {
   };
 }
 
-// This function lets the admin approve or decline a request.
+// admin approves or declines a request
 async function reviewJoinRequest(accessToken, groupId, requestId, { status }) {
   const context = await requireAdminContext(accessToken);
 
@@ -566,7 +567,7 @@ async function reviewJoinRequest(accessToken, groupId, requestId, { status }) {
   };
 }
 
-// This function updates a group that belongs to the current admin.
+// update a group owned by the current admin
 async function updateOwnedGroup(accessToken, groupId, { name, description }) {
   const context = await requireAdminContext(accessToken);
   await getManageableGroupRecord(context.client, context.user.id, groupId);
@@ -600,6 +601,7 @@ async function updateOwnedGroup(accessToken, groupId, { name, description }) {
   return mapGroup(group, "admin");
 }
 
+// let a member leave a group (admins cant leave their own)
 async function leaveGroup(accessToken, groupId) {
   const context = await getSessionContext(accessToken);
 
@@ -627,7 +629,7 @@ async function leaveGroup(accessToken, groupId) {
   return { success: true };
 }
 
-// This function deletes a group that belongs to the current admin.
+// delete a group owned by the current admin
 async function deleteOwnedGroup(accessToken, groupId) {
   const context = await requireAdminContext(accessToken);
   await getOwnedGroupRecord(context.client, context.user.id, groupId);

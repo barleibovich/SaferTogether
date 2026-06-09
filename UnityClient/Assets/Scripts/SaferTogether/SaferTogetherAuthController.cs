@@ -6,12 +6,11 @@ using UnityEngine.UI;
 
 namespace SaferTogether.UnityClient
 {
-    /// <summary>
-    /// Runtime UI controller for the Unity-only avatar editor.
-    /// </summary>
+    // runs the avatar editor UI at runtime
     public sealed class SaferTogetherAuthController : MonoBehaviour
     {
 #if UNITY_WEBGL && !UNITY_EDITOR
+        // web function that changes the browser page
         [System.Runtime.InteropServices.DllImport("__Internal")]
         private static extern void SaferTogetherNavigate(string url);
 #endif
@@ -50,9 +49,7 @@ namespace SaferTogether.UnityClient
         private string returnUrl = "signup.html";
         private string activeTabId = "avatar";
 
-        /// <summary>
-        /// This function initializes the API client and optional generated UI.
-        /// </summary>
+        // set up the api client and build the UI on startup
         private void Awake()
         {
             apiClient = new SaferTogetherApiClient(gatewayBaseUrl);
@@ -65,6 +62,7 @@ namespace SaferTogether.UnityClient
             WireButtons();
         }
 
+        // clean up the preview render texture + coroutine on teardown
         private void OnDestroy()
         {
             if (avatarPreviewRenderCoroutine != null)
@@ -82,9 +80,7 @@ namespace SaferTogether.UnityClient
             Destroy(avatarPreviewTexture);
         }
 
-        /// <summary>
-        /// This function accepts the logged-in web profile when Unity runs embedded in the website.
-        /// </summary>
+        // take the web session json and load it into Unity
         public void ApplyWebSessionJson(string json)
         {
             if (string.IsNullOrEmpty(json))
@@ -125,9 +121,7 @@ namespace SaferTogether.UnityClient
             SetStatus("Choose an avatar, then save");
         }
 
-        /// <summary>
-        /// This function connects button clicks to avatar editor actions.
-        /// </summary>
+        // connect the buttons and dropdowns to their actions
         private void WireButtons()
         {
             saveAvatarButton?.onClick.RemoveAllListeners();
@@ -158,9 +152,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
-        /// <summary>
-        /// This function returns every avatar dropdown in the generated editor.
-        /// </summary>
+        // return all the avatar dropdowns in one list
         private Dropdown[] AvatarDropdowns()
         {
             return new[]
@@ -176,9 +168,7 @@ namespace SaferTogether.UnityClient
             };
         }
 
-        /// <summary>
-        /// This function builds the avatar-only editor when no Unity UI is assigned.
-        /// </summary>
+        // build the avatar editor when the scene has no UI
         private void BuildRuntimeUi()
         {
             EnsureEventSystem();
@@ -202,9 +192,7 @@ namespace SaferTogether.UnityClient
             PreviewAvatar();
         }
 
-        /// <summary>
-        /// This function builds the avatar editor as tabs: avatar, shirts, pants, and accessories.
-        /// </summary>
+        // build the tab controls for the avatar editor
         private void CreateAvatarEditorControls(Transform parent)
         {
             CreateTabBar(parent);
@@ -223,9 +211,7 @@ namespace SaferTogether.UnityClient
             SelectTab("avatar");
         }
 
-        /// <summary>
-        /// This function creates the tab bar used to switch between avatar sections.
-        /// </summary>
+        // make the row of tab buttons
         private void CreateTabBar(Transform parent)
         {
             RectTransform row = CreateRow(parent);
@@ -239,9 +225,7 @@ namespace SaferTogether.UnityClient
             accessoriesTabButton = CreateTabButton(row, "Accessories", () => SelectTab("accessories"));
         }
 
-        /// <summary>
-        /// This function creates the container that hosts the tab panels.
-        /// </summary>
+        // make the area where tab panels go
         private RectTransform CreateTabContent(Transform parent)
         {
             var contentObject = new GameObject("Tab Content", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(LayoutElement));
@@ -261,9 +245,7 @@ namespace SaferTogether.UnityClient
             return contentObject.GetComponent<RectTransform>();
         }
 
-        /// <summary>
-        /// This function creates one tab panel.
-        /// </summary>
+        // make one hidden tab panel
         private GameObject CreateTabPanel(Transform parent, string name)
         {
             var panelObject = new GameObject(name, typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(LayoutElement));
@@ -283,9 +265,7 @@ namespace SaferTogether.UnityClient
             return panelObject;
         }
 
-        /// <summary>
-        /// This function creates a tab button with active and inactive states.
-        /// </summary>
+        // make one tab button
         private Button CreateTabButton(Transform parent, string label, UnityEngine.Events.UnityAction onClick)
         {
             var buttonObject = new GameObject(label + " Tab", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
@@ -314,9 +294,7 @@ namespace SaferTogether.UnityClient
             return button;
         }
 
-        /// <summary>
-        /// This function creates the Avatar tab with species selection.
-        /// </summary>
+        // make the avatar tab controls
         private void CreateAvatarTab(Transform parent)
         {
             CreateSectionLabel(parent, "Avatar");
@@ -324,9 +302,7 @@ namespace SaferTogether.UnityClient
             speciesDropdown = CreateCompactDropdownField(row, "Avatar", new List<string>(CharacterAvatarOptions.Species));
         }
 
-        /// <summary>
-        /// This function creates the Shirts tab.
-        /// </summary>
+        // make the shirt tab controls
         private void CreateShirtsTab(Transform parent)
         {
             CreateSectionLabel(parent, "Shirts");
@@ -335,9 +311,7 @@ namespace SaferTogether.UnityClient
             topColorDropdown = CreateCompactDropdownField(row, "Color", new List<string>(CharacterAvatarOptions.ClothingColors));
         }
 
-        /// <summary>
-        /// This function creates the Pants tab, including shoes for the lower-body outfit.
-        /// </summary>
+        // make the pants and shoes tab controls
         private void CreatePantsTab(Transform parent)
         {
             CreateSectionLabel(parent, "Pants");
@@ -351,9 +325,7 @@ namespace SaferTogether.UnityClient
             shoeColorDropdown = CreateCompactDropdownField(shoesRow, "Color", new List<string>(CharacterAvatarOptions.ClothingColors));
         }
 
-        /// <summary>
-        /// This function creates the Accessories tab.
-        /// </summary>
+        // make the accessory tab controls
         private void CreateAccessoriesTab(Transform parent)
         {
             CreateSectionLabel(parent, "Accessories");
@@ -361,18 +333,14 @@ namespace SaferTogether.UnityClient
             accessoryDropdown = CreateCompactDropdownField(row, "Accessory", new List<string>(CharacterAvatarOptions.Accessories));
         }
 
-        /// <summary>
-        /// This function responds to the avatar species tab and locks the clothes tabs for dragon.
-        /// </summary>
+        // update the editor after the species changes
         private void OnSpeciesChanged()
         {
             UpdateTabAvailability();
             PreviewAvatar();
         }
 
-        /// <summary>
-        /// This function chooses which tab is visible and highlights its button.
-        /// </summary>
+        // switch which tab is showing
         private void SelectTab(string tabId)
         {
             bool dragon = IsDragonSelected();
@@ -386,9 +354,7 @@ namespace SaferTogether.UnityClient
             UpdateTabAvailability();
         }
 
-        /// <summary>
-        /// This function applies the tab lock state for dragon and keeps only the allowed tabs visible.
-        /// </summary>
+        // lock or unlock tabs depending on the avatar
         private void UpdateTabAvailability()
         {
             bool dragon = IsDragonSelected();
@@ -407,9 +373,7 @@ namespace SaferTogether.UnityClient
             SetControlInteractivity();
         }
 
-        /// <summary>
-        /// This function sets one tab button/panel pair visible or hidden.
-        /// </summary>
+        // show one tab and set its button color
         private void SetTabVisible(Button button, GameObject panel, bool visible, bool active)
         {
             if (button != null)
@@ -430,9 +394,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
-        /// <summary>
-        /// This function disables shirt and pants controls when the dragon avatar is active.
-        /// </summary>
+        // turn clothing controls on or off
         private void SetControlInteractivity()
         {
             bool dragon = IsDragonSelected();
@@ -446,17 +408,13 @@ namespace SaferTogether.UnityClient
             if (shoeColorDropdown != null) shoeColorDropdown.interactable = enabled;
         }
 
-        /// <summary>
-        /// This function returns whether the selected avatar is dragon.
-        /// </summary>
+        // check if the dragon avatar is selected
         private bool IsDragonSelected()
         {
             return SelectedDropdownValue(speciesDropdown, CharacterAvatarOptions.Male) == CharacterAvatarOptions.Dragon;
         }
 
-        /// <summary>
-        /// This function applies the default black outfit used by non-dragon avatars.
-        /// </summary>
+        // set the default outfit values
         private void ApplyDefaultSelections()
         {
             SetDropdownValue(speciesDropdown, CharacterAvatarOptions.Male);
@@ -469,9 +427,7 @@ namespace SaferTogether.UnityClient
             SetDropdownValue(accessoryDropdown, CharacterAvatarOptions.NoAccessory);
         }
 
-        /// <summary>
-        /// This function creates a compact section heading for the focused avatar controls.
-        /// </summary>
+        // make a small label for a section
         private void CreateSectionLabel(Transform parent, string label)
         {
             Text text = CreateText(parent, label, 15, TextAnchor.MiddleLeft);
@@ -484,9 +440,7 @@ namespace SaferTogether.UnityClient
             layoutElement.preferredHeight = 20;
         }
 
-        /// <summary>
-        /// This function creates one compact horizontal row for 2-3 avatar controls.
-        /// </summary>
+        // make one row for avatar options
         private RectTransform CreateOptionRow(Transform parent)
         {
             var rowObject = new GameObject("Option Row", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
@@ -505,9 +459,7 @@ namespace SaferTogether.UnityClient
             return rowObject.GetComponent<RectTransform>();
         }
 
-        /// <summary>
-        /// This function creates a compact labeled dropdown for rows with multiple controls.
-        /// </summary>
+        // make a small dropdown with a label
         private Dropdown CreateCompactDropdownField(Transform parent, string label, List<string> options)
         {
             var fieldObject = new GameObject(label + " Field", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(LayoutElement));
@@ -528,9 +480,7 @@ namespace SaferTogether.UnityClient
             return CreateDropdown(fieldObject.transform, label, options, 15, 15, 38, 8, 24);
         }
 
-        /// <summary>
-        /// This function creates a short label that can fit above narrow dropdowns.
-        /// </summary>
+        // make the little label above a compact dropdown
         private void CreateCompactFieldLabel(Transform parent, string label)
         {
             Text text = CreateText(parent, label, 13, TextAnchor.MiddleLeft);
@@ -546,9 +496,7 @@ namespace SaferTogether.UnityClient
             layoutElement.preferredHeight = 18;
         }
 
-        /// <summary>
-        /// This function creates an EventSystem when the scene does not already have one.
-        /// </summary>
+        // make an EventSystem if the scene needs one
         private void EnsureEventSystem()
         {
             if (FindAnyObjectByType<EventSystem>() != null)
@@ -560,9 +508,7 @@ namespace SaferTogether.UnityClient
             DontDestroyOnLoad(eventSystemObject);
         }
 
-        /// <summary>
-        /// This function creates the root canvas.
-        /// </summary>
+        // make the main UI canvas
         private Canvas CreateCanvas()
         {
             var canvasObject = new GameObject("SaferTogether Canvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
@@ -578,9 +524,7 @@ namespace SaferTogether.UnityClient
             return canvas;
         }
 
-        /// <summary>
-        /// This function creates a scrollable panel for the full avatar editor.
-        /// </summary>
+        // make the scroll panel for the editor
         private RectTransform CreateScrollablePanel(Transform parent)
         {
             var scrollObject = new GameObject("Avatar Scroll View", typeof(RectTransform), typeof(Image), typeof(ScrollRect));
@@ -642,9 +586,7 @@ namespace SaferTogether.UnityClient
             return rect;
         }
 
-        /// <summary>
-        /// This function creates a horizontal row for buttons.
-        /// </summary>
+        // make a horizontal button row
         private RectTransform CreateRow(Transform parent)
         {
             var rowObject = new GameObject("Row", typeof(RectTransform), typeof(HorizontalLayoutGroup));
@@ -662,9 +604,7 @@ namespace SaferTogether.UnityClient
             return rowObject.GetComponent<RectTransform>();
         }
 
-        /// <summary>
-        /// This function creates the screen title.
-        /// </summary>
+        // make the page title text
         private void CreateTitle(Transform parent, string value)
         {
             Text title = CreateText(parent, value, 34, TextAnchor.MiddleCenter);
@@ -672,9 +612,7 @@ namespace SaferTogether.UnityClient
             title.color = new Color32(245, 241, 226, 255);
         }
 
-        /// <summary>
-        /// This function creates a colored avatar badge.
-        /// </summary>
+        // make the simple layered avatar preview
         private AvatarView CreateAvatarView(Transform parent)
         {
             var avatarObject = new GameObject("Avatar", typeof(RectTransform), typeof(Image), typeof(AvatarView));
@@ -788,9 +726,7 @@ namespace SaferTogether.UnityClient
             return view;
         }
 
-        /// <summary>
-        /// This function creates the real prefab-based 3D avatar preview used by the editor.
-        /// </summary>
+        // make the prefab avatar preview scene
         private AvatarBuilder CreateAvatarBuilderPreview(Transform parent)
         {
             var previewObject = new GameObject("3D Avatar Preview", typeof(RectTransform), typeof(RawImage), typeof(LayoutElement));
@@ -874,9 +810,7 @@ namespace SaferTogether.UnityClient
             return builder;
         }
 
-        /// <summary>
-        /// This function creates one positioned image layer inside the avatar preview.
-        /// </summary>
+        // make one image layer for the preview
         private Image CreateAvatarImage(Transform parent, string name, Vector2 position, Vector2 size)
         {
             var imageObject = new GameObject(name, typeof(RectTransform), typeof(Image));
@@ -892,9 +826,7 @@ namespace SaferTogether.UnityClient
             return imageObject.GetComponent<Image>();
         }
 
-        /// <summary>
-        /// This function creates one positioned text layer inside the avatar preview.
-        /// </summary>
+        // make one text layer for the preview
         private Text CreateAvatarText(Transform parent, string name, string value, int size, Vector2 position, Vector2 layerSize)
         {
             Text text = CreateText(parent, value, size, TextAnchor.MiddleCenter);
@@ -911,9 +843,7 @@ namespace SaferTogether.UnityClient
             return text;
         }
 
-        /// <summary>
-        /// This function creates a dropdown control.
-        /// </summary>
+        // make a dropdown control
         private Dropdown CreateDropdown(
             Transform parent,
             string name,
@@ -967,9 +897,7 @@ namespace SaferTogether.UnityClient
             return dropdown;
         }
 
-        /// <summary>
-        /// This function creates the dropdown option template required by Unity UI.
-        /// </summary>
+        // make Unity's dropdown template
         private RectTransform CreateDropdownTemplate(Transform parent, out Text itemText, float controlHeight = 48, int optionFontSize = 20)
         {
             var templateObject = new GameObject("Template", typeof(RectTransform), typeof(Image), typeof(ScrollRect));
@@ -1026,9 +954,7 @@ namespace SaferTogether.UnityClient
             return templateRect;
         }
 
-        /// <summary>
-        /// This function creates the template item used for dropdown options.
-        /// </summary>
+        // make one item inside the dropdown template
         private Text CreateDropdownItem(Transform parent, int optionFontSize = 20)
         {
             var itemObject = new GameObject("Item", typeof(RectTransform), typeof(Toggle), typeof(Image), typeof(LayoutElement));
@@ -1057,9 +983,7 @@ namespace SaferTogether.UnityClient
             return itemText;
         }
 
-        /// <summary>
-        /// This function creates a button.
-        /// </summary>
+        // make a UI button
         private Button CreateButton(Transform parent, string label)
         {
             var buttonObject = new GameObject(label + " Button", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
@@ -1085,9 +1009,7 @@ namespace SaferTogether.UnityClient
             return button;
         }
 
-        /// <summary>
-        /// This function creates a UI text element.
-        /// </summary>
+        // make a UI text label
         private Text CreateText(Transform parent, string value, int size, TextAnchor alignment)
         {
             var textObject = new GameObject("Text", typeof(RectTransform), typeof(Text));
@@ -1110,9 +1032,7 @@ namespace SaferTogether.UnityClient
             return text;
         }
 
-        /// <summary>
-        /// This function saves the avatar when a user is logged in, or returns a signup draft when no user exists yet.
-        /// </summary>
+        // save the avatar or return a signup draft
         private void OnSaveAvatarClicked()
         {
             string avatar = SelectedAvatarId();
@@ -1128,9 +1048,7 @@ namespace SaferTogether.UnityClient
             StartCoroutine(SaveAvatarWithPreviewImage(avatar));
         }
 
-        /// <summary>
-        /// This function saves both the avatar id and a PNG snapshot of the Unity preview for web cards.
-        /// </summary>
+        // save the avatar id with its preview image
         private IEnumerator SaveAvatarWithPreviewImage(string avatar)
         {
             yield return null;
@@ -1149,26 +1067,20 @@ namespace SaferTogether.UnityClient
             });
         }
 
-        /// <summary>
-        /// This function leaves the avatar editor without changing the current avatar.
-        /// </summary>
+        // leave without saving changes
         private void OnBackClicked()
         {
             NavigateToReturnUrl(false, "");
         }
 
-        /// <summary>
-        /// This function applies a returned profile to the UI.
-        /// </summary>
+        // put the loaded profile into the editor
         private void ApplyProfile(UserProfile profile)
         {
             currentProfile = profile;
             ApplyAvatar(profile.avatar);
         }
 
-        /// <summary>
-        /// This function applies an avatar id to all dropdowns without requiring account fields.
-        /// </summary>
+        // load an avatar id into the dropdowns
         private void ApplyAvatar(string avatar)
         {
             CharacterAvatarSpec spec = CharacterAvatarId.ToSpec(avatar);
@@ -1184,9 +1096,7 @@ namespace SaferTogether.UnityClient
             PreviewAvatar();
         }
 
-        /// <summary>
-        /// This function previews the currently selected avatar.
-        /// </summary>
+        // refresh the current avatar preview
         private void PreviewAvatar()
         {
             string avatar = SelectedAvatarId();
@@ -1208,9 +1118,7 @@ namespace SaferTogether.UnityClient
             RequestAvatarPreviewRender();
         }
 
-        /// <summary>
-        /// This function schedules a render texture refresh after dropdown-driven avatar changes settle.
-        /// </summary>
+        // ask for the preview render on the next frame
         private void RequestAvatarPreviewRender()
         {
             if (!isActiveAndEnabled || avatarPreviewCamera == null || avatarPreviewTexture == null)
@@ -1226,9 +1134,7 @@ namespace SaferTogether.UnityClient
             avatarPreviewRenderCoroutine = StartCoroutine(RenderAvatarPreviewNextFrame());
         }
 
-        /// <summary>
-        /// This function renders the avatar preview on the next frame so spawned clothing is included.
-        /// </summary>
+        // render the preview after the UI updates
         private IEnumerator RenderAvatarPreviewNextFrame()
         {
             yield return null;
@@ -1253,9 +1159,7 @@ namespace SaferTogether.UnityClient
             avatarPreviewRenderCoroutine = null;
         }
 
-        /// <summary>
-        /// This function forces the preview camera to update its render texture immediately.
-        /// </summary>
+        // force the preview camera to render now
         private void RenderAvatarPreviewNow()
         {
             if (avatarPreviewCamera == null || avatarPreviewTexture == null)
@@ -1275,9 +1179,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
-        /// <summary>
-        /// This function reads the Unity preview render texture into a PNG data URL for the web UI.
-        /// </summary>
+        // turn the preview texture into a png data url
         private string CaptureAvatarPreviewImage()
         {
             if (avatarPreviewCamera == null || avatarPreviewTexture == null)
@@ -1314,9 +1216,7 @@ namespace SaferTogether.UnityClient
                 : "data:image/png;base64," + System.Convert.ToBase64String(pngBytes);
         }
 
-        /// <summary>
-        /// This function sets a dropdown to a known value.
-        /// </summary>
+        // set a dropdown to a saved value
         private void SetDropdownValue(Dropdown dropdown, string value)
         {
             if (dropdown == null)
@@ -1329,9 +1229,7 @@ namespace SaferTogether.UnityClient
             dropdown.RefreshShownValue();
         }
 
-        /// <summary>
-        /// This function returns the selected composed avatar id.
-        /// </summary>
+        // build the selected avatar id
         private string SelectedAvatarId()
         {
             string species = SelectedDropdownValue(speciesDropdown, CharacterAvatarOptions.Male);
@@ -1367,9 +1265,7 @@ namespace SaferTogether.UnityClient
             );
         }
 
-        /// <summary>
-        /// This function returns one dropdown value with a fallback value.
-        /// </summary>
+        // read one dropdown with a fallback
         private string SelectedDropdownValue(Dropdown dropdown, string fallback)
         {
             if (dropdown == null || dropdown.options.Count == 0)
@@ -1381,9 +1277,7 @@ namespace SaferTogether.UnityClient
             return dropdown.options[index].text;
         }
 
-        /// <summary>
-        /// This function returns to the page that opened Unity and optionally appends the selected avatar draft.
-        /// </summary>
+        // go back to the page that opened Unity
         private void NavigateToReturnUrl(bool includeAvatar, string avatar)
         {
             string target = string.IsNullOrEmpty(returnUrl) ? "signup.html" : returnUrl;
@@ -1396,9 +1290,7 @@ namespace SaferTogether.UnityClient
             OpenUrlInCurrentPage(target);
         }
 
-        /// <summary>
-        /// This function appends a URL parameter while preserving an existing query string or hash.
-        /// </summary>
+        // add one query value to a url
         private string AppendQueryParameter(string url, string key, string value)
         {
             int hashIndex = url.IndexOf('#');
@@ -1408,6 +1300,7 @@ namespace SaferTogether.UnityClient
             return baseUrl + separator + key + "=" + System.Uri.EscapeDataString(value) + hash;
         }
 
+        // open a url in the same browser page
         private void OpenUrlInCurrentPage(string target)
         {
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -1417,9 +1310,7 @@ namespace SaferTogether.UnityClient
 #endif
         }
 
-        /// <summary>
-        /// This function shows a status message in the UI.
-        /// </summary>
+        // show a status message
         private void SetStatus(string message)
         {
             if (statusText != null)
@@ -1428,9 +1319,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
-        /// <summary>
-        /// This function enables or disables action buttons while a request runs.
-        /// </summary>
+        // enable or disable buttons while saving
         private void SetBusy(bool busy)
         {
             if (saveAvatarButton != null) saveAvatarButton.interactable = !busy;

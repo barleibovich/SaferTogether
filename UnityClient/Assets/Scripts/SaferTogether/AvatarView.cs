@@ -4,9 +4,7 @@ using UnityEngine.UI;
 
 namespace SaferTogether.UnityClient
 {
-    /// <summary>
-    /// Displays the selected avatar as a layered character preview.
-    /// </summary>
+    // draws the avatar as a stack of UI image layers
     public sealed class AvatarView : MonoBehaviour
     {
         [SerializeField] private Image backgroundImage;
@@ -68,9 +66,7 @@ namespace SaferTogether.UnityClient
         private static Sprite skirtSprite;
         private static readonly Dictionary<string, Sprite> artSpriteCache = new Dictionary<string, Sprite>();
 
-        /// <summary>
-        /// This function assigns the UI references when the character is created in code.
-        /// </summary>
+        // wire up all the image refs when we build the avatar in code
         public void Bind(
             Image background,
             Image art,
@@ -167,9 +163,7 @@ namespace SaferTogether.UnityClient
             ApplySprites();
         }
 
-        /// <summary>
-        /// This function updates the avatar character from a saved avatar id.
-        /// </summary>
+        // rebuild the whole avatar from a saved avatar id string
         public void SetAvatar(string username, string avatar)
         {
             CharacterAvatarSpec spec = CharacterAvatarId.ToSpec(avatar);
@@ -234,9 +228,7 @@ namespace SaferTogether.UnityClient
             ApplyGenderStyle(spec.sex, spec.species);
         }
 
-        /// <summary>
-        /// This function assigns generated sprites to image layers.
-        /// </summary>
+        // hand each image layer its generated shape sprite
         private void ApplySprites()
         {
             SetSprite(backgroundImage, RoundedSprite());
@@ -285,9 +277,7 @@ namespace SaferTogether.UnityClient
             SetSprite(accessoryRightDetailImage, RoundedSprite());
         }
 
-        /// <summary>
-        /// This function applies creature-specific parts.
-        /// </summary>
+        // true if the species is one of the human-ish ones
         private static bool IsHumanAvatarSpecies(string species)
         {
             return species == CharacterAvatarOptions.Male
@@ -295,6 +285,7 @@ namespace SaferTogether.UnityClient
                 || species == CharacterAvatarOptions.Human;
         }
 
+        // turn on the creature-specific bits like wings, tail, horns, ears
         private void ApplySpeciesStyle(string species, string accessory, Color skinColor)
         {
             string value = CharacterAvatarId.NormalizeSpecies(species);
@@ -341,9 +332,7 @@ namespace SaferTogether.UnityClient
             ApplyEarOrHornStyle(value, hasHorns, skinColor);
         }
 
-        /// <summary>
-        /// This function styles ears and horns that share the same side layers.
-        /// </summary>
+        // ears and horns share the same side layers, style whichever one we need
         private void ApplyEarOrHornStyle(string species, bool horns, Color skinColor)
         {
             if (leftEarImage == null || rightEarImage == null)
@@ -381,9 +370,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
-        /// <summary>
-        /// This function applies the selected face shape.
-        /// </summary>
+        // set the head shape and nose/snout for the chosen face
         private void ApplyFaceStyle(string face, string species, Color skinColor)
         {
             if (headImage == null || trunkImage == null)
@@ -456,9 +443,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
-        /// <summary>
-        /// This function applies the selected hair shape to the hair layer.
-        /// </summary>
+        // shape the hair layers based on the picked hairstyle
         private void ApplyHairStyle(string hair)
         {
             if (hairImage == null || backHairImage == null)
@@ -542,9 +527,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
-        /// <summary>
-        /// This function applies the selected shirt/top style to the body layer.
-        /// </summary>
+        // style the body + arms for the chosen top
         private void ApplyTopStyle(string top, Color skinColor, Color topColor)
         {
             if (bodyImage == null)
@@ -633,9 +616,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
-        /// <summary>
-        /// This function applies the selected pants/bottom style.
-        /// </summary>
+        // style the legs + bottom for the chosen pants/skirt/etc
         private void ApplyBottomStyle(string bottom, string top, Color skinColor, Color bottomColor)
         {
             if (bottomImage == null)
@@ -736,9 +717,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
-        /// <summary>
-        /// This function applies the selected shoe style.
-        /// </summary>
+        // draw the chosen shoes (or hide them)
         private void ApplyShoesStyle(string shoes)
         {
             string value = CharacterAvatarId.NormalizeShoes(shoes);
@@ -804,9 +783,7 @@ namespace SaferTogether.UnityClient
             rightShoeImage.rectTransform.sizeDelta = size;
         }
 
-        /// <summary>
-        /// This function styles the selected eye shape with real image layers.
-        /// </summary>
+        // shape the eyes + brows for the chosen eye look
         private void ApplyEyesStyle(string eyes)
         {
             if (leftEyeImage == null || rightEyeImage == null || leftEyeWhiteImage == null || rightEyeWhiteImage == null)
@@ -913,9 +890,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
-        /// <summary>
-        /// This function styles the mouth as a small face layer instead of text.
-        /// </summary>
+        // draw the mouth as a tiny image layer (not text)
         private void ApplyMouthStyle(string face, string species)
         {
             if (mouthImage == null)
@@ -952,9 +927,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
-        /// <summary>
-        /// This function uses gender only for human proportions.
-        /// </summary>
+        // tweak proportions a bit by gender, humans only
         private void ApplyGenderStyle(string sex, string species)
         {
             if (!IsHumanAvatarSpecies(CharacterAvatarId.NormalizeSpecies(species)) || bodyImage == null)
@@ -1001,9 +974,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
-        /// <summary>
-        /// This function positions the selected accessory image.
-        /// </summary>
+        // place + style the chosen accessory image
         private void ApplyAccessoryStyle(string accessory)
         {
             if (accessoryImage == null)
@@ -1078,9 +1049,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
-        /// <summary>
-        /// This function resets shirt-only detail layers before applying another top style.
-        /// </summary>
+        // hide the shirt detail layers before drawing a new top
         private void HideTopDetails()
         {
             SetImageVisible(topCenterDetailImage, false);
@@ -1088,9 +1057,7 @@ namespace SaferTogether.UnityClient
             SetImageVisible(rightTopDetailImage, false);
         }
 
-        /// <summary>
-        /// This function resets pants, waist, and shoe detail layers before applying another clothing style.
-        /// </summary>
+        // hide the pants/waist detail layers before drawing a new bottom
         private void HideBottomDetails()
         {
             SetImageVisible(waistDetailImage, false);
@@ -1098,18 +1065,21 @@ namespace SaferTogether.UnityClient
             SetImageVisible(rightBottomDetailImage, false);
         }
 
+        // hide the side hair detail layers
         private void HideHairDetails()
         {
             SetImageVisible(leftHairDetailImage, false);
             SetImageVisible(rightHairDetailImage, false);
         }
 
+        // hide the accessory detail layers
         private void HideAccessoryDetails()
         {
             SetImageVisible(accessoryLeftDetailImage, false);
             SetImageVisible(accessoryRightDetailImage, false);
         }
 
+        // bag of coordinates telling where clothes/accessories sit per species
         private struct IllustratedAttachmentProfile
         {
             public Vector2 chestPoint;
@@ -1148,8 +1118,7 @@ namespace SaferTogether.UnityClient
             public Vector2 rightHornPoint;
             public Vector2 hornSize;
 
-            // These attachment profiles replace the old one-size-fits-all overlay.
-            // Each coordinate is local to the avatar preview, so the same clothes attach to species-specific body points.
+            // pick the right attach-point layout for a given species
             public static IllustratedAttachmentProfile ForSpecies(string species)
             {
                 IllustratedAttachmentProfile profile = Human();
@@ -1281,6 +1250,7 @@ namespace SaferTogether.UnityClient
                 return profile;
             }
 
+            // the default human layout everyone starts from
             private static IllustratedAttachmentProfile Human()
             {
                 return new IllustratedAttachmentProfile
@@ -1324,9 +1294,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
-        /// <summary>
-        /// This function loads the generated species art and hides the procedural avatar layers.
-        /// </summary>
+        // load the generated avatar art and hide the old layers
         private bool ApplyIllustratedAvatar(string species)
         {
             Sprite sprite = LoadArtSprite(CharacterAvatarId.NormalizeSpecies(species));
@@ -1353,9 +1321,7 @@ namespace SaferTogether.UnityClient
             return true;
         }
 
-        /// <summary>
-        /// This function draws the saved clothing and accessories over the illustrated base character.
-        /// </summary>
+        // draw saved clothes on top of the art
         private void ApplyIllustratedOverlays(CharacterAvatarSpec spec, Color topColor, Color bottomColor, Color shoeColor)
         {
             HideTopDetails();
@@ -1397,9 +1363,7 @@ namespace SaferTogether.UnityClient
             ApplyIllustratedAccessory(accessory, profile);
         }
 
-        /// <summary>
-        /// This function adds shirt-specific details, such as hood pockets, collars, jackets, and armor plates.
-        /// </summary>
+        // add the extra parts for the selected shirt
         private void ApplyIllustratedTopDetails(string top, Color topColor, Vector2 bodyPosition, Vector2 bodySize)
         {
             if (top == CharacterAvatarOptions.Hoodie)
@@ -1433,9 +1397,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
-        /// <summary>
-        /// This function adds pants, skirts, waist details, cargo pockets, and side stripes over the art.
-        /// </summary>
+        // add pants or skirt details over the art
         private void ApplyIllustratedBottom(
             string bottom,
             string top,
@@ -1471,9 +1433,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
-        /// <summary>
-        /// This function places the selected shoes and their highlights over the illustrated feet.
-        /// </summary>
+        // place the selected shoes over the feet
         private void ApplyIllustratedShoes(string shoes, Color shoeColor, Vector2 leftPosition, Vector2 rightPosition, Vector2 baseSize)
         {
             bool visible = shoes != CharacterAvatarOptions.NoShoes;
@@ -1493,9 +1453,7 @@ namespace SaferTogether.UnityClient
             ConfigureDetail(rightShoeDetailImage, RoundedSprite(), OverlayColor(Lighten(shoeColor, 0.52f), 240), rightPosition + new Vector2(0, 2 + yOffset), new Vector2(20, 4));
         }
 
-        /// <summary>
-        /// This function draws the chosen accessory as simple layered geometry above the species art.
-        /// </summary>
+        // draw the selected accessory over the art
         private void ApplyIllustratedAccessory(string accessory, IllustratedAttachmentProfile profile)
         {
             if (accessory == CharacterAvatarOptions.NoAccessory)
@@ -1552,9 +1510,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
-        /// <summary>
-        /// This function clears overlay-only layers before drawing a different saved outfit.
-        /// </summary>
+        // clear the extra art layers
         private void HideIllustratedOverlayLayers()
         {
             SetImageVisible(wingsImage, false);
@@ -1574,9 +1530,7 @@ namespace SaferTogether.UnityClient
             SetImageVisible(accessoryImage, false);
         }
 
-        /// <summary>
-        /// This function applies the common transform, sprite, and color settings for overlay pieces.
-        /// </summary>
+        // place and color one overlay image
         private void PositionOverlay(Image image, bool visible, Vector2 position, Vector2 size, float zRotation, Color color, Sprite sprite)
         {
             if (image == null)
@@ -1597,6 +1551,7 @@ namespace SaferTogether.UnityClient
             image.rectTransform.localEulerAngles = new Vector3(0, 0, zRotation);
         }
 
+        // show or hide the old procedural avatar layers
         private void SetProceduralLayersVisible(bool visible)
         {
             SetImageVisible(wingsImage, visible);
@@ -1648,9 +1603,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
-        /// <summary>
-        /// This function adds small shadows and cheek tones so the face reads as a character, not a flat block.
-        /// </summary>
+        // add small face shadows and cheeks
         private void ApplyFaceDetailLayers(string face, string species, Color skinColor)
         {
             bool humanLike = IsHumanAvatarSpecies(species)
@@ -1682,9 +1635,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
-        /// <summary>
-        /// This function makes a small reusable clothing detail visible and positions it.
-        /// </summary>
+        // show one small detail image
         private void ConfigureDetail(Image image, Sprite sprite, Color color, Vector2 position, Vector2 size, float zRotation = 0f)
         {
             if (image == null)
@@ -1700,6 +1651,7 @@ namespace SaferTogether.UnityClient
             image.rectTransform.localEulerAngles = new Vector3(0, 0, zRotation);
         }
 
+        // move one image layer sideways
         private void MoveLayerX(Image image, float offset)
         {
             if (image == null || !image.enabled)
@@ -1711,6 +1663,7 @@ namespace SaferTogether.UnityClient
             rect.anchoredPosition = new Vector2(rect.anchoredPosition.x + offset, rect.anchoredPosition.y);
         }
 
+        // make one image layer wider
         private void WidenLayer(Image image, float amount)
         {
             if (image == null || !image.enabled)
@@ -1722,9 +1675,7 @@ namespace SaferTogether.UnityClient
             rect.sizeDelta = new Vector2(rect.sizeDelta.x + amount, rect.sizeDelta.y);
         }
 
-        /// <summary>
-        /// This function maps one shared avatar color id to a Unity color.
-        /// </summary>
+        // turn an avatar color id into a Unity color
         public static Color ColorForAvatar(string color)
         {
             switch (CharacterAvatarId.NormalizeColor(color))
@@ -1764,9 +1715,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
-        /// <summary>
-        /// This function maps one skin tone id to a Unity color.
-        /// </summary>
+        // turn a skin id into a Unity color
         public static Color SkinColor(string skin)
         {
             switch (CharacterAvatarId.NormalizeSkin(skin))
@@ -1792,9 +1741,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
-        /// <summary>
-        /// This function maps one hair color id to a Unity color.
-        /// </summary>
+        // turn a hair color id into a Unity color
         public static Color HairColor(string color)
         {
             switch (CharacterAvatarId.NormalizeHairColor(color))
@@ -1818,9 +1765,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
-        /// <summary>
-        /// This function maps one eye color id to a Unity color.
-        /// </summary>
+        // turn an eye color id into a Unity color
         public static Color EyeColor(string color)
         {
             switch (CharacterAvatarId.NormalizeEyeColor(color))
@@ -1842,9 +1787,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
-        /// <summary>
-        /// This function maps one avatar color id to a readable text color.
-        /// </summary>
+        // pick readable text color for a background
         public static Color ContrastColor(string baseColor)
         {
             string value = CharacterAvatarId.NormalizeColor(baseColor);
@@ -1860,6 +1803,7 @@ namespace SaferTogether.UnityClient
             return Color.white;
         }
 
+        // pick the small face-detail color from the skin
         private static Color ColorForFaceDetail(string skin)
         {
             string value = CharacterAvatarId.NormalizeSkin(skin);
@@ -1870,6 +1814,7 @@ namespace SaferTogether.UnityClient
                 : new Color32(44, 32, 28, 255);
         }
 
+        // pick a color for each accessory
         private static Color AccessoryColor(string accessory)
         {
             string value = CharacterAvatarId.NormalizeAccessory(accessory);
@@ -1892,11 +1837,13 @@ namespace SaferTogether.UnityClient
             return new Color32(20, 30, 38, 255);
         }
 
+        // get the first letter for the badge
         private static string InitialFor(string username)
         {
             return string.IsNullOrWhiteSpace(username) ? "" : username.Trim().Substring(0, 1).ToUpperInvariant();
         }
 
+        // load the generated art sprite for a species
         private static Sprite LoadArtSprite(string species)
         {
             if (artSpriteCache.TryGetValue(species, out Sprite cached))
@@ -1921,6 +1868,7 @@ namespace SaferTogether.UnityClient
             return sprite;
         }
 
+        // set an image sprite safely
         private static void SetSprite(Image image, Sprite sprite)
         {
             if (image != null)
@@ -1929,6 +1877,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
+        // set an image color safely
         private static void SetImageColor(Image image, Color color)
         {
             if (image != null)
@@ -1937,6 +1886,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
+        // show or hide an image safely
         private static void SetImageVisible(Image image, bool visible)
         {
             if (image != null)
@@ -1945,6 +1895,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
+        // place and rotate one limb image
         private static void PositionLimb(Image image, Vector2 position, Vector2 size, float zRotation)
         {
             if (image == null)
@@ -1959,6 +1910,7 @@ namespace SaferTogether.UnityClient
             image.rectTransform.localEulerAngles = new Vector3(0, 0, zRotation);
         }
 
+        // set text safely
         private static void SetText(Text label, string value, Color color)
         {
             if (label == null)
@@ -1970,27 +1922,32 @@ namespace SaferTogether.UnityClient
             label.color = color;
         }
 
+        // make a color darker
         private static Color Darken(Color color, float multiplier)
         {
             return new Color(color.r * multiplier, color.g * multiplier, color.b * multiplier, color.a);
         }
 
+        // make a color lighter
         private static Color Lighten(Color color, float amount)
         {
             return Color.Lerp(color, Color.white, amount);
         }
 
+        // change a color alpha
         private static Color OverlayColor(Color color, byte alpha)
         {
             return new Color(color.r, color.g, color.b, alpha / 255f);
         }
 
+        // choose cheek color from skin color
         private static Color CheekColorForSkin(Color skinColor)
         {
             Color blush = new Color32(237, 118, 118, 120);
             return Color.Lerp(skinColor, blush, 0.42f);
         }
 
+        // make or reuse the circle sprite
         private static Sprite CircleSprite()
         {
             if (circleSprite == null)
@@ -2001,6 +1958,7 @@ namespace SaferTogether.UnityClient
             return circleSprite;
         }
 
+        // make or reuse the rounded sprite
         private static Sprite RoundedSprite()
         {
             if (roundedSprite == null)
@@ -2011,6 +1969,7 @@ namespace SaferTogether.UnityClient
             return roundedSprite;
         }
 
+        // make or reuse the diamond sprite
         private static Sprite DiamondSprite()
         {
             if (diamondSprite == null)
@@ -2021,7 +1980,7 @@ namespace SaferTogether.UnityClient
             return diamondSprite;
         }
 
-        // These procedural masks keep the avatar asset-free while giving it character-like silhouettes.
+        // make or reuse the face sprite
         private static Sprite FaceSprite()
         {
             if (faceSprite == null)
@@ -2032,6 +1991,7 @@ namespace SaferTogether.UnityClient
             return faceSprite;
         }
 
+        // make or reuse the long face sprite
         private static Sprite LongFaceSprite()
         {
             if (longFaceSprite == null)
@@ -2042,6 +2002,7 @@ namespace SaferTogether.UnityClient
             return longFaceSprite;
         }
 
+        // make or reuse the hair cap sprite
         private static Sprite HairCapSprite()
         {
             if (hairCapSprite == null)
@@ -2052,6 +2013,7 @@ namespace SaferTogether.UnityClient
             return hairCapSprite;
         }
 
+        // make or reuse the spiky hair sprite
         private static Sprite SpikyHairSprite()
         {
             if (spikyHairSprite == null)
@@ -2062,6 +2024,7 @@ namespace SaferTogether.UnityClient
             return spikyHairSprite;
         }
 
+        // make or reuse the torso sprite
         private static Sprite TorsoSprite()
         {
             if (torsoSprite == null)
@@ -2072,6 +2035,7 @@ namespace SaferTogether.UnityClient
             return torsoSprite;
         }
 
+        // make or reuse the leg sprite
         private static Sprite LegSprite()
         {
             if (legSprite == null)
@@ -2082,6 +2046,7 @@ namespace SaferTogether.UnityClient
             return legSprite;
         }
 
+        // make or reuse the shoe sprite
         private static Sprite ShoeSprite()
         {
             if (shoeSprite == null)
@@ -2092,6 +2057,7 @@ namespace SaferTogether.UnityClient
             return shoeSprite;
         }
 
+        // make or reuse the skirt sprite
         private static Sprite SkirtSprite()
         {
             if (skirtSprite == null)
@@ -2102,6 +2068,7 @@ namespace SaferTogether.UnityClient
             return skirtSprite;
         }
 
+        // build a sprite from a pixel test
         private static Sprite CreateShapeSprite(System.Func<int, int, bool> containsPixel)
         {
             const int size = 96;
@@ -2123,6 +2090,7 @@ namespace SaferTogether.UnityClient
             return Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size);
         }
 
+        // check if a pixel is inside the circle
         private static bool IsCirclePixel(int x, int y)
         {
             const float center = 47.5f;
@@ -2131,6 +2099,7 @@ namespace SaferTogether.UnityClient
             return dx * dx + dy * dy <= center * center;
         }
 
+        // check if a pixel is inside a rounded box
         private static bool IsRoundedPixel(int x, int y)
         {
             const int radius = 18;
@@ -2141,11 +2110,13 @@ namespace SaferTogether.UnityClient
             return dx * dx + dy * dy <= radius * radius;
         }
 
+        // check if a pixel is inside a diamond
         private static bool IsDiamondPixel(int x, int y)
         {
             return Mathf.Abs(x - 48) + Mathf.Abs(y - 48) <= 48;
         }
 
+        // check if a pixel is inside the face shape
         private static bool IsFacePixel(int x, int y)
         {
             float t = y / 95f;
@@ -2160,6 +2131,7 @@ namespace SaferTogether.UnityClient
             return dx <= halfWidth - (1f - topRound) * 5f && y > 2;
         }
 
+        // check if a pixel is inside the long face shape
         private static bool IsLongFacePixel(int x, int y)
         {
             float t = y / 95f;
@@ -2171,6 +2143,7 @@ namespace SaferTogether.UnityClient
             return Mathf.Abs(x - 47.5f) <= halfWidth && y > 2;
         }
 
+        // check if a pixel belongs to the hair cap
         private static bool IsHairCapPixel(int x, int y)
         {
             float t = y / 95f;
@@ -2185,6 +2158,7 @@ namespace SaferTogether.UnityClient
             return cap || lowBangs;
         }
 
+        // check if a pixel belongs to spiky hair
         private static bool IsSpikyHairPixel(int x, int y)
         {
             float dx = Mathf.Abs(x - 48f);
@@ -2195,6 +2169,7 @@ namespace SaferTogether.UnityClient
             return baseCap || centerSpike || leftSpike || rightSpike;
         }
 
+        // check if a pixel is inside the torso
         private static bool IsTorsoPixel(int x, int y)
         {
             float t = y / 95f;
@@ -2203,6 +2178,7 @@ namespace SaferTogether.UnityClient
             return Mathf.Abs(x - 48f) <= halfWidth && y > 3 && shoulderRound;
         }
 
+        // check if a pixel is inside a leg
         private static bool IsLegPixel(int x, int y)
         {
             float t = y / 95f;
@@ -2210,6 +2186,7 @@ namespace SaferTogether.UnityClient
             return Mathf.Abs(x - 48f) <= halfWidth && y > 2;
         }
 
+        // check if a pixel is inside a shoe
         private static bool IsShoePixel(int x, int y)
         {
             float dx = Mathf.Abs(x - 50f);
@@ -2219,6 +2196,7 @@ namespace SaferTogether.UnityClient
             return sole || toe;
         }
 
+        // check if a pixel is inside the skirt
         private static bool IsSkirtPixel(int x, int y)
         {
             float t = y / 95f;

@@ -4,6 +4,7 @@ using UnityEngine;
 
 namespace SaferTogether.UnityClient
 {
+    // little data holder for one clothing/accessory prefab + where it goes
     [Serializable]
     public sealed class AvatarPartPrefab
     {
@@ -14,9 +15,7 @@ namespace SaferTogether.UnityClient
         public GameObject prefab;
     }
 
-    /// <summary>
-    /// Switches the selected avatar prefab and attaches the avatar-specific clothing/accessory prefab layers.
-    /// </summary>
+    // swaps the avatar prefab and slaps the right clothes/accessories on it
     public sealed class AvatarBuilder : MonoBehaviour
     {
         [Header("Runtime Loading")]
@@ -54,6 +53,7 @@ namespace SaferTogether.UnityClient
         private string selectedShoeColor = CharacterAvatarOptions.Black;
         private bool resourcesLoaded;
 
+        // on boot, load stuff and default to the male avatar
         private void Start()
         {
             EnsureResourcesLoaded();
@@ -64,6 +64,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
+        // switch to a different avatar species and rebuild its parts
         public void SelectAvatar(string avatarName)
         {
             EnsureResourcesLoaded();
@@ -111,6 +112,7 @@ namespace SaferTogether.UnityClient
             RebuildAttachedParts();
         }
 
+        // pick an accessory and redo just the accessory slots
         public void SelectAccessory(string accessoryName)
         {
             EnsureResourcesLoaded();
@@ -118,6 +120,7 @@ namespace SaferTogether.UnityClient
             RebuildAccessory();
         }
 
+        // pick a shirt then rebuild the clothes
         public void SelectShirt(string shirtName)
         {
             EnsureResourcesLoaded();
@@ -125,6 +128,7 @@ namespace SaferTogether.UnityClient
             RebuildClothes();
         }
 
+        // change the shirt color then rebuild the clothes
         public void SelectShirtColor(string colorId)
         {
             EnsureResourcesLoaded();
@@ -132,6 +136,7 @@ namespace SaferTogether.UnityClient
             RebuildClothes();
         }
 
+        // pick pants then rebuild the clothes
         public void SelectPants(string pantsName)
         {
             EnsureResourcesLoaded();
@@ -139,6 +144,7 @@ namespace SaferTogether.UnityClient
             RebuildClothes();
         }
 
+        // change the pants color then rebuild the clothes
         public void SelectPantsColor(string colorId)
         {
             EnsureResourcesLoaded();
@@ -146,6 +152,7 @@ namespace SaferTogether.UnityClient
             RebuildClothes();
         }
 
+        // pick shoes then rebuild the clothes
         public void SelectShoes(string shoesName)
         {
             EnsureResourcesLoaded();
@@ -153,6 +160,7 @@ namespace SaferTogether.UnityClient
             RebuildClothes();
         }
 
+        // change the shoe color then rebuild the clothes
         public void SelectShoeColor(string colorId)
         {
             EnsureResourcesLoaded();
@@ -160,6 +168,7 @@ namespace SaferTogether.UnityClient
             RebuildClothes();
         }
 
+        // wipe everything and re-add accessory + clothes
         private void RebuildAttachedParts()
         {
             ClearAllParts();
@@ -167,6 +176,7 @@ namespace SaferTogether.UnityClient
             RebuildClothes();
         }
 
+        // clear the head/face slots and put the chosen accessory back
         private void RebuildAccessory()
         {
             ClearSlots(AvatarAttachmentSlot.Face, AvatarAttachmentSlot.Hat, AvatarAttachmentSlot.Horns, AvatarAttachmentSlot.Wings, AvatarAttachmentSlot.Tail);
@@ -179,6 +189,7 @@ namespace SaferTogether.UnityClient
             AttachMatchingParts(accessoryPrefabs, selectedAccessory, "");
         }
 
+        // clear the clothing slots and re-attach shirt, pants, shoes
         private void RebuildClothes()
         {
             ClearSlots(
@@ -194,6 +205,7 @@ namespace SaferTogether.UnityClient
             AttachMatchingParts(shoePrefabs, selectedShoes, selectedShoeColor);
         }
 
+        // jeans are always denim, otherwise use the picked color
         private string PantsColorForSelection()
         {
             return selectedPants == CharacterAvatarOptions.Jeans
@@ -201,6 +213,7 @@ namespace SaferTogether.UnityClient
                 : NormalizeClothingColor(selectedPantsColor, CharacterAvatarOptions.Blue, false);
         }
 
+        // loop the catalog and spawn any prefab that matches id + color
         private void AttachMatchingParts(AvatarPartPrefab[] catalog, string selectedId, string selectedColor)
         {
             if (catalog == null || currentAttachmentSet == null)
@@ -238,6 +251,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
+        // list of parts that keep their prefab transform
         private bool UsesPrefabTransform(AvatarPartPrefab part)
         {
             string partId = NormalizeId(part.id, "");
@@ -361,6 +375,7 @@ namespace SaferTogether.UnityClient
                     || partId == CharacterAvatarOptions.Mask);
         }
 
+        // check if a part fits the current species, id and color
         private bool PartMatches(AvatarPartPrefab part, string selectedId, string selectedColor)
         {
             if (part == null || part.prefab == null || NormalizeId(part.id, "") != selectedId)
@@ -378,6 +393,7 @@ namespace SaferTogether.UnityClient
             return string.IsNullOrEmpty(partColor) || string.IsNullOrEmpty(selectedColor) || partColor == selectedColor;
         }
 
+        // destroy and forget whatever is in the given slots
         private void ClearSlots(params AvatarAttachmentSlot[] slots)
         {
             foreach (AvatarAttachmentSlot slot in slots)
@@ -393,6 +409,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
+        // nuke every attached part
         private void ClearAllParts()
         {
             foreach (GameObject part in attachedParts.Values)
@@ -406,6 +423,7 @@ namespace SaferTogether.UnityClient
             attachedParts.Clear();
         }
 
+        // map a species name to its avatar GameObject (defaults to male)
         private GameObject AvatarObjectFor(string avatarName)
         {
             switch (CharacterAvatarId.NormalizeSpecies(avatarName))
@@ -423,6 +441,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
+        // female needs a special offset/scale, everyone else is default
         private static void ApplyAvatarRootTransform(Transform avatarTransform, string species)
         {
             if (avatarTransform == null)
@@ -443,6 +462,7 @@ namespace SaferTogether.UnityClient
             avatarTransform.localScale = Vector3.one;
         }
 
+        // toggle an avatar on/off if it exists
         private static void SetAvatarActive(GameObject avatar, bool active)
         {
             if (avatar != null)
@@ -451,6 +471,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
+        // make a root object to hold the preview if we dont have one yet
         private void EnsureAvatarRoot()
         {
             if (avatarRoot != null)
@@ -463,6 +484,7 @@ namespace SaferTogether.UnityClient
             avatarRoot = rootObject.transform;
         }
 
+        // lazy-load all the avatars and part catalogs once
         public void EnsureResourcesLoaded()
         {
             if (resourcesLoaded)
@@ -498,16 +520,19 @@ namespace SaferTogether.UnityClient
             resourcesLoaded = true;
         }
 
+        // load an avatar prefab from Resources by id
         private GameObject LoadAvatar(string id)
         {
             return Resources.Load<GameObject>(resourcesRoot + "/Avatars/" + id);
         }
 
+        // load a part prefab from Resources by category/species/id
         private GameObject LoadPart(string category, string species, string id)
         {
             return Resources.Load<GameObject>(resourcesRoot + "/" + category + "/" + species + "/" + id);
         }
 
+        // build a catalog of clothing prefabs across every species/id/color combo
         private AvatarPartPrefab[] BuildColorCatalog(string category, AvatarAttachmentSlot slot, string[] ids)
         {
             var catalog = new List<AvatarPartPrefab>();
@@ -540,6 +565,7 @@ namespace SaferTogether.UnityClient
             return catalog.ToArray();
         }
 
+        // build the accessory catalog for every species (skips the none option)
         private AvatarPartPrefab[] BuildAccessoryCatalog()
         {
             var catalog = new List<AvatarPartPrefab>();
@@ -573,6 +599,7 @@ namespace SaferTogether.UnityClient
             return catalog.ToArray();
         }
 
+        // crown goes on the hat slot, everything else on the face
         private static AvatarAttachmentSlot SlotForAccessory(string id)
         {
             switch (id)
@@ -584,6 +611,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
+        // jeans only come in denim, everything else gets all the colors
         private static string[] ColorsForPart(string id)
         {
             return id == CharacterAvatarOptions.Jeans
@@ -591,6 +619,7 @@ namespace SaferTogether.UnityClient
                 : CharacterAvatarOptions.ClothingColors;
         }
 
+        // clean up a color id, fall back if it isnt a real option
         private static string NormalizeClothingColor(string value, string fallback, bool allowDenim)
         {
             string cleanValue = NormalizeId(value, "");
@@ -611,12 +640,14 @@ namespace SaferTogether.UnityClient
             return fallback;
         }
 
+        // trim + lowercase an id, use fallback if empty
         private static string NormalizeId(string value, string fallback)
         {
             string cleanValue = string.IsNullOrWhiteSpace(value) ? "" : value.Trim().ToLowerInvariant();
             return string.IsNullOrEmpty(cleanValue) ? fallback : cleanValue;
         }
 
+        // swap in the real source textures on all the renderers
         private void ApplyRuntimeTextures(GameObject root)
         {
             if (root == null)
@@ -651,6 +682,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
+        // find + cache the texture that goes with a material name
         private Texture2D TextureForMaterial(string materialName)
         {
             string resourcePath = SourceImageResourcePathForMaterial(materialName);
@@ -669,6 +701,7 @@ namespace SaferTogether.UnityClient
             return texture;
         }
 
+        // figure out the resource path for a material (avatar/accessory/clothing)
         private string SourceImageResourcePathForMaterial(string materialName)
         {
             string name = NormalizeMaterialName(materialName);
@@ -709,6 +742,7 @@ namespace SaferTogether.UnityClient
             return "";
         }
 
+        // parse a clothing material name into its source image path
         private string ClothingResourcePath(string materialName, string species, string prefix, string category)
         {
             if (!materialName.StartsWith(prefix, StringComparison.Ordinal))
@@ -786,12 +820,14 @@ namespace SaferTogether.UnityClient
             return "";
         }
 
+        // clean a material name and drop the "(instance)" bit unity adds
         private static string NormalizeMaterialName(string value)
         {
             string name = NormalizeId(value, "");
             return name.Replace(" (instance)", "");
         }
 
+        // uppercase the first letter
         private static string Capitalize(string value)
         {
             return string.IsNullOrEmpty(value)

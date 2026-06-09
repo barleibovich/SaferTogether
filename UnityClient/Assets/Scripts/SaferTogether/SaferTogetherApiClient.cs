@@ -6,18 +6,14 @@ using UnityEngine.Networking;
 
 namespace SaferTogether.UnityClient
 {
-    /// <summary>
-    /// Small coroutine-based API client for the SaferTogether gateway.
-    /// </summary>
+    // little coroutine api client for talking to the gateway
     public sealed class SaferTogetherApiClient
     {
         private string accessToken;
 
         public string GatewayBaseUrl;
 
-        /// <summary>
-        /// This function creates an API client with the selected gateway URL.
-        /// </summary>
+        // set up the client with whatever gateway url we got
         public SaferTogetherApiClient(string gatewayBaseUrl)
         {
             GatewayBaseUrl = string.IsNullOrEmpty(gatewayBaseUrl)
@@ -25,9 +21,7 @@ namespace SaferTogether.UnityClient
                 : TrimTrailingSlash(gatewayBaseUrl);
         }
 
-        /// <summary>
-        /// This function signs up a user and stores the returned bearer token.
-        /// </summary>
+        // sign up a user + save the token we get back
         public IEnumerator SignUp(string username, string password, string role, string avatar, Action<UserProfile> onSuccess, Action<string> onError)
         {
             var body = new SignUpRequest
@@ -45,9 +39,7 @@ namespace SaferTogether.UnityClient
             }, onError);
         }
 
-        /// <summary>
-        /// This function logs in a user and stores the returned bearer token.
-        /// </summary>
+        // log in + save the token we get back
         public IEnumerator Login(string username, string password, Action<UserProfile> onSuccess, Action<string> onError)
         {
             var body = new LoginRequest
@@ -63,9 +55,7 @@ namespace SaferTogether.UnityClient
             }, onError);
         }
 
-        /// <summary>
-        /// This function updates the current user's avatar.
-        /// </summary>
+        // update my avatar
         public IEnumerator UpdateAvatar(string avatar, string avatarImage, Action<UserProfile> onSuccess, Action<string> onError)
         {
             var body = new AvatarUpdateRequest
@@ -80,9 +70,7 @@ namespace SaferTogether.UnityClient
             }, onError);
         }
 
-        /// <summary>
-        /// This function logs out and clears local auth state.
-        /// </summary>
+        // log out and wipe the local token
         public IEnumerator Logout(Action onSuccess, Action<string> onError)
         {
             yield return SendJson<LogoutResponse>("/api/auth/logout", "POST", null, _ =>
@@ -92,9 +80,7 @@ namespace SaferTogether.UnityClient
             }, onError);
         }
 
-        /// <summary>
-        /// This function stores a bearer token returned by the gateway.
-        /// </summary>
+        // stash the bearer token if it's not empty
         private void SaveAccessToken(string token)
         {
             if (!string.IsNullOrEmpty(token))
@@ -103,9 +89,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
-        /// <summary>
-        /// This function sends JSON to the gateway and parses the JSON response.
-        /// </summary>
+        // POST/PATCH json to the gateway and parse the json back
         private IEnumerator SendJson<TResponse>(string path, string method, object body, Action<TResponse> onSuccess, Action<string> onError)
         {
             var request = new UnityWebRequest(CombineUrl(GatewayBaseUrl, path), method);
@@ -138,9 +122,7 @@ namespace SaferTogether.UnityClient
             request.Dispose();
         }
 
-        /// <summary>
-        /// This function applies bearer auth headers to a Unity request.
-        /// </summary>
+        // slap the bearer token onto the request if we have one
         private void ApplyAuthHeaders(UnityWebRequest request)
         {
             if (!string.IsNullOrEmpty(accessToken))
@@ -149,9 +131,7 @@ namespace SaferTogether.UnityClient
             }
         }
 
-        /// <summary>
-        /// This function checks whether a Unity request failed.
-        /// </summary>
+        // did the request fail?
         private static bool IsFailure(UnityWebRequest request)
         {
 #if UNITY_2020_1_OR_NEWER
@@ -163,9 +143,7 @@ namespace SaferTogether.UnityClient
 #endif
         }
 
-        /// <summary>
-        /// This function extracts a readable gateway error message.
-        /// </summary>
+        // pull out a nice error message from the response
         private static string GetErrorMessage(string responseText, string fallback)
         {
             if (!string.IsNullOrEmpty(responseText))
@@ -181,17 +159,13 @@ namespace SaferTogether.UnityClient
             return string.IsNullOrEmpty(fallback) ? "Request failed" : fallback;
         }
 
-        /// <summary>
-        /// This function combines the gateway base URL with an API path.
-        /// </summary>
+        // glue the base url and the api path together
         private static string CombineUrl(string baseUrl, string path)
         {
             return TrimTrailingSlash(baseUrl) + "/" + path.TrimStart('/');
         }
 
-        /// <summary>
-        /// This function removes trailing slashes from a URL.
-        /// </summary>
+        // chop trailing slashes off a url
         private static string TrimTrailingSlash(string value)
         {
             return value.TrimEnd('/');

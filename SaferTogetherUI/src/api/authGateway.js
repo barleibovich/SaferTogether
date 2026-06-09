@@ -1,6 +1,6 @@
 import { requestJson, setSessionToken } from "./apiClient.js";
 
-// This function creates a user account.
+// create a user account
 export async function signUpWithUsername({ username, password, role, avatar, avatarImage }) {
   const result = await requestJson("/api/auth/signup", {
     body: { avatar, avatarImage, password, role, username },
@@ -10,7 +10,7 @@ export async function signUpWithUsername({ username, password, role, avatar, ava
   return result;
 }
 
-// This function logs in with a username and password.
+// log in with username + password
 export async function loginWithUsername({ username, password }) {
   const result = await requestJson("/api/auth/login", {
     body: { password, username },
@@ -20,20 +20,20 @@ export async function loginWithUsername({ username, password }) {
   return result;
 }
 
-// This function logs out the current user.
+// log out
 export async function logout() {
   const result = await requestJson("/api/auth/logout", { method: "POST" });
   setSessionToken(null);
   return result;
 }
 
-// This function gets the current user's profile.
+// grab the current user's profile
 export async function getCurrentUserProfile() {
   const payload = await requestJson("/api/auth/profile");
   return payload.profile;
 }
 
-// This function saves the current user's avatar.
+// save the user's avatar
 export async function updateCurrentUserAvatar({ avatar, avatarImage }) {
   const payload = await requestJson("/api/auth/profile", {
     body: { avatar, avatarImage },

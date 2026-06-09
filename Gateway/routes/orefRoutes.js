@@ -9,7 +9,7 @@ const {
   getCurrentOrefAlerts
 } = require("../../Services/orefAlertService");
 
-// This function returns the live HFC status for one visible group.
+// live home front command status for one group we can see
 async function getGroupOrefStatus(accessToken, groupId) {
   const groups = await getVisibleGroups(accessToken);
   const group = groups.find(item => item.id === groupId);
@@ -37,7 +37,7 @@ async function getGroupOrefStatus(accessToken, groupId) {
   };
 }
 
-// This function handles Home Front Command alert routes.
+// handle the oref alert routes
 async function handleOrefRoute(request, response, pathname) {
   const groupStatusMatch = pathname.match(/^\/api\/oref\/groups\/([^/]+)\/status$/);
 

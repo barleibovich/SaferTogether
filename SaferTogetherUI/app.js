@@ -4,6 +4,18 @@ import {
   logout,
   signUpWithUsername
 } from "./src/api/authGateway.js";
+import { openRadioWirePuzzle } from "./src/radioWire.js";
+import {
+  activateGroupActivity,
+  createGroupActivity,
+  deactivateGroupActivity,
+  deleteGroupActivity,
+  getActiveGroupActivities,
+  getGroupActivities,
+  getGroupActivityResults,
+  reviewGroupActivityResult,
+  submitGroupActivityResult
+} from "./src/api/activityGateway.js";
 import {
   createGroupForCurrentUser,
   deleteOwnedGroup,
@@ -96,19 +108,31 @@ const DEFAULT_MISSIONS = [
   {
     id: "m1",
     title: "Close the window",
-    description: "Make sure the window is closed before sitting down."
+    description: "Make sure the window is closed before sitting down.",
+    expectedChannel: "",
+    requiredAction: "Close the window",
+    target: "window"
   },
   {
     id: "m2",
     title: "Bring water",
-    description: "Bring a water bottle to the protected room."
+    description: "Bring a water bottle to the protected room.",
+    expectedChannel: "",
+    requiredAction: "Stand in the safe zone with water",
+    target: "safe-zone"
   },
   {
     id: "m3",
     title: "Sit away from windows",
-    description: "Sit on the floor and stay away from glass."
+    description: "Sit on the floor and stay away from glass.",
+    expectedChannel: "",
+    requiredAction: "Move away from the window",
+    target: "safe-zone"
   }
 ];
+
+const MISSION_TARGETS = ["window", "radio", "radio-wire", "door", "safe-zone", "board", "custom"];
+const ACTIVITY_MODES = ["real", "training"];
 
 const DEFAULT_BASELINE = {
   userId: null,
@@ -128,7 +152,7 @@ document.addEventListener("DOMContentLoaded", () => {
   startEventTimer();
 });
 
-// This function creates the default in-browser app state.
+// default app state in the browser
 function initialState() {
   return {
     user: null,
@@ -138,6 +162,9 @@ function initialState() {
     familyMembers: copy(DEFAULT_FAMILY),
     questions: copy(DEFAULT_QUESTIONS),
     missions: copy(DEFAULT_MISSIONS),
+    activityDraft: null,
+    groupActivities: [],
+    activityResults: [],
     baseline: copy(DEFAULT_BASELINE),
     practiceSession: null,
     orefStatus: null,
@@ -145,12 +172,12 @@ function initialState() {
   };
 }
 
-// This function clones simple JSON-safe values.
+// clone simple json-safe stuff
 function copy(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-// This function loads saved app state from session storage.
+// load saved state from localStorage
 function loadState() {
   try {
     const saved = sessionStorage.getItem(STORAGE_KEY);
@@ -160,12 +187,12 @@ function loadState() {
   }
 }
 
-// This function saves the current app state to session storage.
+// save the app state to localStorage
 function saveState() {
   sessionStorage.setItem(STORAGE_KEY, JSON.stringify(stateForStorage()));
 }
 
-// This function keeps large generated avatar PNGs out of browser storage.
+// strip the big avatar pngs so they don't bloat storage
 function stateForStorage() {
   const snapshot = copy(state);
 
@@ -191,7 +218,7 @@ function stateForStorage() {
   return snapshot;
 }
 
-// This function stores an avatar coming back from Unity so signup can use it before an account exists.
+// stash the avatar unity sends back so signup can use it before there's an account
 function syncSignupAvatarDraftFromUrl() {
   const params = new URLSearchParams(window.location.search);
   const avatar = params.get("avatar");
@@ -207,7 +234,7 @@ function syncSignupAvatarDraftFromUrl() {
   window.history.replaceState(null, "", cleanUrl);
 }
 
-// This function keeps Unity navigation inside this prototype instead of allowing arbitrary external redirects.
+// keep unity redirects inside the app, no random external urls
 function safeUnityReturnUrl(profile) {
   const params = new URLSearchParams(window.location.search);
   const requested = params.get("return");
@@ -232,7 +259,7 @@ function safeUnityReturnUrl(profile) {
   return `${url.pathname.replace(/^\//, "")}${url.search}${url.hash}` || fallback;
 }
 
-// This function fills any missing state sections with defaults.
+// fill in any missing state bits with defaults
 function ensureDefaults() {
   state.familyMembers = state.familyMembers?.length ? state.familyMembers : copy(DEFAULT_FAMILY);
   state.groups = Array.isArray(state.groups) ? state.groups : [];
@@ -242,13 +269,16 @@ function ensureDefaults() {
   state.familyName = state.groups.find(group => group.id === state.activeGroupId)?.name || "";
   state.questions = state.questions?.length ? state.questions : copy(DEFAULT_QUESTIONS);
   state.missions = state.missions?.length ? state.missions : copy(DEFAULT_MISSIONS);
+  state.activityDraft = state.activityDraft || null;
+  state.groupActivities = Array.isArray(state.groupActivities) ? state.groupActivities : [];
+  state.activityResults = Array.isArray(state.activityResults) ? state.activityResults : [];
   state.baseline = state.baseline || copy(DEFAULT_BASELINE);
   state.orefStatus = state.orefStatus || null;
   delete state.gpsAlertLocationEnabled;
   saveState();
 }
 
-// This function creates a deterministic number from a username.
+// turn a username into a stable number
 function seedFromUsername(username) {
   return String(username || "")
     .trim()
@@ -257,19 +287,20 @@ function seedFromUsername(username) {
     .reduce((sum, char) => sum + char.charCodeAt(0), 0);
 }
 
-// This function returns a supported option value with a fallback.
+// return the value if it's a known option, else the fallback
 function optionValue(value, options, fallback) {
   const cleanValue = String(value || "").trim().toLowerCase();
   return options.includes(cleanValue) ? cleanValue : fallback;
 }
 
+// pick a valid species, treating old "human" as "male"
 function characterSpeciesValue(value) {
   const cleanValue = String(value || "").trim().toLowerCase();
   if (cleanValue === "human") return "male";
   return optionValue(cleanValue, CHARACTER_SPECIES, DEFAULT_CHARACTER_SPEC.species);
 }
 
-// This function normalizes a complete character spec.
+// normalize a full character spec
 function normalizeCharacterSpec(spec = {}) {
   const species = characterSpeciesValue(spec.species);
   const bottom = optionValue(spec.bottom, CHARACTER_BOTTOMS, DEFAULT_CHARACTER_SPEC.bottom);
@@ -293,7 +324,7 @@ function normalizeCharacterSpec(spec = {}) {
   };
 }
 
-// This function builds the saved complete avatar id.
+// build the saved avatar id string
 function buildCharacterAvatar(spec) {
   const avatar = normalizeCharacterSpec(spec);
 
@@ -319,7 +350,7 @@ function buildCharacterAvatar(spec) {
   ].join(":");
 }
 
-// This function creates a stable default avatar from the username.
+// stable default avatar spec from the username
 function avatarSpecFromUsername(username) {
   const seed = seedFromUsername(username);
 
@@ -332,12 +363,12 @@ function avatarSpecFromUsername(username) {
   });
 }
 
-// This function creates a stable default avatar id from the username.
+// same but returns the id string
 function avatarFromUsername(username) {
   return buildCharacterAvatar(avatarSpecFromUsername(username));
 }
 
-// This function parses a Unity-built avatar id into its saved parts.
+// parse a unity builder avatar id into parts
 function parseBuilderAvatar(avatar) {
   const cleanAvatar = String(avatar || "").trim().toLowerCase();
   const parts = cleanAvatar.split(":");
@@ -371,7 +402,7 @@ function parseBuilderAvatar(avatar) {
   };
 }
 
-// This function parses a legacy character avatar id into its saved parts.
+// parse an old (v1) character avatar id into parts
 function parseLegacyCharacterAvatar(avatar) {
   const cleanAvatar = String(avatar || "").trim().toLowerCase();
   const parts = cleanAvatar.split(":");
@@ -430,7 +461,7 @@ function parseLegacyCharacterAvatar(avatar) {
   };
 }
 
-// This function parses a complete character avatar id into its saved parts.
+// parse a full (v2) character avatar id into parts
 function parseCharacterAvatar(avatar) {
   const cleanAvatar = String(avatar || "").trim().toLowerCase();
   const parts = cleanAvatar.split(":");
@@ -471,7 +502,7 @@ function parseCharacterAvatar(avatar) {
   };
 }
 
-// This function accepts known preset, old builder, and character avatar ids.
+// accept preset, builder, or character avatar ids
 function normalizeAvatar(avatar, username) {
   const cleanAvatar = String(avatar || "").trim().toLowerCase();
   const characterAvatar = parseCharacterAvatar(cleanAvatar);
@@ -497,16 +528,17 @@ function normalizeAvatar(avatar, username) {
   return avatarFromUsername(username);
 }
 
-// This function chooses a readable initial for the avatar badge.
+// pick a letter for the avatar badge
 function avatarInitial(username) {
   return String(username || "?").trim().charAt(0).toUpperCase() || "?";
 }
 
+// is this a base64 png data url?
 function isAvatarImage(value) {
   return /^data:image\/png;base64,[a-zA-Z0-9+/=]+$/.test(String(value || "").trim());
 }
 
-// This function uses the Unity-rendered PNG when available.
+// use the unity png if we have one, else the initial
 function renderAvatarBadge(username, className = "profile-avatar", avatarImage = "") {
   if (isAvatarImage(avatarImage)) {
     return `
@@ -523,7 +555,7 @@ function renderAvatarBadge(username, className = "profile-avatar", avatarImage =
   `;
 }
 
-// This function routes the current HTML page to its initializer.
+// send each page to its init function
 function routePage() {
   const page = document.body.dataset.page;
 
@@ -543,7 +575,7 @@ function routePage() {
   if (page === "report") initAdminPage(initReport);
 }
 
-// This function wires the login form to the auth API.
+// hook up the login form to the auth api
 function initLogin() {
   const form = document.querySelector("[data-login-form]");
 
@@ -569,7 +601,7 @@ function initLogin() {
   });
 }
 
-// This function wires the signup form and initial avatar choice to the auth API.
+// hook up signup form + initial avatar to the auth api
 function initSignup() {
   const form = document.querySelector("[data-signup-form]");
   syncSignupAvatarDraftFromUrl();
@@ -601,7 +633,7 @@ function initSignup() {
   });
 }
 
-// This function saves the logged-in user profile in local state.
+// save the logged-in user into local state
 function setSessionUser(username, role, userId, avatar, avatarImage = "", alertLocation = null) {
   const cleanRole = role === "admin" ? "admin" : "user";
 
@@ -619,7 +651,7 @@ function setSessionUser(username, role, userId, avatar, avatarImage = "", alertL
   state.groups = state.groups.map(group => ({ ...group, userRole: cleanRole }));
 }
 
-// This function loads the server session profile into local state.
+// pull the server session profile into local state
 async function loadSessionIntoState() {
   const profile = await getCurrentUserProfile();
 
@@ -633,7 +665,7 @@ async function loadSessionIntoState() {
   return profile;
 }
 
-// This function refreshes the visible groups for the current user.
+// refresh the user's groups
 async function refreshCurrentUserGroups(role = state.user?.role || "user") {
   const groups = await getCurrentUserGroups();
 
@@ -675,7 +707,7 @@ async function refreshCurrentUserGroups(role = state.user?.role || "user") {
   if (state.user) state.user.familyRoomId = activeGroup.id;
 }
 
-// This function disables or enables a form while a request is running.
+// lock/unlock a form while a request runs
 function setFormBusy(form, isBusy) {
   const submitButton = form.querySelector("button[type='submit']");
 
@@ -689,17 +721,17 @@ function setFormBusy(form, isBusy) {
   }
 }
 
-// This function shows an error message inside a form.
+// show an error in a form
 function showFormError(form, message) {
   showFormMessage(form, message, "auth-error");
 }
 
-// This function shows a success message inside a form.
+// show a success msg in a form
 function showFormSuccess(form, message) {
   showFormMessage(form, message, "auth-success");
 }
 
-// This function creates or updates a form message.
+// add or update the form message node
 function showFormMessage(form, message, className) {
   let messageNode = form.querySelector("[data-form-message]");
 
@@ -713,23 +745,32 @@ function showFormMessage(form, message, className) {
   messageNode.textContent = message;
 }
 
-// This function removes the current form message.
+// remove the form message
 function clearFormMessage(form) {
   form.querySelector("[data-form-message]")?.remove();
 }
 
-// This function turns auth errors into text safe for display.
-function readableAuthError(error) {
-  return error?.message || "Authentication failed. Please try again.";
+// pull a readable message out of an error, else use the fallback
+function readableError(error, fallback) {
+  if (typeof error === "string") {
+    return error;
+  }
+
+  return error?.message || fallback;
 }
 
-// This function protects admin-only pages before running their initializer.
+// auth error -> displayable text
+function readableAuthError(error) {
+  return readableError(error, "Authentication failed. Please try again.");
+}
+
+// guard admin-only pages, then run their init
 async function initAdminPage(initializer) {
   const allowed = await requireAdminAccess();
-  if (allowed && initializer) initializer();
+  if (allowed && initializer) await initializer();
 }
 
-// This function verifies that the logged-in user is an admin.
+// make sure the user is logged in + admin, else redirect
 async function requireAdminAccess() {
   try {
     const profile = await loadSessionIntoState();
@@ -754,13 +795,13 @@ async function requireAdminAccess() {
   }
 }
 
-// This function renders the current user summary text.
+// the little "hi user" greeting
 function renderCurrentUserSummary(node) {
   if (!node || !state.user) return;
   node.textContent = `היי ${state.user.username || state.user.name}, כיף שחזרת!`;
 }
 
-// This function renders the current user's avatar preview.
+// draw the current user's avatar preview + edit button
 function renderCurrentAvatar() {
   if (!state.user) return;
 
@@ -780,7 +821,7 @@ function renderCurrentAvatar() {
   });
 }
 
-// This function wires the avatar launch button to the Unity WebGL editor.
+// edit-avatar button opens the unity editor page
 function initUnityAvatarLaunch() {
   renderCurrentAvatar();
 
@@ -789,7 +830,7 @@ function initUnityAvatarLaunch() {
   }));
 }
 
-// This function starts the embedded Unity WebGL avatar editor page.
+// boot the embedded unity avatar editor page
 async function initUnityAvatarEditor() {
   const status = document.querySelector("[data-unity-status]");
   let profile = null;
@@ -808,7 +849,7 @@ async function initUnityAvatarEditor() {
   await loadUnityAvatarEditor(profile);
 }
 
-// This function reads Unity build URLs from the host element.
+// grab the unity build urls off the host element
 function getUnityHostConfig(host) {
   return {
     codeUrl: host.dataset.codeUrl,
@@ -819,7 +860,7 @@ function getUnityHostConfig(host) {
   };
 }
 
-// This function loads the Unity WebGL loader script.
+// load a script tag, resolve when ready
 function loadScript(src) {
   return new Promise((resolve, reject) => {
     const script = document.createElement("script");
@@ -831,7 +872,7 @@ function loadScript(src) {
   });
 }
 
-// This function loads the Unity instance and connects it to the web profile.
+// load the unity instance and hand it the web profile
 async function loadUnityAvatarEditor(profile) {
   const host = document.querySelector("[data-unity-host]");
   const canvas = document.querySelector("[data-unity-canvas]");
@@ -864,7 +905,7 @@ async function loadUnityAvatarEditor(profile) {
   }
 }
 
-// This function updates the visible Unity loading progress.
+// move the unity loading bar
 function updateUnityProgress(progress) {
   const progressBar = document.querySelector("[data-unity-progress] span");
 
@@ -873,7 +914,7 @@ function updateUnityProgress(progress) {
   }
 }
 
-// This function shows status text above the Unity editor.
+// status text above the unity editor
 function showUnityStatus(message, tone = "") {
   const status = document.querySelector("[data-unity-status]");
 
@@ -885,27 +926,27 @@ function showUnityStatus(message, tone = "") {
   status.textContent = message;
 }
 
-// This function shows local build instructions when the Unity build is missing.
+// show build instructions when the unity build is missing
 function showUnityBuildMissing(error) {
   const missing = document.querySelector("[data-unity-missing]");
   const host = document.querySelector("[data-unity-host]");
 
   host?.classList.add("unity-webgl-host-missing");
   missing?.classList.remove("hidden");
-  showUnityStatus(error?.message || "Unity WebGL build was not found", "warn");
+  showUnityStatus(readableError(error, "Unity WebGL build was not found"), "warn");
 }
 
-// This function reports Unity runtime startup errors without hiding them as missing files.
+// report a real unity startup error (not a missing-file one)
 function showUnityStartupError(error) {
   const missing = document.querySelector("[data-unity-missing]");
   const host = document.querySelector("[data-unity-host]");
 
   host?.classList.remove("unity-webgl-host-missing");
   missing?.classList.add("hidden");
-  showUnityStatus(error?.message || "Unity editor could not start", "warn");
+  showUnityStatus(readableError(error, "Unity editor could not start"), "warn");
 }
 
-// This function sends the current web profile into the running Unity instance.
+// send the web profile into the running unity instance
 function sendWebSessionToUnity(unityInstance, profile) {
   if (!unityInstance?.SendMessage) {
     return;
@@ -923,7 +964,7 @@ function sendWebSessionToUnity(unityInstance, profile) {
   }, 250);
 }
 
-// This function wires logout links that appear outside the groups screen.
+// wire logout links on pages other than groups
 function wireLogoutLink() {
   document.querySelector("[data-logout]")?.addEventListener("click", async event => {
     event.preventDefault();
@@ -940,7 +981,7 @@ function wireLogoutLink() {
   });
 }
 
-// This function wires the groups screen.
+// set up the groups screen
 async function initGroups() {
   const currentUser = document.querySelector("[data-current-user]");
   const createButton = document.querySelector("[data-admin-create-group]");
@@ -1062,7 +1103,7 @@ async function initGroups() {
   });
 }
 
-// This function opens the selected group.
+// open the picked group
 function openGroup(groupId) {
   const group = state.groups.find(item => item.id === groupId);
   if (!group) return;
@@ -1077,7 +1118,7 @@ function openGroup(groupId) {
   window.location.href = "board.html";
 }
 
-// This function shows the groups on the groups page.
+// draw the group list
 function renderGroupsList() {
   const container = document.querySelector("[data-groups-list]");
   if (!container) return;
@@ -1130,7 +1171,7 @@ function renderGroupsList() {
   });
 }
 
-// This function creates a new group for the admin.
+// create-group page (admin only)
 async function initCreateGroup() {
   const form = document.querySelector("[data-create-group-form]");
   if (!form) return;
@@ -1174,7 +1215,7 @@ async function initCreateGroup() {
   });
 }
 
-// This function wires the active group board screen.
+// set up the group board screen
 async function initBoard() {
   try {
     const profile = await loadSessionIntoState();
@@ -1228,12 +1269,17 @@ async function initBoard() {
   }
 
   document.querySelector("[data-trigger-emergency]")?.addEventListener("click", () => {
-    startEmergency();
+    startEmergency(null, "real");
+    window.location.href = "emergency.html";
+  });
+
+  document.querySelector("[data-trigger-training]")?.addEventListener("click", () => {
+    startEmergency(null, "training");
     window.location.href = "emergency.html";
   });
 
   document.querySelector("[data-open-oref-emergency]")?.addEventListener("click", () => {
-    startEmergency(state.orefStatus);
+    startEmergency(state.orefStatus, "real");
     window.location.href = "emergency.html";
   });
 
@@ -1254,21 +1300,22 @@ async function initBoard() {
 
   if (isCurrentUserAdminForActiveGroup()) {
     startBoardRequestsPolling();
+    renderAdminActivities(group);
   }
 }
 
-// This function returns the currently selected group.
+// the currently selected group
 function getActiveGroup() {
   return state.groups.find(group => group.id === state.activeGroupId) || state.groups[0] || null;
 }
 
-// This function checks admin rights for the currently selected group.
+// am i admin of the active group?
 function isCurrentUserAdminForActiveGroup() {
   const group = getActiveGroup();
   return Boolean(group) && state.user?.role === "admin" && group.userRole === "admin";
 }
 
-// This function shows the members of the active group.
+// draw the active group's members
 function renderBoardMembers(group) {
   const container = document.querySelector("[data-group-members]");
   if (!container || !group) return;
@@ -1300,12 +1347,12 @@ function renderBoardMembers(group) {
   }).join("");
 }
 
-// This function returns one member's live HFC status.
+// one member's live HFC status
 function getOrefMemberStatus(memberId) {
   return (state.orefStatus?.members || []).find(member => member.memberId === memberId) || null;
 }
 
-// This function maps a live HFC member status to an existing visual state.
+// HFC member status -> css visual state
 function orefMemberStatusClass(memberStatus, location = null, showLocation = false) {
   if (memberStatus?.status === "alert") return "at_risk";
   if (showLocation && (memberStatus?.status === "clear" || location?.areaName)) return "located";
@@ -1314,7 +1361,7 @@ function orefMemberStatusClass(memberStatus, location = null, showLocation = fal
   return "offline";
 }
 
-// This function maps a live HFC member status to display text.
+// HFC member status -> display text
 function orefMemberStatusLabel(memberStatus, location = null) {
   if (memberStatus?.status === "alert") return "ALERT";
   const areaName = alertLocationLabel(memberStatus?.alertLocation || location);
@@ -1322,12 +1369,12 @@ function orefMemberStatusLabel(memberStatus, location = null) {
   return "No area";
 }
 
-// This function returns the most readable saved Home Front Command area name.
+// best area name we have (hebrew first)
 function alertLocationLabel(location) {
   return location?.areaNameHebrew || location?.areaName || "";
 }
 
-// This function shows pending join requests for the active group on the board.
+// draw pending join requests on the board
 function renderBoardPendingRequests(group) {
   const container = document.querySelector("[data-pending-requests-list]");
   if (!container || !group) return;
@@ -1386,7 +1433,180 @@ function renderBoardPendingRequests(group) {
   });
 }
 
-// This function polls the server every 15 seconds to pick up new join requests and member changes.
+// draw the admin's saved games for the active group
+async function renderAdminActivities(group = getActiveGroup()) {
+  const container = document.querySelector("[data-admin-activity-list]");
+  if (!container || !group) return;
+
+  container.innerHTML = `<p class="notice">Loading games...</p>`;
+
+  try {
+    const activities = await getGroupActivities(group.id);
+    state.groupActivities = activities;
+    saveState();
+
+    if (!activities.length) {
+      container.innerHTML = `
+        <p class="notice">No games yet. Create trivia questions or a room mission for this group.</p>
+        <div class="button-grid">
+          <a class="btn btn-secondary" href="trivia.html">Trivia</a>
+          <a class="btn btn-secondary" href="missions.html">Mission</a>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = activities.map(activity => {
+      const modes = activity.activeModes || [];
+      const assigned = modes.includes("real") && modes.includes("training");
+      return `
+      <article class="added-item activity-admin-item">
+        <div>
+          <strong>${escapeHtml(activity.title)}</strong>
+          <span>${escapeHtml(activity.type === "trivia" ? "Trivia" : "Room mission")} - ${activityItemCount(activity)} item(s)</span>
+          <span class="activity-mode-line">${assigned ? "Assigned to alarm + training" : "Not assigned"}</span>
+        </div>
+        <div class="activity-action-grid">
+          <button class="mini-btn ${assigned ? "active safe" : ""}" type="button" data-assign-activity="${activity.id}" data-assigned="${assigned ? "1" : ""}" title="Assign to alarm and training">${assigned ? "✓ Assigned" : "📌 Assign"}</button>
+          <button class="mini-btn icon-btn danger" type="button" data-delete-activity="${activity.id}" data-activity-title="${escapeHtml(activity.title)}" aria-label="Delete" title="Delete">🗑</button>
+        </div>
+      </article>
+    `;
+    }).join("");
+
+    container.querySelectorAll("[data-assign-activity]").forEach(button => {
+      button.addEventListener("click", async () => {
+        const activityId = button.dataset.assignActivity;
+        const isAssigned = button.dataset.assigned === "1";
+        await runBoardActivityAction(button, async () => {
+          if (isAssigned) {
+            await deactivateGroupActivity(group.id, activityId, "real");
+            await deactivateGroupActivity(group.id, activityId, "training");
+          } else {
+            await activateGroupActivity(group.id, activityId, "real");
+            await activateGroupActivity(group.id, activityId, "training");
+          }
+        });
+      });
+    });
+
+    container.querySelectorAll("[data-delete-activity]").forEach(button => {
+      button.addEventListener("click", async () => {
+        const activityId = button.dataset.deleteActivity;
+        const title = button.dataset.activityTitle || "this game";
+        if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return;
+        await runBoardActivityAction(button, async () => {
+          await deleteGroupActivity(group.id, activityId);
+        });
+      });
+    });
+  } catch (error) {
+    container.innerHTML = `<p class="notice warn">${escapeHtml(readableAuthError(error))}</p>`;
+  }
+}
+
+// run an admin game action then refresh the list
+async function runBoardActivityAction(button, action) {
+  const group = getActiveGroup();
+  if (!group) return;
+
+  try {
+    button.disabled = true;
+    await action();
+    await renderAdminActivities(group);
+  } catch (error) {
+    alert(readableAuthError(error));
+    button.disabled = false;
+  }
+}
+
+// how many items in this activity (questions or tasks)
+function activityItemCount(activity) {
+  if (activity.type === "trivia") {
+    return activity.payload?.questions?.length || 0;
+  }
+
+  return activity.payload?.tasks?.length || 0;
+}
+
+// text for which modes a game is active in
+function activityModeText(modes = []) {
+  const cleanModes = ACTIVITY_MODES.filter(mode => modes.includes(mode));
+  return cleanModes.length ? `Active for: ${cleanModes.join(", ")}` : "Not active";
+}
+
+// draw submitted results waiting on admin review
+async function renderAdminActivityResults(group = getActiveGroup()) {
+  const container = document.querySelector("[data-admin-results-list]");
+  if (!container || !group) return;
+
+  container.innerHTML = `<p class="notice">Loading results...</p>`;
+
+  try {
+    const results = await getGroupActivityResults(group.id);
+    state.activityResults = results;
+    saveState();
+
+    if (!results.length) {
+      container.innerHTML = `<p class="notice">No game results yet.</p>`;
+      return;
+    }
+
+    container.innerHTML = results.map(result => `
+      <article class="added-item activity-result-item">
+        <div>
+          <strong>${escapeHtml(result.username)} - ${escapeHtml(result.activity?.title || "Game")}</strong>
+          <span>${escapeHtml(result.mode)} - ${escapeHtml(result.status)} - ${resultSummaryText(result)}</span>
+        </div>
+        ${result.status === "pending" ? `
+          <div class="activity-action-grid">
+            <button class="mini-btn active safe" type="button" data-review-result="${result.id}" data-review-status="approved">Approve</button>
+            <button class="mini-btn active at_risk" type="button" data-review-result="${result.id}" data-review-status="rejected">Reject</button>
+          </div>
+        ` : ""}
+      </article>
+    `).join("");
+
+    container.querySelectorAll("[data-review-result]").forEach(button => {
+      button.addEventListener("click", async () => {
+        try {
+          button.disabled = true;
+          await reviewGroupActivityResult(
+            group.id,
+            button.dataset.reviewResult,
+            button.dataset.reviewStatus
+          );
+          await renderAdminActivityResults(group);
+        } catch (error) {
+          alert(readableAuthError(error));
+          button.disabled = false;
+        }
+      });
+    });
+  } catch (error) {
+    container.innerHTML = `<p class="notice warn">${escapeHtml(readableAuthError(error))}</p>`;
+  }
+}
+
+// short summary text for a result
+function resultSummaryText(result) {
+  const payload = result.payload || {};
+
+  if (payload.kind === "trivia") {
+    return `${payload.correctCount || 0}/${payload.totalQuestions || 0} correct`;
+  }
+
+  if (payload.kind === "mission") {
+    const tasks = Array.isArray(payload.tasks) ? payload.tasks : [];
+    const labels = { door: "door", window: "window", radio: "radio", board: "exercises" };
+    const done = tasks.map(task => labels[task] || task).join(", ");
+    return done ? `Completed: ${done}` : "Room tasks completed";
+  }
+
+  return "Submitted";
+}
+
+// check the server every 15s for new join requests
 function startBoardRequestsPolling() {
   const INTERVAL_MS = 15000;
   let previousCount = getActiveGroup()?.pendingRequests?.length ?? 0;
@@ -1408,7 +1628,7 @@ function startBoardRequestsPolling() {
 
       renderBoardMembers(group);
     } catch {
-      // This retry loop lets the next poll recover from a transient request error.
+      // ignore, next poll retries
     }
   }, INTERVAL_MS);
 
@@ -1481,7 +1701,73 @@ function showDrillOverlay() {
   }, 3000);
 }
 
-// This function starts automatic GPS alert-area matching for the current user.
+// This function polls the server every 15 seconds so regular members see up-to-date member locations and avatars.
+function startMembersPolling() {
+  const INTERVAL_MS = 15000;
+
+  const intervalId = setInterval(async () => {
+    if (document.hidden) return;
+    try {
+      await refreshCurrentUserGroups("user");
+      saveState();
+      renderBoardMembers(getActiveGroup());
+    } catch {
+      // silently ignore polling errors
+    }
+  }, INTERVAL_MS);
+
+  window.addEventListener("beforeunload", () => clearInterval(intervalId));
+}
+
+// This function polls the server every 5 seconds to detect when an admin starts a drill.
+// It snapshots the drill state on the first poll so it only alarms on transitions
+// (inactive → active), not on a drill that was already running when the user loaded.
+function startDrillPolling() {
+  const INTERVAL_MS = 5000;
+  let initialized = false;
+  let wasActive = false;
+
+  async function poll() {
+    if (document.hidden) return;
+    try {
+      const groups = await getCurrentUserGroups();
+      const activeGroupId = getActiveGroup()?.id;
+      const group = (groups || []).find(g => g.id === activeGroupId);
+      const isActive = group?.drillActive ?? false;
+
+      if (!initialized) {
+        initialized = true;
+        wasActive = isActive;
+        return;
+      }
+
+      if (isActive && !wasActive) {
+        clearInterval(intervalId);
+        showDrillOverlay();
+      }
+      wasActive = isActive;
+    } catch {
+      // silently ignore polling errors
+    }
+  }
+
+  poll();
+  const intervalId = setInterval(poll, INTERVAL_MS);
+  window.addEventListener("beforeunload", () => clearInterval(intervalId));
+}
+
+// This function shows the drill overlay and redirects to practice after a short delay.
+function showDrillOverlay() {
+  const overlay = document.querySelector("[data-drill-overlay]");
+  if (overlay) {
+    overlay.classList.remove("hidden");
+  }
+  setTimeout(() => {
+    window.location.href = "practice.html";
+  }, 3000);
+}
+
+// kick off auto gps alert-area matching
 function initAlertLocationControls() {
   if (!state.user) {
     return;
@@ -1490,7 +1776,7 @@ function initAlertLocationControls() {
   void enableGpsAlertLocation();
 }
 
-// This function enables automatic GPS updates for the user's alert area.
+// get gps once, save it, then start watching
 async function enableGpsAlertLocation() {
   if (!navigator.geolocation) {
     renderGpsLocationStatus("GPS is not available in this browser", "warn");
@@ -1507,7 +1793,7 @@ async function enableGpsAlertLocation() {
   }
 }
 
-// This function gets the browser's current GPS position as a promise.
+// getCurrentPosition wrapped in a promise
 function getCurrentGpsPosition() {
   return new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(resolve, reject, {
@@ -1518,7 +1804,7 @@ function getCurrentGpsPosition() {
   });
 }
 
-// This function starts watching GPS and updates the saved HFC area as the user moves.
+// watch gps and update the saved area as the user moves
 function startGpsAlertLocationWatch() {
   if (!navigator.geolocation || orefGpsWatchId !== null) {
     return;
@@ -1545,7 +1831,7 @@ function startGpsAlertLocationWatch() {
   );
 }
 
-// This function stops the current GPS watch when permission is revoked or the page closes.
+// stop the gps watch (permission revoked / page closing)
 function stopGpsAlertLocationWatch() {
   if (!navigator.geolocation || orefGpsWatchId === null) {
     return;
@@ -1555,7 +1841,7 @@ function stopGpsAlertLocationWatch() {
   orefGpsWatchId = null;
 }
 
-// This function resolves one GPS position to an HFC area and saves it.
+// resolve a gps position to an HFC area and save it
 async function saveGpsAlertLocation(position, { force = false } = {}) {
   const coords = position.coords;
   const now = Date.now();
@@ -1568,7 +1854,7 @@ async function saveGpsAlertLocation(position, { force = false } = {}) {
     const elapsed = now - lastGpsLocationSave.at;
     const distance = distanceMeters(lastGpsLocationSave.coords, nextLocation);
 
-    // Avoid hammering the gateway while still updating quickly when the user moves across areas.
+    // don't spam the gateway, but still update fast when they actually move
     if (elapsed < GPS_LOCATION_SAVE_INTERVAL_MS && distance < GPS_LOCATION_DISTANCE_THRESHOLD_METERS) {
       return state.user?.alertLocation || null;
     }
@@ -1595,7 +1881,7 @@ async function saveGpsAlertLocation(position, { force = false } = {}) {
   return alertLocation;
 }
 
-// This function renders short GPS state near the location controls.
+// little gps status line near the location controls
 function renderGpsLocationStatus(message, kind = "") {
   const node = document.querySelector("[data-alert-location-status]");
   if (!node) return;
@@ -1610,7 +1896,7 @@ function renderGpsLocationStatus(message, kind = "") {
   node.className = `notice ${kind}`.trim();
 }
 
-// This function turns browser geolocation errors into short display text.
+// geolocation error -> short text
 function readableGpsError(error) {
   if (error?.code === 1) return "GPS permission was denied";
   if (error?.code === 2) return "GPS location is unavailable";
@@ -1618,7 +1904,7 @@ function readableGpsError(error) {
   return error?.message || "Could not use GPS";
 }
 
-// This function calculates distance between two GPS coordinates.
+// distance between two gps coords (haversine)
 function distanceMeters(a, b) {
   const radius = 6371000;
   const lat1 = toRadians(a.latitude);
@@ -1631,12 +1917,12 @@ function distanceMeters(a, b) {
   return 2 * radius * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
-// This function converts degrees to radians.
+// degrees -> radians
 function toRadians(value) {
   return value * Math.PI / 180;
 }
 
-// This function updates the active group member after the user saves a location.
+// update my member entry after saving a location
 function updateActiveMemberAlertLocation(alertLocation) {
   const group = getActiveGroup();
   if (!group || !state.user?.userId) return;
@@ -1646,7 +1932,7 @@ function updateActiveMemberAlertLocation(alertLocation) {
   ));
 }
 
-// This function starts live HFC polling while the board or emergency screen is open.
+// poll live HFC status while board/emergency is open
 function startOrefStatusPolling() {
   const group = getActiveGroup();
   if (!group) return;
@@ -1665,7 +1951,7 @@ function startOrefStatusPolling() {
   window.addEventListener("beforeunload", () => window.clearInterval(intervalId));
 }
 
-// This function refreshes live HFC status for the active group.
+// refresh live HFC status for the active group
 async function refreshOrefStatus() {
   const group = getActiveGroup();
   if (!group) return null;
@@ -1696,7 +1982,7 @@ async function refreshOrefStatus() {
   }
 }
 
-// This function renders live HFC state in the board and emergency screens.
+// draw the HFC summary on board + emergency screens
 function renderOrefStatus(status = state.orefStatus, error = null) {
   const summary = document.querySelector("[data-oref-alert-summary]");
   const refreshState = document.querySelector("[data-oref-refresh-state]");
@@ -1736,7 +2022,7 @@ function renderOrefStatus(status = state.orefStatus, error = null) {
   renderEmergencyOrefSummary(status);
 }
 
-// This function renders the real-alert summary on the emergency screen.
+// real-alert summary line on the emergency screen
 function renderEmergencyOrefSummary(status = state.emergency?.orefStatus || state.orefStatus) {
   const node = document.querySelector("[data-oref-emergency-summary]");
   if (!node) return;
@@ -1756,8 +2042,149 @@ function renderEmergencyOrefSummary(status = state.emergency?.orefStatus || stat
   node.classList.remove("hidden");
 }
 
-// This function wires the trivia question builder.
+// a fresh blank activity draft
+function createActivityDraft(type) {
+  const group = getActiveGroup();
+
+  return {
+    exercises: [],
+    groupId: group?.id || "",
+    questions: [],
+    tasks: [],
+    title: type === "trivia" ? "New trivia game" : "New mission room",
+    type
+  };
+}
+
+// get the current draft, making a new one if type/group changed
+function getActivityDraft(type) {
+  const group = getActiveGroup();
+
+  if (
+    !state.activityDraft ||
+    state.activityDraft.type !== type ||
+    state.activityDraft.groupId !== group?.id
+  ) {
+    state.activityDraft = createActivityDraft(type);
+  }
+
+  return state.activityDraft;
+}
+
+// clear the draft once it's saved
+function clearActivityDraft(type) {
+  if (state.activityDraft?.type === type) {
+    state.activityDraft = null;
+  }
+}
+
+// mission target with a safe fallback to "custom"
+function normalizeMissionTarget(value) {
+  const target = String(value || "").trim().toLowerCase();
+  return MISSION_TARGETS.includes(target) ? target : "custom";
+}
+
+// guess the room object for old missions with no target
+function inferMissionTarget(mission) {
+  if (mission?.target) {
+    return normalizeMissionTarget(mission.target);
+  }
+
+  const text = `${mission?.title || ""} ${mission?.description || ""}`.toLowerCase();
+
+  if (text.includes("radio")) return "radio";
+  if (text.includes("door")) return "door";
+  if (text.includes("window") || text.includes("חלון")) return "window";
+  return "safe-zone";
+}
+
+// save an authored activity to the active group
+async function saveActivityDraft(type, button) {
+  const group = getActiveGroup();
+  const draft = getActivityDraft(type);
+
+  if (!group) {
+    throw new Error("Choose a group before saving a game");
+  }
+
+  const activity = {
+    title: cleanActivityTitle(draft.title, type),
+    type
+  };
+
+  if (type === "trivia") {
+    activity.questions = draft.questions;
+
+    if (!activity.questions.length) {
+      throw new Error("Add at least one question");
+    }
+  } else {
+    activity.tasks = draft.tasks;
+    activity.exercises = draft.exercises;
+
+    if (!activity.tasks.length) {
+      throw new Error("Choose at least one task for the room");
+    }
+
+    if (activity.tasks.includes("board") && !activity.exercises.length) {
+      throw new Error("Add at least one exercise for the board");
+    }
+  }
+
+  if (button) {
+    button.disabled = true;
+    button.dataset.originalText = button.dataset.originalText || button.textContent;
+    button.textContent = "Saving...";
+  }
+
+  try {
+    const saved = await createGroupActivity(group.id, activity);
+    clearActivityDraft(type);
+    saveState();
+    if (button) button.textContent = "Saved";
+    window.setTimeout(() => {
+      window.location.href = "board.html";
+    }, 650);
+    return saved;
+  } catch (error) {
+    if (button) {
+      button.disabled = false;
+      button.textContent = button.dataset.originalText || "Save";
+    }
+
+    throw error;
+  }
+}
+
+// fallback title if empty
+function cleanActivityTitle(title, type) {
+  const cleanTitle = String(title || "").trim();
+  if (cleanTitle) return cleanTitle;
+  return type === "trivia" ? "Trivia game" : "Room mission";
+}
+
+// set up the trivia question builder
 function initTrivia() {
+  const draft = getActivityDraft("trivia");
+  const titleInput = document.querySelector("[data-activity-title]");
+
+  if (titleInput) {
+    titleInput.value = draft.title;
+    titleInput.addEventListener("input", () => {
+      draft.title = titleInput.value;
+      saveState();
+    });
+  }
+
+  document.querySelector("[data-save-questions]")?.addEventListener("click", async event => {
+    event.stopImmediatePropagation();
+    try {
+      await saveActivityDraft("trivia", event.currentTarget);
+    } catch (error) {
+      alert(readableAuthError(error));
+    }
+  }, true);
+
   renderQuestionList();
 
   document.querySelector("[data-trivia-form]")?.addEventListener("submit", event => {
@@ -1776,7 +2203,7 @@ function initTrivia() {
     };
 
     if (!question.question || question.answers.some(answer => !answer)) return;
-    state.questions.push(question);
+    draft.questions.push(question);
     saveState();
     renderQuestionList();
   });
@@ -1784,33 +2211,177 @@ function initTrivia() {
   document.querySelector("[data-save-questions]")?.addEventListener("click", event => {
     event.currentTarget.textContent = "×”×©××œ×•×Ÿ × ×©×ž×¨ ×ž×§×•×ž×™×ª";
   });
+  document.querySelector("[data-save-questions]")?.addEventListener("click", async event => {
+    try {
+      await saveActivityDraft("trivia", event.currentTarget);
+    } catch (error) {
+      alert(readableAuthError(error));
+    }
+  });
 }
 
-// This function wires the mission builder.
+// set up the mission-room builder: pick tasks + add board exercises
 function initMissions() {
-  renderMissionList();
+  const draft = getActivityDraft("mission");
+  draft.tasks = Array.isArray(draft.tasks) ? draft.tasks : [];
+  draft.exercises = Array.isArray(draft.exercises) ? draft.exercises : [];
 
-  document.querySelector("[data-mission-form]")?.addEventListener("submit", event => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const mission = {
-      id: `m${Date.now()}`,
-      title: form.title.value.trim(),
-      description: form.description.value.trim()
-    };
+  const titleInput = document.querySelector("[data-activity-title]");
+  if (titleInput) {
+    titleInput.value = draft.title;
+    titleInput.addEventListener("input", () => {
+      draft.title = titleInput.value;
+      saveState();
+    });
+  }
 
-    if (!mission.title || !mission.description) return;
-    state.missions.push(mission);
-    saveState();
-    renderMissionList();
+  const exerciseEditor = document.querySelector("[data-exercise-editor]");
+  // only show the exercise editor when the board task is picked
+  const syncExerciseEditor = () => {
+    if (exerciseEditor) {
+      exerciseEditor.hidden = !draft.tasks.includes("board");
+    }
+  };
+
+  document.querySelectorAll("[data-task]").forEach(checkbox => {
+    const task = checkbox.dataset.task;
+    checkbox.checked = draft.tasks.includes(task);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) {
+        if (!draft.tasks.includes(task)) draft.tasks.push(task);
+      } else {
+        draft.tasks = draft.tasks.filter(item => item !== task);
+      }
+      saveState();
+      syncExerciseEditor();
+    });
   });
 
-  document.querySelector("[data-save-missions]")?.addEventListener("click", event => {
-    event.currentTarget.textContent = "×”×ž×©×™×ž×•×ª × ×©×ž×¨×• ×ž×§×•×ž×™×ª";
+  syncExerciseEditor();
+  renderExerciseList();
+
+  // auto-fill the answer if there's math in the question (e.g. "how much is 7 + 8?" -> 15)
+  const exerciseQuestionInput = document.querySelector("[data-exercise-question]");
+  const exerciseAnswerInput = document.querySelector("[data-exercise-answer]");
+  exerciseQuestionInput?.addEventListener("input", () => {
+    const computed = computeExerciseAnswer(exerciseQuestionInput.value);
+    if (computed !== null && exerciseAnswerInput) {
+      exerciseAnswerInput.value = computed;
+    }
+  });
+
+  document.querySelector("[data-add-exercise]")?.addEventListener("click", () => {
+    // only add exercises when the board task is on
+    if (!draft.tasks.includes("board")) return;
+
+    const questionInput = document.querySelector("[data-exercise-question]");
+    const answerInput = document.querySelector("[data-exercise-answer]");
+    const question = questionInput?.value.trim() || "";
+    const answer = answerInput?.value.trim() || "";
+
+    if (!question) return;
+
+    draft.exercises.push({ answer, question });
+    saveState();
+    renderExerciseList();
+
+    if (questionInput) questionInput.value = "";
+    if (answerInput) answerInput.value = "";
+    questionInput?.focus();
+  });
+
+  document.querySelector("[data-save-missions]")?.addEventListener("click", async event => {
+    try {
+      await saveActivityDraft("mission", event.currentTarget);
+    } catch (error) {
+      alert(readableAuthError(error));
+    }
   });
 }
 
-// This function wires the practice flow.
+// draw the board exercises in the current draft
+function renderExerciseList() {
+  const container = document.querySelector("[data-exercise-list]");
+  if (!container) return;
+
+  const exercises = state.activityDraft?.type === "mission"
+    ? (state.activityDraft.exercises || [])
+    : [];
+
+  if (!exercises.length) {
+    container.innerHTML = `<p class="notice">No exercises yet.</p>`;
+    return;
+  }
+
+  container.innerHTML = exercises.map((exercise, index) => `
+    <article class="added-item">
+      <strong>${index + 1}. ${escapeHtml(exercise.question)}</strong>
+      <span>Answer: ${escapeHtml(exercise.answer || "(any answer accepted)")}</span>
+      <button class="mini-btn" type="button" data-remove-exercise="${index}">Remove</button>
+    </article>
+  `).join("");
+
+  container.querySelectorAll("[data-remove-exercise]").forEach(button => {
+    button.addEventListener("click", () => {
+      const index = Number(button.dataset.removeExercise);
+      if (state.activityDraft?.exercises) {
+        state.activityDraft.exercises.splice(index, 1);
+        saveState();
+        renderExerciseList();
+      }
+    });
+  });
+}
+
+// find math in the text and return the answer as text, null if there's none.
+// handles + - * / and × ÷
+function computeExerciseAnswer(text) {
+  const normalized = String(text || "")
+    .replace(/×/g, "*")
+    .replace(/÷/g, "/");
+
+  const match = normalized.match(/\d+(?:\.\d+)?(?:\s*[-+*/]\s*\d+(?:\.\d+)?)+/);
+  if (!match) {
+    return null;
+  }
+
+  const value = evaluateArithmetic(match[0]);
+  if (value === null || !isFinite(value)) {
+    return null;
+  }
+
+  // round off float noise like 0.1 + 0.2
+  return String(Math.round(value * 1e6) / 1e6);
+}
+
+// eval a simple + - * / expression with normal precedence
+function evaluateArithmetic(expression) {
+  const tokens = expression.match(/\d+(?:\.\d+)?|[-+*/]/g);
+  if (!tokens || tokens.length < 3) {
+    return null;
+  }
+
+  // do * and / first, collecting terms to add up
+  const terms = [parseFloat(tokens[0])];
+  for (let i = 1; i < tokens.length - 1; i += 2) {
+    const operator = tokens[i];
+    const number = parseFloat(tokens[i + 1]);
+
+    if (operator === "*") {
+      terms[terms.length - 1] *= number;
+    } else if (operator === "/") {
+      terms[terms.length - 1] /= number;
+    } else if (operator === "+") {
+      terms.push(number);
+    } else if (operator === "-") {
+      terms.push(-number);
+    }
+  }
+
+  return terms.reduce((sum, term) => sum + term, 0);
+}
+
+// set up the practice flow
 function initPractice() {
   const isAdmin = isCurrentUserAdminForActiveGroup();
 
@@ -1924,13 +2495,13 @@ function initMemberPractice() {
   });
 }
 
-// This function wires the emergency check-in flow.
+// set up the emergency check-in flow
 async function initEmergency() {
   try {
     await loadSessionIntoState();
     saveState();
   } catch {
-    // Emergency mode can still show the locally stored event if the session refresh fails.
+    // if the refresh fails we just use the locally stored event
   }
 
   if (!state.emergency?.active) {
@@ -1960,12 +2531,18 @@ async function initEmergency() {
   });
 }
 
-// This function starts the unlocked activity game.
-function initGame() {
-  renderGame();
+// start the unlocked activity game
+async function initGame() {
+  try {
+    await loadSessionIntoState();
+    saveState();
+  } catch {
+  }
+
+  await renderGame();
 }
 
-// This function renders the emergency summary screen.
+// draw the emergency summary screen
 function initSummary() {
   const container = document.querySelector("[data-summary-list]");
   if (!container) return;
@@ -1987,7 +2564,7 @@ function initSummary() {
   }).join("");
 }
 
-// This function wires the report member selector.
+// set up the report member dropdown
 function initReport() {
   const select = document.querySelector("[data-report-member]");
   if (!select) return;
@@ -2000,7 +2577,7 @@ function initReport() {
   renderReport(select.value || state.familyMembers[0]?.id);
 }
 
-// This function renders the local family member cards.
+// draw the local family member cards
 function renderFamilyList(container) {
   if (!container) return;
 
@@ -2016,12 +2593,20 @@ function renderFamilyList(container) {
   `).join("");
 }
 
-// This function renders the saved trivia questions.
+// draw the saved trivia questions
 function renderQuestionList() {
   const container = document.querySelector("[data-question-list]");
   if (!container) return;
+  const questions = state.activityDraft?.type === "trivia"
+    ? state.activityDraft.questions
+    : state.questions;
 
-  container.innerHTML = state.questions.map((question, index) => `
+  if (!questions.length) {
+    container.innerHTML = `<p class="notice">No questions yet.</p>`;
+    return;
+  }
+
+  container.innerHTML = questions.map((question, index) => `
     <article class="added-item">
       <strong>${index + 1}. ${escapeHtml(question.question)}</strong>
       <span>${escapeHtml(question.answers[question.correctAnswerIndex])} ×ž×¡×•×ž× ×ª ×›×ª×©×•×‘×” × ×›×•× ×”.</span>
@@ -2029,20 +2614,28 @@ function renderQuestionList() {
   `).join("");
 }
 
-// This function renders the saved missions.
+// draw the saved missions
 function renderMissionList() {
   const container = document.querySelector("[data-mission-list]");
   if (!container) return;
+  const missions = state.activityDraft?.type === "mission"
+    ? state.activityDraft.missions
+    : state.missions;
 
-  container.innerHTML = state.missions.map((mission, index) => `
+  if (!missions.length) {
+    container.innerHTML = `<p class="notice">No missions yet.</p>`;
+    return;
+  }
+
+  container.innerHTML = missions.map((mission, index) => `
     <article class="added-item">
       <strong>${index + 1}. ${escapeHtml(mission.title)}</strong>
-      <span>${escapeHtml(mission.description)}</span>
+      <span>${escapeHtml(mission.description)} (${escapeHtml(inferMissionTarget(mission))})</span>
     </article>
   `).join("");
 }
 
-// This function renders the active practice question.
+// draw the current practice question
 function renderPracticeQuestion() {
   const container = document.querySelector("[data-practice-question]");
   const question = state.questions[0] || DEFAULT_QUESTIONS[0];
@@ -2078,7 +2671,7 @@ function renderPracticeQuestion() {
   });
 }
 
-// This function saves the practice baseline and shows its summary.
+// save the practice baseline and show the summary
 function completePractice() {
   const session = state.practiceSession || {
     startedAt: Date.now() - 4000,
@@ -2116,12 +2709,15 @@ function completePractice() {
   summary.classList.remove("hidden");
 }
 
-// This function starts emergency mode and resets emergency telemetry.
-function startEmergency(orefStatus = null) {
+// start emergency mode + reset telemetry
+function startEmergency(orefStatus = null, trigger = null) {
+  const cleanTrigger = trigger || (orefStatus?.hasGroupAlert ? "pikud_haoref" : "real");
+
   state.familyMembers = buildEmergencyMembers(orefStatus);
   state.emergency = {
     active: true,
-    trigger: orefStatus?.hasGroupAlert ? "pikud_haoref" : "manual",
+    trigger: cleanTrigger,
+    activityMode: cleanTrigger === "training" ? "training" : "real",
     orefStatus: orefStatus || null,
     startedAt: Date.now(),
     checkIns: {},
@@ -2135,13 +2731,20 @@ function startEmergency(orefStatus = null) {
       movementLevel: round(0.58 + Math.random() * 0.22)
     },
     missionCompletedAt: null,
+    missionIndex: 0,
+    missionResults: [],
     activityStartedAt: null,
-    activityAnswer: null
+    activityAnswer: null,
+    activityQueue: [],
+    activityQueueIndex: 0,
+    submittedResults: {},
+    triviaAnswers: [],
+    triviaIndex: 0
   };
   saveState();
 }
 
-// This function creates the emergency member list from the active group and live alert state.
+// build the emergency member list from the group + live alert state
 function buildEmergencyMembers(orefStatus = null) {
   const group = getActiveGroup();
 
@@ -2169,12 +2772,12 @@ function buildEmergencyMembers(orefStatus = null) {
   });
 }
 
-// This function returns the current user's member id in the emergency list.
+// my member id in the emergency list
 function currentFamilyMemberId() {
   return state.user?.userId || "1";
 }
 
-// This function renders the emergency check-in state.
+// draw the emergency check-in state
 function renderEmergency() {
   renderFamilyList(document.querySelector("[data-emergency-family]"));
   renderEmergencyOrefSummary();
@@ -2206,7 +2809,7 @@ function renderEmergency() {
   message.className = "notice danger";
 }
 
-// This function marks one local family member as safe.
+// mark a family member safe
 function markMemberSafe(id) {
   const member = state.familyMembers.find(item => item.id === id);
   if (!member || member.status === "safe") return;
@@ -2214,7 +2817,7 @@ function markMemberSafe(id) {
   state.emergency.checkIns[id] = formatSeconds(secondsSince(state.emergency.startedAt));
 }
 
-// This function simulates other family members checking in.
+// fake the other members checking in
 function simulateFamilyCheckIns() {
   const currentId = currentFamilyMemberId();
   const pending = state.familyMembers.filter(member => member.status !== "safe" && member.id !== currentId);
@@ -2227,8 +2830,8 @@ function simulateFamilyCheckIns() {
   });
 }
 
-// This function renders the post-check-in game.
-function renderGame() {
+// old local-only game screen (kept around as a fallback)
+function renderLegacyLocalGame() {
   const locked = document.querySelector("[data-game-locked]");
   const unlocked = document.querySelector("[data-game-unlocked]");
   const area = document.querySelector("[data-game-area]");
@@ -2301,7 +2904,465 @@ function renderGame() {
   });
 }
 
-// This function renders the stress report for one member.
+// draw the active group game for the current alarm mode
+async function renderGame() {
+  const locked = document.querySelector("[data-game-locked]");
+  const unlocked = document.querySelector("[data-game-unlocked]");
+  const area = document.querySelector("[data-game-area]");
+  if (!locked || !unlocked || !area) return;
+
+  if (!allMembersSafe()) {
+    locked.classList.remove("hidden");
+    unlocked.classList.add("hidden");
+    return;
+  }
+
+  locked.classList.add("hidden");
+  unlocked.classList.remove("hidden");
+
+  if (!state.emergency) startEmergency(null, "real");
+  if (!state.emergency.activityStartedAt) {
+    state.emergency.activityStartedAt = Date.now();
+    saveState();
+  }
+
+  area.innerHTML = `<p class="notice">Loading active game...</p>`;
+
+  const group = getActiveGroup();
+  const mode = activeEmergencyMode();
+
+  if (!group) {
+    area.innerHTML = `
+      <p class="notice warn">No group is selected.</p>
+      <a class="btn btn-secondary" href="groups.html">Back to groups</a>
+    `;
+    return;
+  }
+
+  try {
+    const activities = await getActiveGroupActivities(group.id, mode);
+    state.emergency.activityQueue = activities.map(activity => activity.id);
+    saveState();
+
+    if (!activities.length) {
+      area.innerHTML = `
+        <p class="notice warn">No ${escapeHtml(mode)} game is active for this group.</p>
+        <a class="btn btn-secondary" href="board.html">Back to group</a>
+      `;
+      return;
+    }
+
+    const index = Math.min(state.emergency.activityQueueIndex || 0, activities.length);
+
+    if (index >= activities.length) {
+      area.innerHTML = `
+        <p class="eyebrow">All done</p>
+        <h2>Every game complete</h2>
+        <a class="btn btn-primary" href="summary.html">Finish</a>
+      `;
+      return;
+    }
+
+    const activity = activities[index];
+    state.emergency.activeActivity = activity;
+    saveState();
+
+    if (activity.type === "trivia") {
+      renderTriviaGame(area, activity, mode);
+      return;
+    }
+
+    renderMissionGame(area, activity, mode);
+  } catch (error) {
+    area.innerHTML = `<p class="notice warn">${escapeHtml(readableAuthError(error))}</p>`;
+  }
+}
+
+// "training" or "real" for the current run
+function activeEmergencyMode() {
+  return state.emergency?.activityMode === "training" || state.emergency?.trigger === "training"
+    ? "training"
+    : "real";
+}
+
+// draw a multi-question trivia game
+function renderTriviaGame(area, activity, mode) {
+  const questions = activity.payload?.questions?.length
+    ? activity.payload.questions
+    : DEFAULT_QUESTIONS;
+  const index = Math.min(state.emergency.triviaIndex || 0, questions.length);
+  const answers = state.emergency.triviaAnswers || [];
+
+  if (index >= questions.length) {
+    renderTriviaComplete(area, activity, mode, questions, answers).catch(error => {
+      area.innerHTML = `<p class="notice warn">${escapeHtml(readableAuthError(error))}</p>`;
+    });
+    return;
+  }
+
+  const question = questions[index];
+
+  area.innerHTML = `
+    <p class="eyebrow">${escapeHtml(activity.title)}</p>
+    <h2>${escapeHtml(question.question)}</h2>
+    <p class="subtitle">${index + 1} / ${questions.length}</p>
+    <div class="answer-grid">
+      ${question.answers.map((answer, answerIndex) => (
+        `<button class="answer-btn" type="button" data-game-answer="${answerIndex}">${escapeHtml(answer)}</button>`
+      )).join("")}
+    </div>
+    <p class="notice hidden" data-game-feedback></p>
+  `;
+
+  area.querySelectorAll("[data-game-answer]").forEach(button => {
+    button.addEventListener("click", () => {
+      const answerIndex = Number(button.dataset.gameAnswer);
+      const correct = answerIndex === question.correctAnswerIndex;
+      const timeToAnswer = secondsSince(state.emergency.activityStartedAt);
+
+      button.classList.add(correct ? "correct" : "wrong");
+      area.querySelectorAll("[data-game-answer]").forEach(item => { item.disabled = true; });
+      const feedback = area.querySelector("[data-game-feedback]");
+      if (feedback) {
+        feedback.textContent = feedbackText(correct);
+        feedback.className = `notice ${correct ? "good" : "warn"}`;
+      }
+
+      state.emergency.triviaAnswers = [
+        ...answers,
+        {
+          answerIndex,
+          correct,
+          correctAnswerIndex: question.correctAnswerIndex,
+          question: question.question,
+          selectedAnswer: question.answers[answerIndex],
+          timeToAnswer
+        }
+      ];
+      state.emergency.triviaIndex = index + 1;
+      state.emergency.telemetry.answerTimes.push(timeToAnswer);
+      state.emergency.telemetry.tapCount += 1;
+      if (correct) state.emergency.telemetry.correct += 1;
+      if (!correct) {
+        state.emergency.telemetry.incorrect += 1;
+        state.emergency.telemetry.mistakes += 1;
+      }
+      saveState();
+
+      window.setTimeout(() => renderTriviaGame(area, activity, mode), 700);
+    });
+  });
+}
+
+// draw the finished trivia score
+async function renderTriviaComplete(area, activity, mode, questions, answers) {
+  const resultKey = `${activity.id}:trivia`;
+  state.emergency.submittedResults = state.emergency.submittedResults || {};
+  state.emergency.submittedResults[resultKey] = true;
+  saveState();
+
+  const correctCount = answers.filter(answer => answer.correct).length;
+  area.innerHTML = `
+    <p class="eyebrow">${escapeHtml(activity.title)}</p>
+    <h2>${correctCount}/${questions.length} correct</h2>
+    <p class="notice good">Trivia complete.</p>
+    ${nextOrFinishButton()}
+  `;
+  wireNextActivityButton(area);
+}
+
+// is there another game after this one?
+function hasMoreActivities() {
+  const queue = state.emergency.activityQueue || [];
+  const index = state.emergency.activityQueueIndex || 0;
+  return index + 1 < queue.length;
+}
+
+// "next game" button if more remain, else "finish"
+function nextOrFinishButton() {
+  return hasMoreActivities()
+    ? `<button class="btn btn-primary" type="button" data-next-activity>Next game</button>`
+    : `<a class="btn btn-primary" href="summary.html">Finish</a>`;
+}
+
+// hook the "next game" button up
+function wireNextActivityButton(area) {
+  area.querySelector("[data-next-activity]")?.addEventListener("click", advanceToNextActivity);
+}
+
+// go to the next game, or the summary if there are none left
+function advanceToNextActivity() {
+  if (hasMoreActivities()) {
+    state.emergency.activityQueueIndex = (state.emergency.activityQueueIndex || 0) + 1;
+    state.emergency.triviaIndex = 0;
+    state.emergency.triviaAnswers = [];
+    saveState();
+    renderGame();
+  } else {
+    window.location.href = "summary.html";
+  }
+}
+
+// draw the unity room with the tasks the admin picked
+function renderMissionGame(area, activity, mode) {
+  const missionKey = `${activity.id}:room`;
+  const submitted = state.emergency.submittedResults?.[missionKey];
+  stopUnityMissionRoom();
+
+  window.saferTogetherMissionCompleted = async detail => {
+    try {
+      await submitMissionCompletion(activity, mode, detail || {});
+      // skip the "sent to admin" screen, just go to the next game
+      advanceToNextActivity();
+    } catch (error) {
+      renderUnityMissionStatus(readableAuthError(error), "warn");
+    }
+  };
+
+  // already done (e.g. after a reload)? skip it
+  if (submitted) {
+    advanceToNextActivity();
+    return;
+  }
+
+  area.innerHTML = `
+    <p class="eyebrow">${escapeHtml(activity.title)}</p>
+    <h2>Mission room</h2>
+    <p class="subtitle">Complete every chosen task, then submit.</p>
+    <p class="notice" data-unity-mission-status>Loading Unity mission room...</p>
+    <section
+      class="unity-webgl-host mission-unity-host"
+      data-unity-room-host
+      data-loader-url="/unity/mission-room/Build/mission-room.loader.js"
+      data-data-url="/unity/mission-room/Build/mission-room.data.gz"
+      data-framework-url="/unity/mission-room/Build/mission-room.framework.js.gz"
+      data-code-url="/unity/mission-room/Build/mission-room.wasm.gz"
+      data-streaming-assets-url="/unity/mission-room/StreamingAssets"
+      aria-label="Unity mission room"
+    >
+      <canvas id="unity-mission-room-canvas" class="unity-webgl-canvas mission-unity-canvas" data-unity-room-canvas tabindex="-1"></canvas>
+      <div class="unity-progress" data-unity-room-progress>
+        <span></span>
+      </div>
+    </section>
+    <section class="unity-build-missing hidden" data-unity-room-missing>
+      <p>Build the Unity WebGL mission room into:</p>
+      <code>SaferTogetherUI/unity/mission-room</code>
+    </section>
+  `;
+
+  loadUnityMissionRoom(activity, mode).catch(error => {
+    const message = readableError(error, "Unity mission room could not start");
+    const host = document.querySelector("[data-unity-room-host]");
+    const missing = document.querySelector("[data-unity-room-missing]");
+
+    console.warn("Unity mission room startup failed", error);
+
+    if (/Unity WebGL build was not found/i.test(message)) {
+      host?.classList.add("unity-webgl-host-missing");
+      missing?.classList.remove("hidden");
+    } else {
+      host?.classList.remove("unity-webgl-host-missing");
+      missing?.classList.add("hidden");
+    }
+
+    renderUnityMissionStatus(message, "warn");
+  });
+}
+
+// tear down the old mission-room unity instance before reusing the canvas
+function stopUnityMissionRoom() {
+  clearMissionPayloadSender();
+  window.saferTogetherOpenRadioWire = null;
+
+  const unityInstance = window.saferTogetherMissionUnityInstance;
+  window.saferTogetherMissionUnityInstance = null;
+
+  if (unityInstance?.Quit) {
+    unityInstance.Quit().catch(() => {});
+  }
+}
+
+// load the mission-room unity build and send it the chosen tasks
+async function loadUnityMissionRoom(activity, mode) {
+  const host = document.querySelector("[data-unity-room-host]");
+  const canvas = document.querySelector("[data-unity-room-canvas]");
+
+  if (!host || !canvas) {
+    return;
+  }
+
+  const config = getUnityHostConfig(host);
+  canvas.id = canvas.id || "unity-mission-room-canvas";
+  await loadScript(config.loaderUrl);
+
+  const unityInstance = await window.createUnityInstance(canvas, {
+    arguments: [],
+    codeUrl: config.codeUrl,
+    dataUrl: config.dataUrl,
+    frameworkUrl: config.frameworkUrl,
+    streamingAssetsUrl: config.streamingAssetsUrl,
+    companyName: "DefaultCompany",
+    productName: "mission-room",
+    productVersion: "1.0",
+    showBanner: (message, type) => {
+      if (!message) {
+        return;
+      }
+
+      renderUnityMissionStatus(message, type === "error" || type === "warning" ? "warn" : "");
+    }
+  }, progress => {
+    const progressBar = document.querySelector("[data-unity-room-progress] span");
+    if (progressBar) {
+      progressBar.style.width = `${Math.round(progress * 100)}%`;
+    }
+  });
+
+  window.saferTogetherMissionUnityInstance = unityInstance;
+
+  // when the room wants the radio wired, open the puzzle and tell unity once it's solved
+  window.saferTogetherOpenRadioWire = () => {
+    openRadioWirePuzzle(() => sendUnityRadioWired(unityInstance));
+  };
+
+  renderUnityMissionStatus("Unity mission room ready. Sending mission data...", "good");
+  sendUnityMissionPayload(unityInstance, createUnityMissionPayload(activity, mode));
+}
+
+// tell the unity room the radio wire puzzle is done
+function sendUnityRadioWired(unityInstance) {
+  if (!unityInstance?.SendMessage) {
+    return;
+  }
+
+  const targets = [
+    "SaferTogether Mission Room Controller",
+    "Mission Room Controller",
+    "MissionRoomController",
+    "GameObject"
+  ];
+
+  targets.forEach(targetName => {
+    try {
+      unityInstance.SendMessage(targetName, "CompleteRadioWire", "");
+    } catch (error) {
+      // one of the other target names will hit the controller
+    }
+  });
+}
+
+// keep sending mission data to unity until it acks
+function sendUnityMissionPayload(unityInstance, payload) {
+  clearMissionPayloadSender();
+
+  if (!unityInstance?.SendMessage) {
+    return;
+  }
+
+  const payloadJson = JSON.stringify(payload);
+  const targets = [
+    "SaferTogether Mission Room Controller",
+    "Mission Room Controller",
+    "MissionRoomController",
+    "GameObject"
+  ];
+  const maxAttempts = 15;
+  let attempts = 0;
+  let acknowledged = false;
+
+  window.saferTogetherMissionRoomAck = () => {
+    acknowledged = true;
+    clearMissionPayloadSender();
+    renderUnityMissionStatus("Mission loaded. Walk your avatar to the object to complete it.", "good");
+  };
+
+  // one send attempt, gives up after maxAttempts
+  const trySend = () => {
+    attempts += 1;
+
+    targets.forEach(targetName => {
+      try {
+        unityInstance.SendMessage(targetName, "ApplyMissionJson", payloadJson);
+      } catch (error) {
+      }
+    });
+
+    if (acknowledged) {
+      clearMissionPayloadSender();
+      return;
+    }
+
+    if (attempts >= maxAttempts) {
+      clearMissionPayloadSender();
+      renderUnityMissionStatus(
+        "The mission room did not respond. Rebuild it in Unity (SaferTogether > Build WebGL Mission Room), then reload.",
+        "warn"
+      );
+    }
+  };
+
+  window.saferTogetherMissionSendTimer = window.setInterval(trySend, 400);
+  trySend();
+}
+
+// stop the payload retries + clear the ack handler
+function clearMissionPayloadSender() {
+  if (window.saferTogetherMissionSendTimer) {
+    window.clearInterval(window.saferTogetherMissionSendTimer);
+    window.saferTogetherMissionSendTimer = null;
+  }
+
+  window.saferTogetherMissionRoomAck = null;
+}
+
+// payload sent to unity: chosen tasks + exercises + profile
+function createUnityMissionPayload(activity, mode) {
+  const group = getActiveGroup();
+  const payload = activity.payload || {};
+
+  return {
+    activityId: activity.id,
+    groupId: group?.id || "",
+    mode,
+    tasks: Array.isArray(payload.tasks) ? payload.tasks : [],
+    exercises: Array.isArray(payload.exercises) ? payload.exercises : [],
+    profile: {
+      avatar: state.user?.avatar || "",
+      avatarImage: state.user?.avatarImage || "",
+      username: state.user?.username || state.user?.name || "User"
+    }
+  };
+}
+
+// status line around the unity room
+function renderUnityMissionStatus(message, tone = "") {
+  const status = document.querySelector("[data-unity-mission-status]");
+
+  if (!status) {
+    return;
+  }
+
+  status.className = `notice ${tone}`.trim();
+  status.textContent = message;
+}
+
+// mark the room done locally. the unity room self-verifies before it reports done
+async function submitMissionCompletion(activity, mode, detail = {}) {
+  const missionKey = `${activity.id}:room`;
+  state.emergency.submittedResults = state.emergency.submittedResults || {};
+
+  if (state.emergency.submittedResults[missionKey]) {
+    return state.emergency.submittedResults[missionKey];
+  }
+
+  state.emergency.submittedResults[missionKey] = true;
+  state.emergency.missionCompletedAt = secondsSince(state.emergency.activityStartedAt);
+  saveState();
+  return true;
+}
+
+// draw the stress report for one member
 function renderReport(memberId) {
   const detail = document.querySelector("[data-report-detail]");
   const member = state.familyMembers.find(item => item.id === memberId) || state.familyMembers[0];
@@ -2369,7 +3430,7 @@ function renderReport(memberId) {
   `;
 }
 
-// This function builds the local analytics report data for one member.
+// build the analytics report data for one member
 function buildMemberReport(member, index) {
   const baseline = state.baseline || DEFAULT_BASELINE;
   const telemetry = state.emergency?.telemetry || {};
@@ -2413,7 +3474,7 @@ function buildMemberReport(member, index) {
   };
 }
 
-// This function starts the visible emergency timer.
+// start the emergency countdown timer
 function startEventTimer() {
   if (!document.querySelector("[data-event-timer]")) return;
 
@@ -2421,7 +3482,7 @@ function startEventTimer() {
   window.setInterval(updateEventTimer, 1000);
 }
 
-// This function updates timer labels and progress bars.
+// update timer text + progress bars
 function updateEventTimer() {
   if (!state.emergency?.startedAt) return;
   const elapsed = secondsSince(state.emergency.startedAt);
@@ -2437,30 +3498,30 @@ function updateEventTimer() {
   });
 }
 
-// This function counts local family members by status.
+// count family members with a given status
 function countStatus(status) {
   return state.familyMembers.filter(member => member.status === status).length;
 }
 
-// This function checks whether every local family member is safe.
+// is everyone safe?
 function allMembersSafe() {
   return state.familyMembers.every(member => member.status === "safe");
 }
 
-// This function maps a status id to display text.
+// status id -> display text
 function statusLabel(status) {
   if (status === "safe") return "×ž×•×’×Ÿ";
   if (status === "at_risk") return "×‘×¡×™×›×•×Ÿ";
   return "OFFLINE";
 }
 
-// This function writes text into a selected element when it exists.
+// set textContent if the element exists
 function setText(selector, value) {
   const node = document.querySelector(selector);
   if (node) node.textContent = value;
 }
 
-// This function escapes text before placing it in HTML strings.
+// escape text before dropping it into html
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -2470,12 +3531,12 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-// This function calculates seconds elapsed since a timestamp.
+// seconds since a timestamp
 function secondsSince(timestamp) {
   return Math.max((Date.now() - timestamp) / 1000, 0);
 }
 
-// This function formats seconds as mm:ss.
+// seconds -> mm:ss
 function formatSeconds(seconds) {
   const total = Math.max(Math.floor(seconds), 0);
   const minutes = Math.floor(total / 60).toString().padStart(2, "0");
@@ -2483,32 +3544,32 @@ function formatSeconds(seconds) {
   return `${minutes}:${rest}`;
 }
 
-// This function calculates an average for numeric values.
+// average of some numbers
 function average(values) {
   if (!values.length) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-// This function rounds a number to two decimals.
+// round to 2 decimals
 function round(value) {
   return Math.round(value * 100) / 100;
 }
 
-// This function maps a stress level to its CSS class.
+// stress level -> css class
 function stressClass(level) {
   if (level === "High") return "stress-high";
   if (level === "Medium") return "stress-medium";
   return "stress-low";
 }
 
-// This function maps a stress level to display text.
+// stress level -> display text
 function stressLabel(level) {
   if (level === "High") return "×’×‘×•×”";
   if (level === "Medium") return "×‘×™× ×•× ×™";
   return "× ×ž×•×š";
 }
 
-// This function chooses activity feedback text for a result.
+// right/wrong feedback text
 function feedbackText(correct) {
   return correct ? "×›×œ ×”×›×‘×•×“! ×”×ž×©×™×›×• ×›×š." : "× ×™×¡×™×•×Ÿ ×˜×•×‘. ××ª× ×¢×•×©×™× ×¢×‘×•×“×” ×˜×•×‘×”.";
 }

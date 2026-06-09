@@ -762,6 +762,114 @@ h3 {
   display: block;
   background: #071015;
 }
+.mission-unity-host,
+.mission-unity-canvas {
+  min-height: 760px;
+}
+
+.task-select {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin: 0 0 14px;
+}
+
+.task-select legend {
+  padding: 0 6px;
+  color: var(--muted, #9fb3bb);
+  font-size: 13px;
+}
+
+.task-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.task-option input {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+
+.wire-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 10, 14, 0.82);
+  padding: 16px;
+}
+
+.wire-modal {
+  width: min(92vw, 420px);
+  background: #0f1b22;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+}
+
+.wire-title {
+  margin: 0 0 4px;
+  color: #f3fbff;
+  font-size: 18px;
+  text-align: center;
+}
+
+.wire-hint {
+  margin: 0 0 14px;
+  color: #9fb3bb;
+  font-size: 13px;
+  text-align: center;
+}
+
+.wire-grid {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  padding: 6px;
+  background: #060d11;
+  border-radius: 12px;
+  touch-action: none;
+  user-select: none;
+}
+
+.wire-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #16242c;
+  border-radius: 6px;
+}
+
+.wire-cell-on {
+  border-radius: 6px;
+}
+
+.wire-dot {
+  width: 70%;
+  height: 70%;
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.45);
+}
+
+.wire-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.wire-actions .btn {
+  flex: 1;
+}
 
 .unity-progress {
   position: absolute;
@@ -935,6 +1043,12 @@ h3 {
   filter: grayscale(0.2);
 }
 
+.btn-small {
+  min-height: 36px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1101,6 +1215,16 @@ h3 {
   border-color: rgba(129, 139, 153, 0.55);
 }
 
+.mini-btn.danger {
+  background: rgba(230, 63, 79, 0.14);
+  border-color: rgba(230, 63, 79, 0.4);
+  color: #ff8a93;
+}
+
+.mini-btn.icon-btn {
+  font-size: 16px;
+}
+
 .activity-option {
   min-height: 116px;
   display: grid;
@@ -1136,6 +1260,28 @@ h3 {
 .added-item strong {
   display: block;
   margin-bottom: 4px;
+}
+
+.activity-admin-item,
+.activity-result-item {
+  display: grid;
+  gap: 10px;
+}
+
+.activity-admin-item span,
+.activity-result-item span,
+.activity-mode-line {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.activity-action-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
 }
 
 .instruction-list {
@@ -1811,6 +1957,12 @@ body {
 
 .activity-screen {
   background: #ddfbff !important;
+}
+
+.activity-admin-item span,
+.activity-result-item span,
+.activity-mode-line {
+  color: #26383c;
 }
 
 .home-indicator {

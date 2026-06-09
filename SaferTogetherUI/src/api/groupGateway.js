@@ -1,12 +1,12 @@
 import { requestJson } from "./apiClient.js";
 
-// This function gets the groups of the current user.
+// the current user's groups
 export async function getCurrentUserGroups() {
   const payload = await requestJson("/api/groups");
   return payload.groups;
 }
 
-// This function creates a new group.
+// make a new group
 export async function createGroupForCurrentUser({ name }) {
   const payload = await requestJson("/api/groups", {
     body: { name },
@@ -16,7 +16,7 @@ export async function createGroupForCurrentUser({ name }) {
   return payload.group;
 }
 
-// This function sends a join request by code.
+// ask to join using a code
 export async function requestJoinByCode({ code }) {
   const payload = await requestJson("/api/groups/join-requests", {
     body: { code },
@@ -26,7 +26,7 @@ export async function requestJoinByCode({ code }) {
   return payload.joinRequest;
 }
 
-// This function lets the admin approve or decline a request.
+// admin approves/declines a request
 export async function reviewJoinRequest({ groupId, requestId, status }) {
   const payload = await requestJson(`/api/groups/${groupId}/join-requests/${requestId}`, {
     body: { status },
@@ -36,7 +36,7 @@ export async function reviewJoinRequest({ groupId, requestId, status }) {
   return payload.joinRequest;
 }
 
-// This function renames a group.
+// rename a group
 export async function renameGroup(groupId, name) {
   const payload = await requestJson(`/api/groups/${groupId}`, {
     body: { name },
@@ -45,14 +45,14 @@ export async function renameGroup(groupId, name) {
   return payload.group;
 }
 
-// This function deletes a group.
+// delete a group
 export async function deleteOwnedGroup(groupId) {
   return requestJson(`/api/groups/${groupId}`, {
     method: "DELETE"
   });
 }
 
-// This function lets a member leave a group.
+// leave a group
 export async function leaveGroup(groupId) {
   return requestJson(`/api/groups/${groupId}/members/me`, {
     method: "DELETE"

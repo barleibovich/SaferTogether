@@ -2,9 +2,7 @@ using System;
 
 namespace SaferTogether.UnityClient
 {
-    /// <summary>
-    /// Shared avatar ids used by the web app and Unity client.
-    /// </summary>
+    // avatar ids shared between the web app and unity
     public static class AvatarIds
     {
         public const string Aqua = "aqua";
@@ -25,9 +23,7 @@ namespace SaferTogether.UnityClient
         };
     }
 
-    /// <summary>
-    /// Shared builder-avatar option ids used by Unity and backend validation.
-    /// </summary>
+    // builder avatar option ids, shared with the backend
     public static class AvatarBuilderOptions
     {
         public const string Circle = "circle";
@@ -71,9 +67,7 @@ namespace SaferTogether.UnityClient
         };
     }
 
-    /// <summary>
-    /// In-memory representation of a composed avatar.
-    /// </summary>
+    // a composed avatar, held in memory
     [Serializable]
     public class AvatarBuilderSpec
     {
@@ -83,14 +77,10 @@ namespace SaferTogether.UnityClient
         public string eyes;
     }
 
-    /// <summary>
-    /// Helper methods for avatar composer ids.
-    /// </summary>
+    // helpers for builder avatar ids
     public static class AvatarBuilderId
     {
-        /// <summary>
-        /// This function builds a normalized builder avatar id.
-        /// </summary>
+        // build a clean builder avatar id string
         public static string Build(string shape, string baseColor, string accentColor, string eyes)
         {
             return "builder:" + NormalizeShape(shape)
@@ -99,9 +89,7 @@ namespace SaferTogether.UnityClient
                 + ":" + NormalizeEyes(eyes);
         }
 
-        /// <summary>
-        /// This function tries to parse a builder avatar id into a spec object.
-        /// </summary>
+        // try to turn a builder id back into a spec
         public static bool TryParse(string avatar, out AvatarBuilderSpec spec)
         {
             spec = null;
@@ -139,9 +127,7 @@ namespace SaferTogether.UnityClient
             return true;
         }
 
-        /// <summary>
-        /// This function converts preset avatar ids to a default builder spec.
-        /// </summary>
+        // turn an old preset id into a default builder spec
         public static AvatarBuilderSpec LegacyToSpec(string avatar)
         {
             string preset = NormalizePreset(avatar);
@@ -155,9 +141,7 @@ namespace SaferTogether.UnityClient
             };
         }
 
-        /// <summary>
-        /// This function maps either a builder or legacy avatar id to a builder spec.
-        /// </summary>
+        // get a spec from either a builder id or a legacy one
         public static AvatarBuilderSpec ToSpec(string avatar)
         {
             AvatarBuilderSpec parsed;
@@ -170,36 +154,28 @@ namespace SaferTogether.UnityClient
             return LegacyToSpec(avatar);
         }
 
-        /// <summary>
-        /// This function normalizes one shape id to a supported value.
-        /// </summary>
+        // clean up a shape id, fall back if it's weird
         public static string NormalizeShape(string shape)
         {
             string value = NormalizeValue(shape);
             return IsShape(value) ? value : AvatarBuilderOptions.Circle;
         }
 
-        /// <summary>
-        /// This function normalizes one color id to a supported value.
-        /// </summary>
+        // clean up a color id, fall back if it's weird
         public static string NormalizeColor(string color)
         {
             string value = NormalizeValue(color);
             return IsColor(value) ? value : AvatarIds.Aqua;
         }
 
-        /// <summary>
-        /// This function normalizes one eyes-style id to a supported value.
-        /// </summary>
+        // clean up an eyes id, fall back if it's weird
         public static string NormalizeEyes(string eyes)
         {
             string value = NormalizeValue(eyes);
             return IsEyes(value) ? value : AvatarBuilderOptions.Dot;
         }
 
-        /// <summary>
-        /// This function normalizes one legacy preset id.
-        /// </summary>
+        // clean up an old preset id, fall back to aqua
         public static string NormalizePreset(string avatar)
         {
             string value = NormalizeValue(avatar);
@@ -215,9 +191,7 @@ namespace SaferTogether.UnityClient
             return AvatarIds.Aqua;
         }
 
-        /// <summary>
-        /// This function checks whether a value is one allowed shape id.
-        /// </summary>
+        // is this a legit shape id?
         private static bool IsShape(string value)
         {
             foreach (string option in AvatarBuilderOptions.Shapes)
@@ -231,9 +205,7 @@ namespace SaferTogether.UnityClient
             return false;
         }
 
-        /// <summary>
-        /// This function checks whether a value is one allowed color id.
-        /// </summary>
+        // is this a legit color id?
         private static bool IsColor(string value)
         {
             foreach (string option in AvatarBuilderOptions.Colors)
@@ -247,9 +219,7 @@ namespace SaferTogether.UnityClient
             return false;
         }
 
-        /// <summary>
-        /// This function checks whether a value is one allowed eyes-style id.
-        /// </summary>
+        // is this a legit eyes id?
         private static bool IsEyes(string value)
         {
             foreach (string option in AvatarBuilderOptions.Eyes)
@@ -263,18 +233,14 @@ namespace SaferTogether.UnityClient
             return false;
         }
 
-        /// <summary>
-        /// This function trims and lowercases a nullable string.
-        /// </summary>
+        // trim + lowercase, handles null/empty
         private static string NormalizeValue(string value)
         {
             return string.IsNullOrEmpty(value) ? "" : value.Trim().ToLowerInvariant();
         }
     }
 
-    /// <summary>
-    /// Shared character-avatar option ids used by Unity and backend validation.
-    /// </summary>
+    // character avatar option ids, shared with the backend
     public static class CharacterAvatarOptions
     {
         public const string Human = "human";
@@ -529,9 +495,7 @@ namespace SaferTogether.UnityClient
         };
     }
 
-    /// <summary>
-    /// In-memory representation of a complete character avatar.
-    /// </summary>
+    // a full character avatar, held in memory
     [Serializable]
     public class CharacterAvatarSpec
     {
@@ -553,14 +517,10 @@ namespace SaferTogether.UnityClient
         public string background;
     }
 
-    /// <summary>
-    /// Helper methods for complete character avatar ids.
-    /// </summary>
+    // helpers for full character avatar ids
     public static class CharacterAvatarId
     {
-        /// <summary>
-        /// This function builds a normalized character:v2 avatar id.
-        /// </summary>
+        // build a clean character:v2 id string
         public static string Build(
             string species,
             string sex,
@@ -599,9 +559,7 @@ namespace SaferTogether.UnityClient
                 + ":" + NormalizeColor(background);
         }
 
-        /// <summary>
-        /// This function tries to parse a character:v2 avatar id into a spec object.
-        /// </summary>
+        // try to turn a character:v2 id back into a spec
         public static bool TryParse(string avatar, out CharacterAvatarSpec spec)
         {
             spec = null;
@@ -667,9 +625,7 @@ namespace SaferTogether.UnityClient
             return true;
         }
 
-        /// <summary>
-        /// This function maps preset, builder, and character:v1 avatars into the complete model.
-        /// </summary>
+        // get a full spec from any old format (preset/builder/v1)
         public static CharacterAvatarSpec ToSpec(string avatar)
         {
             CharacterAvatarSpec characterSpec;
@@ -709,9 +665,7 @@ namespace SaferTogether.UnityClient
             };
         }
 
-        /// <summary>
-        /// This function parses old character:v1 ids for backward compatibility.
-        /// </summary>
+        // parse the old character:v1 ids so they still work
         private static bool TryParseLegacy(string avatar, out CharacterAvatarSpec spec)
         {
             spec = null;
@@ -760,6 +714,7 @@ namespace SaferTogether.UnityClient
             return true;
         }
 
+        // clean up species, map old "human" to male
         public static string NormalizeSpecies(string value)
         {
             string cleanValue = NormalizeValue(value);
@@ -771,86 +726,103 @@ namespace SaferTogether.UnityClient
             return NormalizeOption(cleanValue, CharacterAvatarOptions.Species, CharacterAvatarOptions.Male);
         }
 
+        // clean up sex, defaults female
         public static string NormalizeSex(string value)
         {
             return NormalizeOption(value, CharacterAvatarOptions.Sexes, CharacterAvatarOptions.Female);
         }
 
+        // clean up skin tone, defaults tan
         public static string NormalizeSkin(string value)
         {
             return NormalizeOption(value, CharacterAvatarOptions.SkinTones, CharacterAvatarOptions.Tan);
         }
 
+        // clean up face shape, defaults soft
         public static string NormalizeFace(string value)
         {
             return NormalizeOption(value, CharacterAvatarOptions.FaceShapes, CharacterAvatarOptions.Soft);
         }
 
+        // clean up eyes, defaults almond
         public static string NormalizeEyes(string value)
         {
             return NormalizeOption(value, CharacterAvatarOptions.Eyes, CharacterAvatarOptions.Almond);
         }
 
+        // clean up eye color, defaults brown
         public static string NormalizeEyeColor(string value)
         {
             return NormalizeOption(value, CharacterAvatarOptions.EyeColors, CharacterAvatarOptions.EyeBrown);
         }
 
+        // clean up hair style, defaults short
         public static string NormalizeHair(string value)
         {
             return NormalizeOption(value, CharacterAvatarOptions.HairStyles, CharacterAvatarOptions.Short);
         }
 
+        // clean up hair color, defaults brown
         public static string NormalizeHairColor(string value)
         {
             return NormalizeOption(value, CharacterAvatarOptions.HairColors, CharacterAvatarOptions.HairBrown);
         }
 
+        // clean up top, defaults tee
         public static string NormalizeTop(string value)
         {
             return NormalizeOption(value, CharacterAvatarOptions.Tops, CharacterAvatarOptions.Tee);
         }
 
+        // clean up bottom, defaults jeans
         public static string NormalizeBottom(string value)
         {
             return NormalizeOption(value, CharacterAvatarOptions.Bottoms, CharacterAvatarOptions.Jeans);
         }
 
+        // clean up shoes, defaults sneakers
         public static string NormalizeShoes(string value)
         {
             return NormalizeOption(value, CharacterAvatarOptions.Shoes, CharacterAvatarOptions.Sneakers);
         }
 
+        // clean up accessory, defaults none
         public static string NormalizeAccessory(string value)
         {
             return NormalizeOption(value, CharacterAvatarOptions.Accessories, CharacterAvatarOptions.NoAccessory);
         }
 
+        // clean up a color, defaults aqua
         public static string NormalizeColor(string value)
         {
             return NormalizeOption(value, CharacterAvatarOptions.Colors, AvatarIds.Aqua);
         }
 
+        // map an old skin id onto the new ones
         private static string NormalizeLegacySkin(string value)
         {
             return NormalizeOption(value, new[] { CharacterAvatarOptions.Light, CharacterAvatarOptions.Tan, CharacterAvatarOptions.Brown, CharacterAvatarOptions.Deep }, CharacterAvatarOptions.Tan);
         }
 
+        // map an old hair id onto the new ones
         private static string NormalizeLegacyHair(string value)
         {
             return NormalizeOption(value, new[] { CharacterAvatarOptions.Short, CharacterAvatarOptions.Bob, CharacterAvatarOptions.Curls, CharacterAvatarOptions.Spiky, CharacterAvatarOptions.Hijab, CharacterAvatarOptions.NoHair }, CharacterAvatarOptions.Short);
         }
 
+        // map an old hair color onto the new ones
         private static string NormalizeLegacyHairColor(string value)
         {
             return NormalizeOption(value, new[] { CharacterAvatarOptions.Black, CharacterAvatarOptions.HairBrown, CharacterAvatarOptions.Blonde, CharacterAvatarOptions.HairRed, CharacterAvatarOptions.HairBlue, CharacterAvatarOptions.Silver }, CharacterAvatarOptions.HairBrown);
         }
 
+        // map an old top id onto the new ones
         private static string NormalizeLegacyTop(string value)
         {
             return NormalizeOption(value, new[] { CharacterAvatarOptions.Tee, CharacterAvatarOptions.Hoodie, CharacterAvatarOptions.Jacket, CharacterAvatarOptions.Vest }, CharacterAvatarOptions.Tee);
         }
 
+        // map old eyes onto the new ones (line -> sleepy)
         private static string NormalizeLegacyEyes(string value)
         {
             string cleanValue = NormalizeValue(value);
@@ -863,6 +835,7 @@ namespace SaferTogether.UnityClient
             return NormalizeOption(cleanValue, new[] { CharacterAvatarOptions.Dot, CharacterAvatarOptions.Happy, CharacterAvatarOptions.Focused }, CharacterAvatarOptions.Almond);
         }
 
+        // map old accessory onto the new ones (badge -> crown)
         private static string NormalizeLegacyAccessory(string value)
         {
             string cleanValue = NormalizeValue(value);
@@ -875,12 +848,14 @@ namespace SaferTogether.UnityClient
             return NormalizeOption(cleanValue, new[] { CharacterAvatarOptions.NoAccessory, CharacterAvatarOptions.Glasses, CharacterAvatarOptions.Cap, CharacterAvatarOptions.Mask }, CharacterAvatarOptions.NoAccessory);
         }
 
+        // keep the value if it's in the list, else use the fallback
         private static string NormalizeOption(string value, string[] options, string fallback)
         {
             string cleanValue = NormalizeValue(value);
             return Contains(options, cleanValue) ? cleanValue : fallback;
         }
 
+        // is value in the array?
         private static bool Contains(string[] options, string value)
         {
             foreach (string option in options)
@@ -894,15 +869,14 @@ namespace SaferTogether.UnityClient
             return false;
         }
 
+        // trim + lowercase, handles null/empty
         private static string NormalizeValue(string value)
         {
             return string.IsNullOrEmpty(value) ? "" : value.Trim().ToLowerInvariant();
         }
     }
 
-    /// <summary>
-    /// User profile returned by the gateway.
-    /// </summary>
+    // user profile we get from the gateway
     [Serializable]
     public class UserProfile
     {
@@ -913,9 +887,7 @@ namespace SaferTogether.UnityClient
         public string avatarImage;
     }
 
-    /// <summary>
-    /// Web session message sent by the website into the embedded Unity build.
-    /// </summary>
+    // session info the website passes into the embedded unity build
     [Serializable]
     public class WebSessionMessage
     {
@@ -925,9 +897,7 @@ namespace SaferTogether.UnityClient
         public UserProfile profile;
     }
 
-    /// <summary>
-    /// Signup request body sent to the gateway.
-    /// </summary>
+    // body we send to sign up
     [Serializable]
     public class SignUpRequest
     {
@@ -937,9 +907,7 @@ namespace SaferTogether.UnityClient
         public string avatar;
     }
 
-    /// <summary>
-    /// Login request body sent to the gateway.
-    /// </summary>
+    // body we send to log in
     [Serializable]
     public class LoginRequest
     {
@@ -947,9 +915,7 @@ namespace SaferTogether.UnityClient
         public string password;
     }
 
-    /// <summary>
-    /// Avatar update request body sent to the gateway.
-    /// </summary>
+    // body we send to update the avatar
     [Serializable]
     public class AvatarUpdateRequest
     {
@@ -957,9 +923,7 @@ namespace SaferTogether.UnityClient
         public string avatarImage;
     }
 
-    /// <summary>
-    /// Auth response returned by signup and login.
-    /// </summary>
+    // what signup/login send back
     [Serializable]
     public class AuthResponse
     {
@@ -967,27 +931,21 @@ namespace SaferTogether.UnityClient
         public UserProfile profile;
     }
 
-    /// <summary>
-    /// Profile response returned by profile endpoints.
-    /// </summary>
+    // what the profile endpoints send back
     [Serializable]
     public class ProfileResponse
     {
         public UserProfile profile;
     }
 
-    /// <summary>
-    /// Logout response returned by the gateway.
-    /// </summary>
+    // what logout sends back
     [Serializable]
     public class LogoutResponse
     {
         public bool success;
     }
 
-    /// <summary>
-    /// Error response returned by the gateway.
-    /// </summary>
+    // error shape the gateway sends back
     [Serializable]
     public class ErrorResponse
     {
