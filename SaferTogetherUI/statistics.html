@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SaferTogether - גרפי ביצועים</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body data-page="statistics">
+<main class="prototype-shell">
+  <section class="phone">
+    <div class="status-bar">
+      <span>09:41</span>
+      <span class="status-icons">5G 100%</span>
+    </div>
+
+    <div class="screen">
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">SAFER TOGETHER</p>
+          <h1>גרפי ביצועים</h1>
+        </div>
+      </header>
+
+      <p class="subtitle">ביצועי כל משתתף בטריוויה ובחדר המשימות, בהשוואה לממוצע הקבוצה.</p>
+
+      <p class="notice" data-stats-status>טוען נתונים...</p>
+
+      <button class="btn btn-danger hidden" type="button" data-stats-end-alarm>סיים אזעקה ושחרר את הקבוצה</button>
+
+      <label class="report-select" data-stats-member-wrap hidden>
+        <span class="eyebrow">בחר משתתף</span>
+        <select class="select-field" data-stats-member></select>
+      </label>
+
+      <label class="report-select" data-stats-activity-wrap hidden>
+        <span class="eyebrow">בחר משחק</span>
+        <select class="select-field" data-stats-activity></select>
+      </label>
+
+      <section class="list-stack" data-stats-charts hidden>
+        <section class="card stats-card" data-stats-summary-card>
+          <h2>סיכום AI של מצב המשתתף</h2>
+          <p class="subtitle">ניתוח מבוסס בינה מלאכותית של זמני התגובה, סיבוב היד והדיוק — כדי להבין את רמת הלחץ של המשתתף.</p>
+          <button class="btn btn-primary" type="button" data-stats-summary-btn>צור סיכום</button>
+          <p class="notice hidden" data-stats-summary-status></p>
+          <div class="stats-summary-text hidden" data-stats-summary-text></div>
+        </section>
+
+        <section class="card stats-card">
+          <h2>זמן לכל שאלה / משימה (שניות)</h2>
+          <div class="chart-legend">
+            <span><i class="dot dot-real"></i>אזעקת אמת (ממוצע)</span>
+            <span><i class="dot dot-training"></i>תרגול (ממוצע)</span>
+            <span><i class="dot dot-current"></i>המשתתף (נוכחי)</span>
+          </div>
+          <div class="chart-box"><canvas data-chart-time></canvas></div>
+        </section>
+
+        <section class="card stats-card">
+          <h2>תשובות נכונות מול שגויות</h2>
+          <div class="chart-box chart-box-pie"><canvas data-chart-pie></canvas></div>
+          <p class="notice hidden" data-pie-empty>אין עדיין נתוני תשובות עבור משתתף זה.</p>
+        </section>
+
+        <section class="card stats-card">
+          <h2>סיבוב היד (טלפון)</h2>
+          <div class="chart-legend">
+            <span><i class="dot dot-real"></i>אזעקת אמת (ממוצע)</span>
+            <span><i class="dot dot-training"></i>תרגול (ממוצע)</span>
+            <span><i class="dot dot-current"></i>המשתתף (נוכחי)</span>
+          </div>
+          <div class="chart-box"><canvas data-chart-rotation></canvas></div>
+          <p class="notice hidden" data-rotation-empty>אין עדיין נתוני סיבוב — נמדד רק במכשיר נייד.</p>
+        </section>
+      </section>
+
+      <nav class="bottom-nav" aria-label="ניווט תחתון">
+        <a class="home-round" href="board.html">⌂</a>
+      </nav>
+    </div>
+
+    <div class="home-indicator"></div>
+  </section>
+</main>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

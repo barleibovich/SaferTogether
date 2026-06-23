@@ -109,6 +109,9 @@ namespace SaferTogether.UnityClient
             CreateShutter(windowRect, "RightShutter", 0.96f, 0.66f);
 
             CreateButton(panel, "CloseButton", "Close", new Vector2(0.70f, 0.04f), new Vector2(0.97f, 0.14f), Close);
+
+            // step 1 (the shutters) is the first step: start the idle nudge timer
+            MissionResultBridge.NotifyStageProgress();
         }
 
         // make one draggable steel shutter you slide to the centre
@@ -147,6 +150,9 @@ namespace SaferTogether.UnityClient
             dialShown = true;
             target = UnityEngine.Random.Range(0, 100);
 
+            // step 2 (the dial) is a new step: restart the idle nudge timer
+            MissionResultBridge.NotifyStageProgress();
+
             if (hintText != null)
             {
                 hintText.text = "Step 2: turn the lock to " + target.ToString("00");
@@ -172,8 +178,10 @@ namespace SaferTogether.UnityClient
             Image marker = CreateImage(dialRect, "Marker", new Vector2(0.45f, 0.78f), new Vector2(0.55f, 0.96f), ChalkColor);
             marker.raycastTarget = false;
 
-            // the current number, kept upright in the middle of the dial
-            dialNumberText = CreateText(area, "00", new Vector2(0.2f, 0.40f), new Vector2(0.8f, 0.62f), 34, FontStyle.Bold, ChalkColor);
+            // the current number, kept upright in the middle of the dial.
+            // box must be tall enough for the 34px line, else Truncate drops it.
+            dialNumberText = CreateText(area, "00", new Vector2(0.1f, 0.30f), new Vector2(0.9f, 0.72f), 34, FontStyle.Bold, ChalkColor);
+            dialNumberText.verticalOverflow = VerticalWrapMode.Overflow;
 
             dial = dialObject.GetComponent<RotaryDial>();
             dial.Configure(dialRect, OnDialNumber);

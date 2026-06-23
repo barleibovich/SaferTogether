@@ -51,8 +51,10 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-// opens the puzzle and runs the levels one after another
-export function openRadioWirePuzzle(onComplete) {
+// opens the puzzle and runs the levels one after another.
+// onProgress (optional) fires each time a level is shown, so the caller can
+// restart its idle/encouragement timer per step rather than per whole puzzle.
+export function openRadioWirePuzzle(onComplete, onProgress) {
   const overlay = document.createElement("div");
   overlay.className = "wire-overlay";
   document.body.appendChild(overlay);
@@ -79,6 +81,11 @@ export function openRadioWirePuzzle(onComplete) {
 
   function renderLevel() {
     overlay.innerHTML = "";
+
+    // a fresh step (or a reset of the current one): restart the idle timer
+    if (typeof onProgress === "function") {
+      onProgress();
+    }
 
     const modal = document.createElement("div");
     modal.className = "wire-modal";

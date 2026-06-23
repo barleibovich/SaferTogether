@@ -561,6 +561,71 @@ function normalizeResultPayload(payload) {
   return payload;
 }
 
+// pull out well-formed per-item metrics for the stats aggregation.
+// null/missing time or rotation are simply omitted so they never pollute an average.
+function cleanMetricItems(payload) {
+  const rawItems = Array.isArray(payload?.items) ? payload.items : [];
+
+  return rawItems.reduce((items, raw) => {
+    const index = Number(raw?.index);
+
+    if (!Number.isInteger(index) || index < 0) {
+      return items;
+    }
+
+    const item = { index, label: cleanText(raw?.label, `#${index + 1}`) };
+    const time = Number(raw?.timeSeconds);
+    const rotation = Number(raw?.rotation);
+
+    if (Number.isFinite(time) && time >= 0) {
+      item.timeSeconds = time;
+    }
+
+    if (Number.isFinite(rotation) && rotation >= 0) {
+      item.rotation = rotation;
+    }
+
+    if (typeof raw?.correct === "boolean") {
+      item.correct = raw.correct;
+    }
+
+    items.push(item);
+    return items;
+  }, []);
+}
+
+// fold a result's per-item metrics into the running aggregates via the SQL function.
+// best-effort: a missing stats table/function must never fail the underlying submission.
+async function applyActivityMetrics(client, groupId, activityId, mode, payload) {
+  const items = cleanMetricItems(payload);
+
+  if (!items.length) {
+    return;
+  }
+
+  const { error } = await client.rpc("apply_activity_metrics", {
+    p_activity_id: activityId,
+    p_group_id: groupId,
+    p_items: items,
+    p_mode: mode
+  });
+
+  if (error) {
+    console.warn("apply_activity_metrics failed (run supabase/activity_metrics.sql?):", error.message || error);
+  }
+}
+
+// canonical ordered item list for an activity (questions for trivia, tasks for mission)
+function activityItems(row) {
+  if (row.type === "trivia") {
+    const questions = Array.isArray(row.payload?.questions) ? row.payload.questions : [];
+    return questions.map((question, index) => ({ index, label: `Q${index + 1}` }));
+  }
+
+  const tasks = Array.isArray(row.payload?.tasks) ? row.payload.tasks : [];
+  return tasks.map((task, index) => ({ index, label: task }));
+}
+
 // member submits their answers, missions wait for review
 async function submitGroupActivityResult(accessToken, groupId, body = {}) {
   const context = await requireGroupMemberContext(accessToken, groupId);
@@ -597,6 +662,12 @@ async function submitGroupActivityResult(accessToken, groupId, body = {}) {
       .select("*")
       .single()
   );
+
+  // trivia is auto-approved, so fold its metrics in now. missions stay 'pending'
+  // and are aggregated at approval time (see reviewGroupActivityResult).
+  if (status === "approved") {
+    await applyActivityMetrics(context.client, groupId, activity.id, mode, body.payload);
+  }
 
   const profileMap = new Map([[context.user.id, context.profile]]);
   const activityMap = new Map([[activity.id, activity]]);
@@ -641,6 +712,16 @@ async function reviewGroupActivityResult(accessToken, groupId, resultId, body = 
     throw httpError(400, "Review status must be approved or rejected");
   }
 
+  // read the row first so we only aggregate metrics on the FIRST approval
+  const existing = await runActivityQuery(
+    context.client
+      .from(RESULT_TABLE)
+      .select("reviewed_at")
+      .eq("group_id", groupId)
+      .eq("id", resultId)
+      .maybeSingle()
+  );
+
   const updatedResult = await runActivityQuery(
     context.client
       .from(RESULT_TABLE)
@@ -660,7 +741,111 @@ async function reviewGroupActivityResult(accessToken, groupId, resultId, body = 
   const activity = await getActivityRecord(context.client, groupId, updatedResult.activity_id);
   const activityMap = new Map([[activity.id, activity]]);
 
+  // missions are aggregated at approval (trivia was aggregated at submit). only on
+  // the first transition to approved, so re-reviews don't double-count.
+  if (status === "approved" && activity.type === "mission" && existing && !existing.reviewed_at) {
+    await applyActivityMetrics(
+      context.client,
+      groupId,
+      updatedResult.activity_id,
+      updatedResult.mode,
+      updatedResult.payload
+    );
+  }
+
   return mapResult(updatedResult, activityMap, profileMap);
+}
+
+// admin-only: everything the statistics page needs — the group's members (so each
+// gets a tab), the activities + their canonical item lists, the running aggregates
+// (red/blue series), and each member's latest result per activity (black series + pie).
+async function getGroupStatistics(accessToken, groupId) {
+  const context = await requireGroupAdminContext(accessToken, groupId);
+
+  const memberships = await runActivityQuery(
+    context.client
+      .from("user_groups")
+      .select("user_id, member_username")
+      .eq("group_id", groupId)
+  );
+
+  const memberIds = [...new Set([
+    ...(memberships || []).map(membership => membership.user_id),
+    context.group.created_by
+  ].filter(Boolean))];
+  const profileMap = await getProfilesById(context.client, memberIds);
+  const usernameFallback = new Map((memberships || []).map(membership => [membership.user_id, membership.member_username]));
+  const members = memberIds.map(id => ({
+    userId: id,
+    username: profileMap.get(id)?.username || usernameFallback.get(id) || "User"
+  }));
+
+  const activityRows = await runActivityQuery(
+    context.client
+      .from(ACTIVITY_TABLE)
+      .select("*")
+      .eq("group_id", groupId)
+      .order("created_at", { ascending: false })
+  );
+  const activities = (activityRows || []).map(row => ({
+    id: row.id,
+    items: activityItems(row),
+    title: row.title || "",
+    type: row.type
+  }));
+
+  // running aggregates — best-effort so stats degrade gracefully if the table is missing
+  let aggregates = [];
+  const aggResponse = await context.client
+    .from("activity_metric_aggregates")
+    .select("activity_id, item_index, item_label, mode, metric, avg_value, sample_count")
+    .eq("group_id", groupId);
+
+  if (aggResponse.error) {
+    console.warn("activity_metric_aggregates read failed (run supabase/activity_metrics.sql?):", aggResponse.error.message || aggResponse.error);
+  } else {
+    aggregates = (aggResponse.data || []).map(row => ({
+      activityId: row.activity_id,
+      avgValue: Number(row.avg_value),
+      itemIndex: row.item_index,
+      itemLabel: row.item_label || "",
+      metric: row.metric,
+      mode: row.mode,
+      sampleCount: row.sample_count
+    }));
+  }
+
+  const resultRows = await runActivityQuery(
+    context.client
+      .from(RESULT_TABLE)
+      .select("user_id, activity_id, mode, payload, submitted_at")
+      .eq("group_id", groupId)
+      .order("submitted_at", { ascending: false })
+  );
+
+  // rows are newest-first, so the first one seen per (user, activity) is the latest
+  const latestByKey = new Map();
+  (resultRows || []).forEach(row => {
+    const key = `${row.user_id}:${row.activity_id}`;
+    if (latestByKey.has(key)) {
+      return;
+    }
+
+    latestByKey.set(key, {
+      activityId: row.activity_id,
+      items: Array.isArray(row.payload?.items) ? row.payload.items : [],
+      mode: row.mode,
+      submittedAt: row.submitted_at,
+      userId: row.user_id
+    });
+  });
+
+  return {
+    activities,
+    aggregates,
+    latestResults: [...latestByKey.values()],
+    members
+  };
 }
 
 module.exports = {
@@ -671,6 +856,7 @@ module.exports = {
   getActiveGroupActivities,
   getGroupActivities,
   getGroupActivityResults,
+  getGroupStatistics,
   reviewGroupActivityResult,
   submitGroupActivityResult
 };

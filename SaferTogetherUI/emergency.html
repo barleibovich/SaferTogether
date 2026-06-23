@@ -43,9 +43,19 @@
 
       <p class="notice danger" data-emergency-message>ממתין לאישור כל חברי הקבוצה...</p>
 
+      <div class="admin-alarm-controls">
+        <button class="btn btn-primary hidden" type="button" data-alarm-unlock data-admin-only>פתח פעילות לכולם</button>
+        <button class="btn btn-secondary hidden" type="button" data-alarm-end data-admin-only>סיים אזעקה</button>
+      </div>
+
       <section>
         <h2>מצב בני המשפחה</h2>
         <div class="member-list" data-emergency-family></div>
+      </section>
+
+      <section class="hidden" data-admin-progress>
+        <h2>התקדמות הקבוצה</h2>
+        <div class="member-list" data-admin-progress-list></div>
       </section>
     </div>
 

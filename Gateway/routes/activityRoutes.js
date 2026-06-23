@@ -12,9 +12,11 @@ const {
   getActiveGroupActivities,
   getGroupActivities,
   getGroupActivityResults,
+  getGroupStatistics,
   reviewGroupActivityResult,
   submitGroupActivityResult
 } = require("../../Services/activityService");
+const { generateUserSituationSummary } = require("../../Services/analysisService");
 
 // handles the activity routes: create/activate + results
 async function handleActivityRoute(request, response, pathname, requestUrl) {
@@ -26,8 +28,23 @@ async function handleActivityRoute(request, response, pathname, requestUrl) {
   const activityModeMatch = pathname.match(/^\/api\/groups\/([^/]+)\/activity-activations\/([^/]+)\/([^/]+)$/);
   const resultsMatch = pathname.match(/^\/api\/groups\/([^/]+)\/activity-results$/);
   const resultMatch = pathname.match(/^\/api\/groups\/([^/]+)\/activity-results\/([^/]+)$/);
+  const statisticsMatch = pathname.match(/^\/api\/groups\/([^/]+)\/statistics$/);
+  const statsSummaryMatch = pathname.match(/^\/api\/groups\/([^/]+)\/stats-summary$/);
 
   try {
+    if (statisticsMatch && request.method === "GET") {
+      const statistics = await getGroupStatistics(accessToken, statisticsMatch[1]);
+      sendJson(response, 200, { statistics });
+      return true;
+    }
+
+    if (statsSummaryMatch && request.method === "POST") {
+      const body = await readJsonBody(request);
+      const summary = await generateUserSituationSummary(accessToken, statsSummaryMatch[1], body);
+      sendJson(response, 200, summary);
+      return true;
+    }
+
     if (activitiesMatch && request.method === "GET") {
       const activities = await getGroupActivities(accessToken, activitiesMatch[1]);
       sendJson(response, 200, { activities });

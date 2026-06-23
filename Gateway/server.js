@@ -3,9 +3,11 @@ const fs = require("fs");
 const path = require("path");
 const { getConfig } = require("../Services/configService");
 const { handleActivityRoute } = require("./routes/activityRoutes");
+const { handleAlarmRoute } = require("./routes/alarmRoutes");
 const { handleAuthRoute } = require("./routes/authRoutes");
 const { handleGroupRoute } = require("./routes/groupRoutes");
 const { handleOrefRoute } = require("./routes/orefRoutes");
+const { handlePresenceRoute } = require("./routes/presenceRoutes");
 
 const mimeTypes = {
   ".br": "application/octet-stream",
@@ -17,6 +19,7 @@ const mimeTypes = {
   ".jpg": "image/jpeg",
   ".js": "application/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".mp3": "audio/mpeg",
   ".png": "image/png",
   ".svg": "image/svg+xml",
   ".wasm": "application/wasm"
@@ -29,6 +32,14 @@ async function handleApiRoute(request, response, pathname, requestUrl) {
   }
 
   if (await handleActivityRoute(request, response, pathname, requestUrl)) {
+    return true;
+  }
+
+  if (await handleAlarmRoute(request, response, pathname)) {
+    return true;
+  }
+
+  if (await handlePresenceRoute(request, response, pathname)) {
     return true;
   }
 

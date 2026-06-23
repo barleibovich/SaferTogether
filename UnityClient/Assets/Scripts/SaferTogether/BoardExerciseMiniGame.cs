@@ -138,6 +138,10 @@ namespace SaferTogether.UnityClient
             {
                 answerField.text = "";
             }
+
+            // a new exercise (the first one, or the next after a correct answer)
+            // is a new step: restart the idle nudge timer for it
+            MissionResultBridge.NotifyStageProgress();
         }
 
         // check the typed answer and show right or wrong

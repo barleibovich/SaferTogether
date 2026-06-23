@@ -52,6 +52,22 @@ export async function getGroupActivityResults(groupId) {
   return payload.results;
 }
 
+// admin-only: aggregated performance stats for the group's statistics charts
+export async function getGroupStatistics(groupId) {
+  const payload = await requestJson(`/api/groups/${groupId}/statistics`);
+  return payload.statistics;
+}
+
+// admin-only: AI summary of one member's situation/stress from their measurements
+export async function getUserStatsSummary(groupId, userId) {
+  const payload = await requestJson(`/api/groups/${groupId}/stats-summary`, {
+    body: { userId },
+    method: "POST"
+  });
+
+  return payload;
+}
+
 // send in a result for an activity
 export async function submitGroupActivityResult(groupId, result) {
   const payload = await requestJson(`/api/groups/${groupId}/activity-results`, {

@@ -585,23 +585,41 @@ namespace SaferTogether.UnityClient
         // called when the door lock game finishes (all bolts locked)
         private void OnDoorSecured()
         {
+            if (doorClosed)
+            {
+                return;
+            }
+
             doorClosed = true;
             SetImageSprite(doorImage, LoadRoomSprite("door"), true); // swap to the closed-door image
+            MissionResultBridge.NotifyStageCompleted("door");
             RefreshUI();
         }
 
         // called when the window game finishes
         private void OnWindowClosed()
         {
+            if (windowClosed)
+            {
+                return;
+            }
+
             windowClosed = true;
             SetImageSprite(windowImage, LoadRoomSprite("close_window"), true);
+            MissionResultBridge.NotifyStageCompleted("window");
             RefreshUI();
         }
 
         // called when all the board exercises are answered
         private void OnBoardSolved()
         {
+            if (boardSolved)
+            {
+                return;
+            }
+
             boardSolved = true;
+            MissionResultBridge.NotifyStageCompleted("board");
             RefreshUI();
         }
 
@@ -609,6 +627,11 @@ namespace SaferTogether.UnityClient
         [Preserve]
         public void CompleteRadioWire()
         {
+            if (radioWired)
+            {
+                return;
+            }
+
             radioWired = true;
             radioOn = true;
 
@@ -617,6 +640,7 @@ namespace SaferTogether.UnityClient
                 radioLight.color = SafeColor;
             }
 
+            MissionResultBridge.NotifyStageCompleted("radio");
             RefreshUI();
         }
 

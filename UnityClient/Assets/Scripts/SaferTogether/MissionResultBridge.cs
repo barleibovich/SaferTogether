@@ -16,6 +16,14 @@ namespace SaferTogether.UnityClient
         [DllImport("__Internal")]
         private static extern void SaferTogetherMissionRoomAck();
 
+        // web function that reports one completed task inside the room
+        [DllImport("__Internal")]
+        private static extern void SaferTogetherMissionStageCompleted(string target);
+
+        // web function that reports the player advanced to a new step inside a task
+        [DllImport("__Internal")]
+        private static extern void SaferTogetherMissionStageProgress();
+
         // web function that opens the radio wire puzzle
         [DllImport("__Internal")]
         private static extern void SaferTogetherOpenRadioWire();
@@ -38,6 +46,27 @@ namespace SaferTogether.UnityClient
             SaferTogetherMissionRoomAck();
 #else
             Debug.Log("Mission room loaded");
+#endif
+        }
+
+        // tell the page that one room task was completed
+        public static void NotifyStageCompleted(string target)
+        {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            SaferTogetherMissionStageCompleted(target ?? "");
+#else
+            Debug.Log("Mission stage completed: " + target);
+#endif
+        }
+
+        // tell the page the player moved on to a new step inside a task, so it
+        // can restart the idle "keep trying" nudge timer for that step
+        public static void NotifyStageProgress()
+        {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            SaferTogetherMissionStageProgress();
+#else
+            Debug.Log("Mission stage progress");
 #endif
         }
 

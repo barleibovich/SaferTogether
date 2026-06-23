@@ -103,6 +103,9 @@ namespace SaferTogether.UnityClient
             UpdateHighlights();
 
             CreateButton(panel, "CloseButton", "Close", new Vector2(0.31f, 0.03f), new Vector2(0.69f, 0.13f), Close);
+
+            // first bolt is the first step: start the idle nudge timer for it
+            MissionResultBridge.NotifyStageProgress();
         }
 
         // little dark slot that shows where a bolt is supposed to lock in
@@ -149,7 +152,11 @@ namespace SaferTogether.UnityClient
             {
                 Close();
                 onComplete?.Invoke();
+                return;
             }
+
+            // on to the next bolt: restart the idle nudge timer for this new step
+            MissionResultBridge.NotifyStageProgress();
         }
 
         // light up the next bolt to lock and dim the others, so you know the order

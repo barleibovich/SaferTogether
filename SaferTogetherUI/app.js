@@ -13,6 +13,8 @@ import {
   getActiveGroupActivities,
   getGroupActivities,
   getGroupActivityResults,
+  getGroupStatistics,
+  getUserStatsSummary,
   reviewGroupActivityResult,
   submitGroupActivityResult
 } from "./src/api/activityGateway.js";
@@ -33,6 +35,18 @@ import {
   getGroupOrefStatus,
   saveCurrentUserAlertLocation
 } from "./src/api/orefGateway.js";
+import { alarmAudio } from "./src/alarmAudio.js";
+import { gameAudio } from "./src/gameAudio.js";
+import {
+  endAlarm,
+  getActiveAlarm,
+  markAlarmSafe,
+  reportAlarmProgress,
+  startAlarm,
+  unlockAlarm
+} from "./src/api/alarmGateway.js";
+import { sendPresenceHeartbeat } from "./src/api/presenceGateway.js";
+import { startRotationTracking, takeRotationForItem } from "./src/sensors/rotation.js";
 
 const STORAGE_KEY = "saferTogetherState.v5";
 const SIGNUP_AVATAR_KEY = "saferTogetherSignupAvatar.v1";
@@ -40,6 +54,9 @@ const EVENT_DURATION_SECONDS = 600;
 const OREF_POLL_INTERVAL_MS = 5000;
 const GPS_LOCATION_SAVE_INTERVAL_MS = 15000;
 const GPS_LOCATION_DISTANCE_THRESHOLD_METERS = 50;
+const PRESENCE_HEARTBEAT_MS = 15000;
+const PRESENCE_ONLINE_THRESHOLD_MS = 45000;
+const ALARM_POLL_INTERVAL_MS = 5000;
 const AVATAR_OPTIONS = ["aqua", "mint", "sun", "rose", "violet", "steel"];
 const AVATAR_BUILDER_SHAPES = ["circle", "square", "diamond", "hex"];
 const AVATAR_BUILDER_COLORS = ["aqua", "mint", "sun", "rose", "violet", "steel", "coral", "lime", "sky", "peach"];
@@ -133,6 +150,9 @@ const DEFAULT_MISSIONS = [
 
 const MISSION_TARGETS = ["window", "radio", "radio-wire", "door", "safe-zone", "board", "custom"];
 const ACTIVITY_MODES = ["real", "training"];
+// play an encouragement clip if the player is stuck on a single mission-room
+// stage (a step inside a task, e.g. one radio-wire level) this long
+const MISSION_INACTIVITY_DELAY_MS = 15000;
 
 const DEFAULT_BASELINE = {
   userId: null,
@@ -573,6 +593,7 @@ function routePage() {
   if (page === "unity-avatar-editor") initUnityAvatarEditor();
   if (page === "summary") initSummary();
   if (page === "report") initAdminPage(initReport);
+  if (page === "statistics") initAdminPage(initStatistics);
 }
 
 // hook up the login form to the auth api
@@ -975,6 +996,7 @@ function wireLogoutLink() {
       console.warn(readableAuthError(error));
     }
 
+    alarmAudio.stop();
     state = initialState();
     sessionStorage.removeItem(STORAGE_KEY);
     window.location.href = "index.html";
@@ -1007,8 +1029,14 @@ async function initGroups() {
   }
 
   renderCurrentUserSummary(currentUser);
+  startPresenceHeartbeat();
 
   renderGroupsList();
+  renderGroupPresence();
+  startGroupsPresencePolling();
+  if (user.role !== "admin" && state.groups.length) {
+    startAlarmBroadcastPolling();
+  }
   initUnityAvatarLaunch();
 
   const memberPanel = document.querySelector("[data-member-group-panel]");
@@ -1171,6 +1199,55 @@ function renderGroupsList() {
   });
 }
 
+// draw the connected members of the active group (used on the groups page)
+function renderGroupPresence() {
+  const section = document.querySelector("[data-group-presence]");
+  const list = document.querySelector("[data-group-presence-list]");
+  if (!section || !list) return;
+
+  const group = getActiveGroup();
+  const members = group?.members || [];
+
+  if (!members.length) {
+    section.classList.add("hidden");
+    return;
+  }
+
+  section.classList.remove("hidden");
+  list.innerHTML = members.map(member => {
+    const isMe = state.user?.userId && String(member.id) === String(state.user.userId);
+    const online = isMe || isMemberOnline(member);
+    return `
+      <article class="member-card">
+        ${renderAvatarBadge(member.username, "member-avatar avatar-unity-preview", member.avatarImage)}
+        <div class="member-main">
+          <p class="member-name">
+            <span class="presence-dot ${online ? "online" : "offline"}" title="${online ? "מחובר" : "לא מחובר"}"></span>
+            ${escapeHtml(member.username)}
+            ${isMe ? `<span class="member-me-pill">Me</span>` : ""}
+          </p>
+        </div>
+        <span class="status-pill ${online ? "safe" : "offline"}">${online ? "מחובר" : "לא מחובר"}</span>
+      </article>
+    `;
+  }).join("");
+}
+
+// keep the groups-page connected list fresh
+function startGroupsPresencePolling() {
+  const intervalId = setInterval(async () => {
+    if (document.hidden) return;
+    try {
+      await refreshCurrentUserGroups(state.user?.role || "user");
+      saveState();
+      renderGroupPresence();
+    } catch {
+      // ignore polling errors
+    }
+  }, PRESENCE_HEARTBEAT_MS);
+  window.addEventListener("beforeunload", () => clearInterval(intervalId));
+}
+
 // create-group page (admin only)
 async function initCreateGroup() {
   const form = document.querySelector("[data-create-group-form]");
@@ -1238,6 +1315,7 @@ async function initBoard() {
   const group = getActiveGroup();
   setText("[data-active-group-name]", group.name);
   setText("[data-active-group-id]", group.id);
+  startPresenceHeartbeat();
   renderBoardMembers(group);
   renderBoardPendingRequests(group);
   initAlertLocationControls();
@@ -1265,17 +1343,18 @@ async function initBoard() {
     });
   } else {
     startDrillPolling();
+    startAlarmBroadcastPolling();
     startMembersPolling();
   }
 
-  document.querySelector("[data-trigger-emergency]")?.addEventListener("click", () => {
-    startEmergency(null, "real");
-    window.location.href = "emergency.html";
+  // admin raises a real alarm for the whole group, then drops into the emergency screen
+  document.querySelector("[data-trigger-emergency]")?.addEventListener("click", async () => {
+    await raiseGroupAlarm("real");
   });
 
-  document.querySelector("[data-trigger-training]")?.addEventListener("click", () => {
-    startEmergency(null, "training");
-    window.location.href = "emergency.html";
+  // admin raises a training alarm for the whole group
+  document.querySelector("[data-trigger-training]")?.addEventListener("click", async () => {
+    await raiseGroupAlarm("training");
   });
 
   document.querySelector("[data-open-oref-emergency]")?.addEventListener("click", () => {
@@ -1315,6 +1394,140 @@ function isCurrentUserAdminForActiveGroup() {
   return Boolean(group) && state.user?.role === "admin" && group.userRole === "admin";
 }
 
+// show/hide every admin-only element on the current page
+function applyAdminOnlyVisibility() {
+  const isAdmin = isCurrentUserAdminForActiveGroup();
+  document.querySelectorAll("[data-admin-only]").forEach(node => {
+    node.classList.toggle("hidden", !isAdmin);
+  });
+  return isAdmin;
+}
+
+// --- presence (who is connected) -------------------------------------------
+
+let presenceHeartbeatStarted = false;
+
+// tell the server we're online now, then keep doing it on an interval
+function startPresenceHeartbeat() {
+  if (presenceHeartbeatStarted) return;
+  presenceHeartbeatStarted = true;
+
+  const beat = () => {
+    if (document.hidden) return;
+    sendPresenceHeartbeat().catch(() => {});
+  };
+
+  beat();
+  const intervalId = setInterval(beat, PRESENCE_HEARTBEAT_MS);
+  window.addEventListener("beforeunload", () => clearInterval(intervalId));
+}
+
+// is this member's client connected (recent heartbeat)?
+function isMemberOnline(member) {
+  if (!member?.lastSeenAt) return false;
+  const seen = Date.parse(member.lastSeenAt);
+  if (Number.isNaN(seen)) return false;
+  return (Date.now() - seen) <= PRESENCE_ONLINE_THRESHOLD_MS;
+}
+
+// --- group alarm sync (broadcast + all-safe gating) ------------------------
+
+// reflect server-known safe users onto the local emergency member list
+function syncFamilyFromAlarm() {
+  const safe = new Set(state.alarmStatus?.safeUserIds || []);
+  (state.familyMembers || []).forEach(member => {
+    if (safe.has(member.id)) member.status = "safe";
+  });
+}
+
+// store the latest alarm state from the server
+function setAlarmStatus({ active, alarmId, mode, unlocked, safeUserIds, progress }) {
+  const previous = state.alarmStatus || {};
+  state.alarmStatus = {
+    active: Boolean(active),
+    alarmId: alarmId || previous.alarmId || "",
+    mode: mode || previous.mode || "real",
+    progress: Array.isArray(progress) ? progress : (previous.progress || []),
+    safeUserIds: Array.isArray(safeUserIds) ? safeUserIds : [],
+    unlocked: Boolean(unlocked)
+  };
+
+  const currentUserSafe = state.alarmStatus.safeUserIds.includes(state.user?.userId);
+
+  if (state.alarmStatus.active) {
+    const playbackAlarmId = state.alarmStatus.alarmId || `${getActiveGroup()?.id || "group"}:${state.alarmStatus.mode}`;
+    if (currentUserSafe) {
+      alarmAudio.dismiss(playbackAlarmId);
+    } else {
+      alarmAudio.start(state.alarmStatus.mode, playbackAlarmId);
+    }
+  }
+
+  syncFamilyFromAlarm();
+  saveState();
+}
+
+// pull the current alarm state for the active group from the server
+async function refreshAlarmStatus() {
+  const group = getActiveGroup();
+  if (!group) {
+    state.alarmStatus = null;
+    return null;
+  }
+
+  try {
+    const { alarm, safeUserIds, unlocked, progress } = await getActiveAlarm(group.id);
+
+    if (alarm && alarm.status === "active") {
+      setAlarmStatus({
+        active: true,
+        alarmId: alarm.id,
+        mode: alarm.mode,
+        progress,
+        safeUserIds,
+        unlocked
+      });
+    } else {
+      state.alarmStatus = state.alarmStatus ? { ...state.alarmStatus, active: false } : null;
+      saveState();
+    }
+  } catch {
+    // leave the last known status in place on a transient error
+  }
+
+  const currentUserSafe = state.alarmStatus?.safeUserIds?.includes(state.user?.userId);
+  if (state.alarmStatus?.active) {
+    const playbackAlarmId = state.alarmStatus.alarmId || `${group.id}:${state.alarmStatus.mode}`;
+    if (currentUserSafe) {
+      alarmAudio.dismiss(playbackAlarmId);
+    } else {
+      alarmAudio.start(state.alarmStatus.mode, playbackAlarmId);
+    }
+  }
+
+  return state.alarmStatus;
+}
+
+// are the games/trivia/mission room open? (all safe, or admin override)
+function activitiesUnlocked() {
+  if (state.alarmStatus?.active) {
+    return Boolean(state.alarmStatus.unlocked) || allMembersSafe();
+  }
+  return allMembersSafe();
+}
+
+// report play progress to the server so the admin can watch it live (best effort)
+function reportActivityProgress(activity, type, completed, total) {
+  const group = getActiveGroup();
+  if (!group || !activity?.id || !state.alarmStatus?.active) return;
+  reportAlarmProgress(group.id, {
+    activityId: activity.id,
+    completed,
+    total,
+    type
+  }).catch(() => {});
+}
+
 // draw the active group's members
 function renderBoardMembers(group) {
   const container = document.querySelector("[data-group-members]");
@@ -1327,6 +1540,7 @@ function renderBoardMembers(group) {
 
   container.innerHTML = group.members.map(member => {
     const isCurrentMember = state.user?.userId && String(member.id) === String(state.user.userId);
+    const isOnline = isCurrentMember || isMemberOnline(member);
     const liveStatus = getOrefMemberStatus(member.id);
     const location = liveStatus?.alertLocation || member.alertLocation;
     const statusClass = orefMemberStatusClass(liveStatus, location, true);
@@ -1337,6 +1551,7 @@ function renderBoardMembers(group) {
         ${renderAvatarBadge(member.username, "member-avatar avatar-unity-preview", member.avatarImage)}
         <div class="member-main">
           <p class="member-name">
+            <span class="presence-dot ${isOnline ? "online" : "offline"}" title="${isOnline ? "מחובר" : "לא מחובר"}"></span>
             ${escapeHtml(member.username)}
             ${isCurrentMember ? `<span class="member-me-pill">Me</span>` : ""}
           </p>
@@ -1701,70 +1916,112 @@ function showDrillOverlay() {
   }, 3000);
 }
 
-// This function polls the server every 15 seconds so regular members see up-to-date member locations and avatars.
-function startMembersPolling() {
-  const INTERVAL_MS = 15000;
-
-  const intervalId = setInterval(async () => {
-    if (document.hidden) return;
-    try {
-      await refreshCurrentUserGroups("user");
-      saveState();
-      renderBoardMembers(getActiveGroup());
-    } catch {
-      // silently ignore polling errors
-    }
-  }, INTERVAL_MS);
-
-  window.addEventListener("beforeunload", () => clearInterval(intervalId));
-}
-
-// This function polls the server every 5 seconds to detect when an admin starts a drill.
-// It snapshots the drill state on the first poll so it only alarms on transitions
-// (inactive → active), not on a drill that was already running when the user loaded.
-function startDrillPolling() {
-  const INTERVAL_MS = 5000;
+// This function polls every 5s so members get pulled into an alarm the admin raised.
+// It only pulls a member in while they still need to mark safe (active, not yet safe,
+// not already unlocked), so members aren't yanked back after they've checked in.
+function startAlarmBroadcastPolling() {
   let initialized = false;
-  let wasActive = false;
+  let wasActiveUnsafe = false;
 
   async function poll() {
     if (document.hidden) return;
     try {
-      const groups = await getCurrentUserGroups();
-      const activeGroupId = getActiveGroup()?.id;
-      const group = (groups || []).find(g => g.id === activeGroupId);
-      const isActive = group?.drillActive ?? false;
+      const group = getActiveGroup();
+      if (!group) return;
+
+      const { alarm, safeUserIds, unlocked } = await getActiveAlarm(group.id);
+      const isActive = Boolean(alarm) && alarm.status === "active";
+      const meSafe = (safeUserIds || []).includes(state.user?.userId);
+      const shouldPull = isActive && !meSafe && !unlocked;
+
+      if (isActive) {
+        setAlarmStatus({
+          active: true,
+          alarmId: alarm.id,
+          mode: alarm.mode,
+          safeUserIds,
+          unlocked
+        });
+      }
 
       if (!initialized) {
         initialized = true;
-        wasActive = isActive;
+        wasActiveUnsafe = shouldPull;
+        if (shouldPull) {
+          clearInterval(intervalId);
+          enterAlarmFromBroadcast(alarm.mode);
+        }
         return;
       }
 
-      if (isActive && !wasActive) {
+      if (shouldPull && !wasActiveUnsafe) {
         clearInterval(intervalId);
-        showDrillOverlay();
+        enterAlarmFromBroadcast(alarm.mode);
       }
-      wasActive = isActive;
+      wasActiveUnsafe = shouldPull;
     } catch {
       // silently ignore polling errors
     }
   }
 
   poll();
-  const intervalId = setInterval(poll, INTERVAL_MS);
+  const intervalId = setInterval(poll, ALARM_POLL_INTERVAL_MS);
   window.addEventListener("beforeunload", () => clearInterval(intervalId));
 }
 
-// This function shows the drill overlay and redirects to practice after a short delay.
-function showDrillOverlay() {
+// set up local emergency state for the broadcast alarm, then show the overlay + redirect
+function enterAlarmFromBroadcast(mode) {
+  startEmergency(null, mode);
+  saveState();
+  showAlarmBroadcastOverlay(mode);
+}
+
+// reuse the drill overlay element to announce the alarm, then go to emergency.html
+function showAlarmBroadcastOverlay(mode) {
   const overlay = document.querySelector("[data-drill-overlay]");
   if (overlay) {
+    const heading = overlay.querySelector("h2");
+    const subtitle = overlay.querySelector(".subtitle");
+    if (heading) heading.textContent = mode === "training" ? "תרגול התחיל!" : "אזעקה!";
+    if (subtitle) {
+      subtitle.textContent = mode === "training"
+        ? "ה-admin הפעיל תרגול. עוברים למסך החירום..."
+        : "ה-admin הפעיל אזעקה. עוברים למסך החירום...";
+    }
     overlay.classList.remove("hidden");
   }
   setTimeout(() => {
-    window.location.href = "practice.html";
-  }, 3000);
+    window.location.href = "emergency.html";
+  }, 2500);
+}
+
+// admin action: raise an alarm for the active group, then open the emergency screen.
+// degrades to a local-only emergency if the alarm tables aren't set up yet.
+async function raiseGroupAlarm(mode) {
+  const group = getActiveGroup();
+  if (!group) return;
+
+  alarmAudio.start(mode, `pending:${group.id}:${Date.now()}`);
+  startEmergency(null, mode);
+  // statistics stay locked until this alarm is finished
+  state.statsUnlocked = false;
+
+  try {
+    const alarm = await startAlarm(group.id, mode);
+    setAlarmStatus({
+      active: true,
+      alarmId: alarm?.id,
+      mode: alarm?.mode || mode,
+      safeUserIds: [],
+      unlocked: false
+    });
+  } catch (error) {
+    console.error("startAlarm failed:", error);
+    alert(readableAuthError(error));
+  }
+
+  saveState();
+  window.location.href = "emergency.html";
 }
 
 // kick off auto gps alert-area matching
@@ -2383,6 +2640,7 @@ function evaluateArithmetic(expression) {
 
 // set up the practice flow
 function initPractice() {
+  startPresenceHeartbeat();
   const isAdmin = isCurrentUserAdminForActiveGroup();
 
   if (isAdmin) {
@@ -2504,31 +2762,156 @@ async function initEmergency() {
     // if the refresh fails we just use the locally stored event
   }
 
+  // sync with the server alarm before deciding what to render
+  await refreshAlarmStatus();
+
   if (!state.emergency?.active) {
-    startEmergency(state.orefStatus);
+    startEmergency(state.orefStatus, state.alarmStatus?.active ? state.alarmStatus.mode : null);
   }
+
+  syncFamilyFromAlarm();
+  startPresenceHeartbeat();
+  applyAdminOnlyVisibility();
 
   renderOrefStatus();
   renderEmergency();
   refreshOrefStatus();
   startOrefStatusPolling();
 
-  document.querySelector("[data-emergency-safe]")?.addEventListener("click", () => {
-    if (allMembersSafe()) {
-      window.location.href = "game.html";
-      return;
+  if (state.alarmStatus?.active) {
+    // admin: learn how many games are active so we can tell when everyone is done
+    if (isCurrentUserAdminForActiveGroup()) {
+      try {
+        const group = getActiveGroup();
+        const activeActivities = group ? await getActiveGroupActivities(group.id, state.alarmStatus.mode) : [];
+        adminExpectedActivityCount = (activeActivities || []).length;
+      } catch {
+        adminExpectedActivityCount = 0;
+      }
     }
+    startEmergencyAlarmPolling();
+  }
 
-    markMemberSafe(currentFamilyMemberId());
-    state.emergency.telemetry.safeClickTime = secondsSince(state.emergency.startedAt);
-    state.emergency.telemetry.tapCount += 1;
-    saveState();
-    renderEmergency();
+  document.querySelector("[data-emergency-safe]")?.addEventListener("click", () => {
+    void handleEmergencySafeClick();
+  });
 
-    if (state.emergency.trigger !== "pikud_haoref") {
-      simulateFamilyCheckIns();
+  // admin: open the activities for everyone now (override the all-safe gate)
+  document.querySelector("[data-alarm-unlock]")?.addEventListener("click", async () => {
+    const group = getActiveGroup();
+    if (!group) return;
+    try {
+      const result = await unlockAlarm(group.id);
+      setAlarmStatus({
+        active: true,
+        mode: state.alarmStatus?.mode,
+        safeUserIds: result.safeUserIds,
+        unlocked: true
+      });
+      renderEmergency();
+    } catch (error) {
+      alert(readableAuthError(error));
     }
   });
+
+  // admin: end the alarm and go straight to the statistics page
+  document.querySelector("[data-alarm-end]")?.addEventListener("click", async () => {
+    const group = getActiveGroup();
+    if (group) {
+      try {
+        await endAlarm(group.id);
+      } catch {
+        // best effort
+      }
+    }
+    state.alarmStatus = null;
+    state.statsUnlocked = true;
+    saveState();
+    window.location.href = "statistics.html";
+  });
+}
+
+// the user taps "I'm safe": open activities if unlocked, else record safe (server-backed)
+async function handleEmergencySafeClick() {
+  if (activitiesUnlocked()) {
+    window.location.href = "game.html";
+    return;
+  }
+
+  alarmAudio.dismiss(state.alarmStatus?.alarmId);
+  markMemberSafe(currentFamilyMemberId());
+  if (state.emergency) {
+    state.emergency.telemetry.safeClickTime = secondsSince(state.emergency.startedAt);
+    state.emergency.telemetry.tapCount += 1;
+  }
+  saveState();
+  renderEmergency();
+
+  const group = getActiveGroup();
+
+  if (group && state.alarmStatus?.active) {
+    try {
+      const result = await markAlarmSafe(group.id);
+      setAlarmStatus({
+        active: true,
+        mode: state.alarmStatus?.mode,
+        safeUserIds: result.safeUserIds,
+        unlocked: result.unlocked
+      });
+      renderEmergency();
+      if (activitiesUnlocked()) {
+        window.location.href = "game.html";
+      }
+    } catch (error) {
+      console.error("markAlarmSafe failed:", error);
+    }
+    return;
+  }
+
+  // no group alarm running -> keep the local demo behavior
+  if (state.emergency?.trigger !== "pikud_haoref") {
+    simulateFamilyCheckIns();
+  }
+}
+
+// poll the server alarm while the emergency screen is open so the member list,
+// unlock state, and "alarm ended" all stay in sync across the group.
+function startEmergencyAlarmPolling() {
+  let redirectingToStats = false;
+  const intervalId = setInterval(async () => {
+    if (document.hidden) return;
+    const status = await refreshAlarmStatus();
+    if (!status?.active) {
+      clearInterval(intervalId);
+      window.location.href = "board.html";
+      return;
+    }
+    renderEmergency();
+
+    // admin: the moment every member has finished all the games, end the alarm
+    // (releasing the waiting members) and open the statistics page
+    if (
+      !redirectingToStats &&
+      isCurrentUserAdminForActiveGroup() &&
+      activitiesUnlocked() &&
+      allMembersFinishedActivities()
+    ) {
+      redirectingToStats = true;
+      clearInterval(intervalId);
+      const group = getActiveGroup();
+      try {
+        if (group) await endAlarm(group.id);
+      } catch {
+        // best effort — open stats anyway
+      }
+      state.alarmStatus = null;
+      state.statsUnlocked = true;
+      saveState();
+      window.location.href = "statistics.html";
+    }
+  }, ALARM_POLL_INTERVAL_MS);
+
+  window.addEventListener("beforeunload", () => clearInterval(intervalId));
 }
 
 // start the unlocked activity game
@@ -2539,7 +2922,28 @@ async function initGame() {
   } catch {
   }
 
+  await refreshAlarmStatus();
+  startPresenceHeartbeat();
+  startGamePageAlarmPolling();
+  window.addEventListener("pagehide", () => {
+    gameAudio.shutdown();
+    stopUnityMissionRoom();
+  }, { once: true });
   await renderGame();
+}
+
+// while a member is mid-game, send them back if the admin ends the alarm
+function startGamePageAlarmPolling() {
+  const intervalId = setInterval(async () => {
+    if (document.hidden) return;
+    const status = await refreshAlarmStatus();
+    if (!status?.active) {
+      clearInterval(intervalId);
+      window.location.href = "board.html";
+    }
+  }, ALARM_POLL_INTERVAL_MS);
+
+  window.addEventListener("beforeunload", () => clearInterval(intervalId));
 }
 
 // draw the emergency summary screen
@@ -2575,6 +2979,360 @@ function initReport() {
 
   select.addEventListener("change", () => renderReport(select.value));
   renderReport(select.value || state.familyMembers[0]?.id);
+}
+
+// ---- admin statistics page (per-user performance charts) ----
+const STATS_COLORS = { current: "#0b1220", real: "#e63f4f", training: "#4b8ff0" };
+const statsState = { activityId: "", charts: {}, data: null, memberId: "" };
+
+function round1(value) {
+  return Math.round(Number(value) * 10) / 10;
+}
+
+// load the group's stats and render the per-member dropdown + charts
+async function initStatistics() {
+  // the statistics page only opens for the admin once an alarm has been finished
+  if (!state.statsUnlocked) {
+    window.location.href = "board.html";
+    return;
+  }
+
+  const status = document.querySelector("[data-stats-status]");
+  const group = getActiveGroup();
+
+  if (!group) {
+    setStatsStatus(status, "לא נבחרה קבוצה.", "warn");
+    return;
+  }
+
+  try {
+    const data = await getGroupStatistics(group.id);
+    statsState.data = data;
+    const members = data?.members || [];
+    const activities = data?.activities || [];
+
+    if (!activities.length) {
+      setStatsStatus(status, "עדיין אין משחקים בקבוצה זו.", "");
+      return;
+    }
+
+    if (!members.length) {
+      setStatsStatus(status, "עדיין אין משתתפים בקבוצה זו.", "");
+      return;
+    }
+
+    status?.classList.add("hidden");
+    statsState.memberId = members[0].userId;
+    statsState.activityId = activities[0].id;
+
+    renderStatsMemberSelect();
+    renderStatsActivitySelect();
+    renderStatsCharts();
+    wireStatsSummary();
+    void maybeShowStatsEndAlarm();
+  } catch (error) {
+    setStatsStatus(status, readableAuthError(error), "warn");
+  }
+}
+
+// if a live alarm is still running, let the admin end it from here (this
+// releases members who are waiting on the alarm screen)
+async function maybeShowStatsEndAlarm() {
+  const button = document.querySelector("[data-stats-end-alarm]");
+  const group = getActiveGroup();
+  if (!button || !group) return;
+
+  let active = false;
+  try {
+    const { alarm } = await getActiveAlarm(group.id);
+    active = Boolean(alarm) && alarm.status === "active";
+  } catch {
+    active = false;
+  }
+
+  button.classList.toggle("hidden", !active);
+  if (!active) return;
+
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    try {
+      await endAlarm(group.id);
+      state.alarmStatus = null;
+      saveState();
+      button.classList.add("hidden");
+    } catch (error) {
+      alert(readableAuthError(error));
+      button.disabled = false;
+    }
+  }, { once: true });
+}
+
+function setStatsStatus(node, message, tone) {
+  if (!node) return;
+  node.textContent = message;
+  node.className = `notice ${tone}`.trim();
+  node.classList.remove("hidden");
+}
+
+// member picker (dropdown of everyone in the group)
+function renderStatsMemberSelect() {
+  const wrap = document.querySelector("[data-stats-member-wrap]");
+  const select = document.querySelector("[data-stats-member]");
+  if (!wrap || !select) return;
+
+  wrap.hidden = false;
+  select.innerHTML = (statsState.data?.members || []).map(member => (
+    `<option value="${escapeHtml(member.userId)}">${escapeHtml(member.username)}</option>`
+  )).join("");
+  select.value = statsState.memberId;
+
+  select.addEventListener("change", () => {
+    statsState.memberId = select.value;
+    resetStatsSummary();
+    renderStatsCharts();
+  });
+}
+
+// game (activity) picker
+function renderStatsActivitySelect() {
+  const wrap = document.querySelector("[data-stats-activity-wrap]");
+  const select = document.querySelector("[data-stats-activity]");
+  if (!wrap || !select) return;
+
+  wrap.hidden = false;
+  select.innerHTML = (statsState.data?.activities || []).map(activity => {
+    const typeLabel = activity.type === "mission" ? "חדר משימות" : "טריוויה";
+    return `<option value="${escapeHtml(activity.id)}">${escapeHtml(activity.title || typeLabel)} · ${typeLabel}</option>`;
+  }).join("");
+  select.value = statsState.activityId;
+
+  select.addEventListener("change", () => {
+    statsState.activityId = select.value;
+    renderStatsCharts();
+  });
+}
+
+// (re)draw the three charts for the selected member + activity
+function renderStatsCharts() {
+  const data = statsState.data;
+  if (!data) return;
+
+  document.querySelector("[data-stats-charts]")?.removeAttribute("hidden");
+
+  const activity = (data.activities || []).find(item => item.id === statsState.activityId);
+  if (!activity) return;
+
+  const items = activity.items || [];
+  const labels = items.map(item => item.label);
+
+  // average for a metric+mode, aligned to the activity's canonical item order
+  const aggSeries = (metric, mode) => {
+    const byIndex = new Map();
+    (data.aggregates || [])
+      .filter(row => row.activityId === activity.id && row.metric === metric && row.mode === mode)
+      .forEach(row => byIndex.set(row.itemIndex, row.avgValue));
+    return items.map(item => (byIndex.has(item.index) ? round1(byIndex.get(item.index)) : null));
+  };
+
+  // this member's latest result for this activity (black series + pie)
+  const latest = (data.latestResults || []).find(row => (
+    row.userId === statsState.memberId && row.activityId === activity.id
+  ));
+  const latestByIndex = new Map();
+  (latest?.items || []).forEach(item => {
+    if (Number.isInteger(item.index)) latestByIndex.set(item.index, item);
+  });
+  const currentSeries = key => items.map(item => {
+    const value = latestByIndex.get(item.index)?.[key];
+    return typeof value === "number" ? round1(value) : null;
+  });
+
+  // 1) time per item
+  drawSeriesChart("time", "bar", labels, {
+    current: currentSeries("timeSeconds"),
+    real: aggSeries("time", "real"),
+    training: aggSeries("time", "training")
+  });
+
+  // 2) correct vs wrong — trivia only (the mission room self-verifies)
+  drawPieChart(activity, latest);
+
+  // 3) hand rotation per item
+  const rotation = {
+    current: currentSeries("rotation"),
+    real: aggSeries("rotation", "real"),
+    training: aggSeries("rotation", "training")
+  };
+  const hasRotation = [rotation.current, rotation.real, rotation.training]
+    .some(series => series.some(value => value !== null));
+
+  if (hasRotation) {
+    toggleStatsEmpty("[data-rotation-empty]", "[data-chart-rotation]", true);
+    drawSeriesChart("rotation", "line", labels, rotation);
+  } else {
+    destroyStatsChart("rotation");
+    toggleStatsEmpty("[data-rotation-empty]", "[data-chart-rotation]", false);
+  }
+}
+
+function destroyStatsChart(key) {
+  if (statsState.charts[key]) {
+    statsState.charts[key].destroy();
+    statsState.charts[key] = null;
+  }
+}
+
+// shared style for the 3-series bar/line charts (red/blue/black)
+function statsDataset(seriesKey, label, values, type) {
+  const color = STATS_COLORS[seriesKey];
+
+  if (type === "line") {
+    return {
+      backgroundColor: color,
+      borderColor: seriesKey === "current" ? "rgba(248,250,252,0.95)" : color,
+      borderWidth: 2,
+      data: values,
+      label,
+      pointBackgroundColor: seriesKey === "current" ? "#0b1220" : color,
+      pointBorderColor: "rgba(255,255,255,0.6)",
+      pointRadius: 3,
+      spanGaps: true,
+      tension: 0.3
+    };
+  }
+
+  return {
+    backgroundColor: color,
+    borderColor: seriesKey === "current" ? "rgba(255,255,255,0.75)" : color,
+    borderWidth: seriesKey === "current" ? 1.5 : 1,
+    data: values,
+    label
+  };
+}
+
+function drawSeriesChart(key, type, labels, series) {
+  const canvas = document.querySelector(`[data-chart-${key}]`);
+  if (!canvas || typeof Chart === "undefined") return;
+
+  destroyStatsChart(key);
+  canvas.classList.remove("hidden");
+
+  statsState.charts[key] = new Chart(canvas, {
+    data: {
+      datasets: [
+        statsDataset("real", "אזעקת אמת", series.real, type),
+        statsDataset("training", "תרגול", series.training, type),
+        statsDataset("current", "נוכחי", series.current, type)
+      ],
+      labels
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      responsive: true,
+      scales: {
+        x: { grid: { color: "rgba(255,255,255,0.08)" }, ticks: { color: "#9fb0c7" } },
+        y: { beginAtZero: true, grid: { color: "rgba(255,255,255,0.08)" }, ticks: { color: "#9fb0c7" } }
+      }
+    },
+    type
+  });
+}
+
+function drawPieChart(activity, latest) {
+  const canvas = document.querySelector("[data-chart-pie]");
+  const empty = document.querySelector("[data-pie-empty]");
+  if (!canvas || typeof Chart === "undefined") return;
+
+  destroyStatsChart("pie");
+
+  // the correct/wrong pie is for trivia only — missions self-verify in the room
+  const scored = activity.type === "trivia"
+    ? (latest?.items || []).filter(item => typeof item.correct === "boolean")
+    : [];
+  const correct = scored.filter(item => item.correct).length;
+  const wrong = scored.length - correct;
+
+  if (!scored.length) {
+    canvas.classList.add("hidden");
+    if (empty) {
+      empty.textContent = activity.type === "trivia"
+        ? "אין עדיין נתוני תשובות עבור משתתף זה."
+        : "גרף התשובות זמין עבור טריוויה בלבד.";
+      empty.classList.remove("hidden");
+    }
+    return;
+  }
+
+  canvas.classList.remove("hidden");
+  empty?.classList.add("hidden");
+
+  statsState.charts.pie = new Chart(canvas, {
+    data: {
+      datasets: [{
+        backgroundColor: ["#29b36a", "#e63f4f"],
+        borderColor: "rgba(0,0,0,0.25)",
+        borderWidth: 1,
+        data: [correct, wrong]
+      }],
+      labels: ["נכון", "שגוי"]
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: "#f8fafc" } } },
+      responsive: true
+    },
+    type: "pie"
+  });
+}
+
+function toggleStatsEmpty(emptySelector, canvasSelector, hasData) {
+  document.querySelector(emptySelector)?.classList.toggle("hidden", hasData);
+  document.querySelector(canvasSelector)?.classList.toggle("hidden", !hasData);
+}
+
+// clear any AI summary shown for the previously selected member
+function resetStatsSummary() {
+  const text = document.querySelector("[data-stats-summary-text]");
+  const status = document.querySelector("[data-stats-summary-status]");
+  if (text) {
+    text.textContent = "";
+    text.classList.add("hidden");
+  }
+  status?.classList.add("hidden");
+}
+
+// hook up the "generate AI summary" button: send the selected member's
+// measurements to Groq (via the gateway) and show the returned situation summary
+function wireStatsSummary() {
+  const button = document.querySelector("[data-stats-summary-btn]");
+  if (!button || button.dataset.wired === "1") return;
+  button.dataset.wired = "1";
+
+  button.addEventListener("click", async () => {
+    const group = getActiveGroup();
+    if (!group || !statsState.memberId) return;
+
+    const status = document.querySelector("[data-stats-summary-status]");
+    const text = document.querySelector("[data-stats-summary-text]");
+
+    button.disabled = true;
+    text?.classList.add("hidden");
+    setStatsStatus(status, "מנתח את המדידות...", "");
+
+    try {
+      const result = await getUserStatsSummary(group.id, statsState.memberId);
+      status?.classList.add("hidden");
+      if (text) {
+        text.textContent = result?.summary || "לא התקבל סיכום.";
+        text.classList.remove("hidden");
+      }
+    } catch (error) {
+      setStatsStatus(status, readableAuthError(error), "warn");
+    } finally {
+      button.disabled = false;
+    }
+  });
 }
 
 // draw the local family member cards
@@ -2781,32 +3539,130 @@ function currentFamilyMemberId() {
 function renderEmergency() {
   renderFamilyList(document.querySelector("[data-emergency-family]"));
   renderEmergencyOrefSummary();
+  toggleAlarmAdminControls();
+  renderAdminProgress();
+  const isAdmin = isCurrentUserAdminForActiveGroup();
   const button = document.querySelector("[data-emergency-safe]");
   const message = document.querySelector("[data-emergency-message]");
   const current = state.familyMembers.find(member => member.id === currentFamilyMemberId());
 
   if (!button || !message) return;
 
-  if (allMembersSafe()) {
-    button.textContent = "×¤×ª×™×—×ª ×¤×¢×™×œ×•×ª";
+  button.classList.remove("hidden");
+
+  if (activitiesUnlocked()) {
+    // the admin doesn't play — they watch the group's live progress instead
+    if (isAdmin) {
+      button.classList.add("hidden");
+      message.textContent = "הפעילויות פתוחות. מעקב אחר התקדמות הקבוצה:";
+      message.className = "notice good";
+      return;
+    }
+    // member who finished all the games: wait here until the admin ends the alert
+    if (state.emergency?.activitiesFinished) {
+      button.classList.add("hidden");
+      message.textContent = "סיימת את כל הפעילויות. ממתין שהמנהל יסיים את האזעקה...";
+      message.className = "notice good";
+      return;
+    }
+    button.textContent = "פתיחת פעילות";
     button.disabled = false;
-    message.textContent = "×›×•×œ× ×ž×•×’× ×™×. ×”×¤×¢×™×œ×•×™×•×ª ×¤×ª×•×—×•×ª.";
+    message.textContent = "הפעילויות פתוחות. אפשר להתחיל.";
     message.className = "notice good";
     return;
   }
 
   if (current?.status === "safe") {
-    button.textContent = "××™×©×•×¨ ×ž×•×’×Ÿ × ×©×œ×—";
+    button.textContent = "אישור מוגן נשלח";
     button.disabled = true;
-    message.textContent = "×ž×ž×ª×™×Ÿ ×œ××™×©×•×¨ ×›×œ ×—×‘×¨×™ ×”×§×‘×•×¦×”...";
+    message.textContent = "ממתין לאישור כל חברי הקבוצה...";
     message.className = "notice warn";
     return;
   }
 
-  button.textContent = "×× ×™ ×ž×•×’×Ÿ!";
+  button.textContent = "אני מוגן!";
   button.disabled = false;
-  message.textContent = "×›×•×œ× ×ž×¡×•×ž× ×™× ×‘×¡×™×›×•×Ÿ ×¢×“ ×œ××™×©×•×¨.";
+  message.textContent = "כולם מסומנים בסיכון עד לאישור.";
   message.className = "notice danger";
+}
+
+// show the admin override / end controls only to an admin during a live alarm
+function toggleAlarmAdminControls() {
+  const isAdmin = isCurrentUserAdminForActiveGroup();
+  const alarmActive = Boolean(state.alarmStatus?.active);
+  const unlockButton = document.querySelector("[data-alarm-unlock]");
+  const endButton = document.querySelector("[data-alarm-end]");
+
+  if (unlockButton) {
+    unlockButton.classList.toggle("hidden", !(isAdmin && alarmActive && !state.alarmStatus?.unlocked));
+  }
+  if (endButton) {
+    endButton.classList.toggle("hidden", !(isAdmin && alarmActive));
+  }
+}
+
+// number of activities active for the current alarm mode; set when an admin
+// opens the emergency screen, used to know when everyone has finished everything
+let adminExpectedActivityCount = 0;
+
+// have all group members completed every active activity?
+function allMembersFinishedActivities() {
+  const group = getActiveGroup();
+  const members = group?.members || [];
+  if (!members.length || adminExpectedActivityCount <= 0) return false;
+
+  const progress = state.alarmStatus?.progress || [];
+  return members.every(member => {
+    const finishedIds = new Set(
+      progress
+        .filter(row => row.userId === member.id && row.total > 0 && row.completed >= row.total)
+        .map(row => row.activityId)
+    );
+    return finishedIds.size >= adminExpectedActivityCount;
+  });
+}
+
+// admin live view: each member's play progress (e.g. "טריוויה 2/3")
+function renderAdminProgress() {
+  const section = document.querySelector("[data-admin-progress]");
+  const list = document.querySelector("[data-admin-progress-list]");
+  if (!section || !list) return;
+
+  const show = isCurrentUserAdminForActiveGroup() && Boolean(state.alarmStatus?.active) && activitiesUnlocked();
+  section.classList.toggle("hidden", !show);
+  if (!show) return;
+
+  const group = getActiveGroup();
+  const members = group?.members || [];
+  const progress = state.alarmStatus?.progress || [];
+
+  if (!members.length) {
+    list.innerHTML = `<p class="notice">No members.</p>`;
+    return;
+  }
+
+  list.innerHTML = members.map(member => {
+    const rows = progress.filter(row => row.userId === member.id);
+    const summary = rows.length
+      ? rows.map(row => `${activityTypeLabel(row.activityType)} ${row.completed}/${row.total}`).join(" · ")
+      : "טרם התחיל";
+    const done = rows.length > 0 && rows.every(row => row.total > 0 && row.completed >= row.total);
+    return `
+      <article class="member-card">
+        ${renderAvatarBadge(member.username, "member-avatar avatar-unity-preview", member.avatarImage)}
+        <div class="member-main">
+          <p class="member-name">${escapeHtml(member.username)}</p>
+          <p class="member-role">${escapeHtml(summary)}</p>
+        </div>
+        <span class="status-pill ${done ? "safe" : "located"}">${done ? "סיים" : "בתהליך"}</span>
+      </article>
+    `;
+  }).join("");
+}
+
+// activity type -> short Hebrew label
+function activityTypeLabel(type) {
+  return type === "mission" ? "חדר משימות" : "טריוויה";
 }
 
 // mark a family member safe
@@ -2911,7 +3767,8 @@ async function renderGame() {
   const area = document.querySelector("[data-game-area]");
   if (!locked || !unlocked || !area) return;
 
-  if (!allMembersSafe()) {
+  if (!activitiesUnlocked()) {
+    gameAudio.stopActivity();
     locked.classList.remove("hidden");
     unlocked.classList.add("hidden");
     return;
@@ -2926,12 +3783,16 @@ async function renderGame() {
     saveState();
   }
 
+  // start sampling hand rotation (phone only; no-op / no data on desktop)
+  startRotationTracking();
+
   area.innerHTML = `<p class="notice">Loading active game...</p>`;
 
   const group = getActiveGroup();
   const mode = activeEmergencyMode();
 
   if (!group) {
+    gameAudio.stopActivity();
     area.innerHTML = `
       <p class="notice warn">No group is selected.</p>
       <a class="btn btn-secondary" href="groups.html">Back to groups</a>
@@ -2945,6 +3806,7 @@ async function renderGame() {
     saveState();
 
     if (!activities.length) {
+      gameAudio.stopActivity();
       area.innerHTML = `
         <p class="notice warn">No ${escapeHtml(mode)} game is active for this group.</p>
         <a class="btn btn-secondary" href="board.html">Back to group</a>
@@ -2955,6 +3817,7 @@ async function renderGame() {
     const index = Math.min(state.emergency.activityQueueIndex || 0, activities.length);
 
     if (index >= activities.length) {
+      gameAudio.stopActivity();
       area.innerHTML = `
         <p class="eyebrow">All done</p>
         <h2>Every game complete</h2>
@@ -2974,12 +3837,16 @@ async function renderGame() {
 
     renderMissionGame(area, activity, mode);
   } catch (error) {
+    gameAudio.stopActivity();
     area.innerHTML = `<p class="notice warn">${escapeHtml(readableAuthError(error))}</p>`;
   }
 }
 
 // "training" or "real" for the current run
 function activeEmergencyMode() {
+  if (state.alarmStatus?.active && (state.alarmStatus.mode === "training" || state.alarmStatus.mode === "real")) {
+    return state.alarmStatus.mode;
+  }
   return state.emergency?.activityMode === "training" || state.emergency?.trigger === "training"
     ? "training"
     : "real";
@@ -2987,6 +3854,7 @@ function activeEmergencyMode() {
 
 // draw a multi-question trivia game
 function renderTriviaGame(area, activity, mode) {
+  const audioActivityKey = `trivia:${activity.id}`;
   const questions = activity.payload?.questions?.length
     ? activity.payload.questions
     : DEFAULT_QUESTIONS;
@@ -3001,6 +3869,12 @@ function renderTriviaGame(area, activity, mode) {
   }
 
   const question = questions[index];
+  // reset the per-question timer so each question is timed on its own, not
+  // cumulatively from when the whole trivia started
+  state.emergency.questionStartedAt = Date.now();
+  saveState();
+  gameAudio.startActivity(audioActivityKey);
+  gameAudio.watchStage();
 
   area.innerHTML = `
     <p class="eyebrow">${escapeHtml(activity.title)}</p>
@@ -3018,7 +3892,12 @@ function renderTriviaGame(area, activity, mode) {
     button.addEventListener("click", () => {
       const answerIndex = Number(button.dataset.gameAnswer);
       const correct = answerIndex === question.correctAnswerIndex;
-      const timeToAnswer = secondsSince(state.emergency.activityStartedAt);
+      const timeToAnswer = secondsSince(state.emergency.questionStartedAt || state.emergency.activityStartedAt);
+      const rotation = takeRotationForItem();
+      gameAudio.stopInactivity();
+      if (correct) {
+        gameAudio.stageSucceeded();
+      }
 
       button.classList.add(correct ? "correct" : "wrong");
       area.querySelectorAll("[data-game-answer]").forEach(item => { item.disabled = true; });
@@ -3034,7 +3913,10 @@ function renderTriviaGame(area, activity, mode) {
           answerIndex,
           correct,
           correctAnswerIndex: question.correctAnswerIndex,
+          index,
+          label: `Q${index + 1}`,
           question: question.question,
+          rotation,
           selectedAnswer: question.answers[answerIndex],
           timeToAnswer
         }
@@ -3048,6 +3930,7 @@ function renderTriviaGame(area, activity, mode) {
         state.emergency.telemetry.mistakes += 1;
       }
       saveState();
+      reportActivityProgress(activity, "trivia", index + 1, questions.length);
 
       window.setTimeout(() => renderTriviaGame(area, activity, mode), 700);
     });
@@ -3056,12 +3939,16 @@ function renderTriviaGame(area, activity, mode) {
 
 // draw the finished trivia score
 async function renderTriviaComplete(area, activity, mode, questions, answers) {
+  const audioActivityKey = `trivia:${activity.id}`;
   const resultKey = `${activity.id}:trivia`;
   state.emergency.submittedResults = state.emergency.submittedResults || {};
   state.emergency.submittedResults[resultKey] = true;
   saveState();
+  reportActivityProgress(activity, "trivia", questions.length, questions.length);
+  gameAudio.completeActivity(audioActivityKey);
 
   const correctCount = answers.filter(answer => answer.correct).length;
+
   area.innerHTML = `
     <p class="eyebrow">${escapeHtml(activity.title)}</p>
     <h2>${correctCount}/${questions.length} correct</h2>
@@ -3069,6 +3956,37 @@ async function renderTriviaComplete(area, activity, mode, questions, answers) {
     ${nextOrFinishButton()}
   `;
   wireNextActivityButton(area);
+
+  // persist the per-question results so the admin statistics page can chart them
+  await persistTriviaResult(activity, mode, answers, correctCount, questions.length);
+}
+
+// send the per-question trivia results to the backend (feeds the stats charts).
+// failures are swallowed so a flaky network never blocks the score screen.
+async function persistTriviaResult(activity, mode, answers, correctCount, totalQuestions) {
+  const group = getActiveGroup();
+  if (!group || !activity?.id) return;
+
+  const items = (answers || []).map((answer, position) => {
+    const index = Number.isInteger(answer.index) ? answer.index : position;
+    return {
+      correct: Boolean(answer.correct),
+      index,
+      label: answer.label || `Q${index + 1}`,
+      rotation: typeof answer.rotation === "number" ? answer.rotation : null,
+      timeSeconds: round(answer.timeToAnswer || 0)
+    };
+  });
+
+  try {
+    await submitGroupActivityResult(group.id, {
+      activityId: activity.id,
+      mode,
+      payload: { correctCount, items, kind: "trivia", totalQuestions }
+    });
+  } catch (error) {
+    console.warn("Failed to submit trivia result", error);
+  }
 }
 
 // is there another game after this one?
@@ -3082,7 +4000,7 @@ function hasMoreActivities() {
 function nextOrFinishButton() {
   return hasMoreActivities()
     ? `<button class="btn btn-primary" type="button" data-next-activity>Next game</button>`
-    : `<a class="btn btn-primary" href="summary.html">Finish</a>`;
+    : `<button class="btn btn-primary" type="button" data-next-activity>Finish</button>`;
 }
 
 // hook the "next game" button up
@@ -3090,7 +4008,7 @@ function wireNextActivityButton(area) {
   area.querySelector("[data-next-activity]")?.addEventListener("click", advanceToNextActivity);
 }
 
-// go to the next game, or the summary if there are none left
+// go to the next game, or finish up if there are none left
 function advanceToNextActivity() {
   if (hasMoreActivities()) {
     state.emergency.activityQueueIndex = (state.emergency.activityQueueIndex || 0) + 1;
@@ -3098,6 +4016,18 @@ function advanceToNextActivity() {
     state.emergency.triviaAnswers = [];
     saveState();
     renderGame();
+    return;
+  }
+
+  // finished every game: during a live alarm, members go back to the alarm
+  // screen and wait there for the admin to end the alert. Outside an alarm
+  // (local demo) keep the old summary behavior.
+  if (state.alarmStatus?.active) {
+    if (state.emergency) {
+      state.emergency.activitiesFinished = true;
+      saveState();
+    }
+    window.location.href = "emergency.html";
   } else {
     window.location.href = "summary.html";
   }
@@ -3106,15 +4036,29 @@ function advanceToNextActivity() {
 // draw the unity room with the tasks the admin picked
 function renderMissionGame(area, activity, mode) {
   const missionKey = `${activity.id}:room`;
+  const audioActivityKey = `mission:${activity.id}`;
   const submitted = state.emergency.submittedResults?.[missionKey];
+  const completedStages = new Set();
+  // per-task timing + rotation, captured as each stage completes (this sitting only)
+  const stageTimings = [];
+  let lastStageAt = state.emergency.activityStartedAt || Date.now();
+  let missionCompletionHandled = false;
+  let missionCompletionAudio = null;
   stopUnityMissionRoom();
+  gameAudio.startActivity(audioActivityKey);
 
   window.saferTogetherMissionCompleted = async detail => {
+    if (missionCompletionHandled) return;
+    missionCompletionHandled = true;
+
     try {
-      await submitMissionCompletion(activity, mode, detail || {});
+      await submitMissionCompletion(activity, mode, detail || {}, stageTimings);
+      missionCompletionAudio = missionCompletionAudio || gameAudio.completeActivity(audioActivityKey);
+      await missionCompletionAudio;
       // skip the "sent to admin" screen, just go to the next game
       advanceToNextActivity();
     } catch (error) {
+      missionCompletionHandled = false;
       renderUnityMissionStatus(readableAuthError(error), "warn");
     }
   };
@@ -3124,6 +4068,42 @@ function renderMissionGame(area, activity, mode) {
     advanceToNextActivity();
     return;
   }
+
+  const missionTotal = Math.max(1, Array.isArray(activity.payload?.tasks) ? activity.payload.tasks.length : 0);
+  reportActivityProgress(activity, "mission", 0, missionTotal);
+  gameAudio.watchStage(MISSION_INACTIVITY_DELAY_MS);
+
+  // each step inside a task (a new bolt, the dial, the next exercise, the next
+  // wire level) pings this so the idle timer restarts from that step
+  window.saferTogetherMissionStageProgress = () => {
+    gameAudio.watchStage(MISSION_INACTIVITY_DELAY_MS);
+  };
+
+  window.saferTogetherMissionStageCompleted = detail => {
+    const target = String(detail?.target || detail || "").trim();
+    if (!target || completedStages.has(target)) return;
+
+    // time this task took = gap since the previous task completed (or activity start)
+    const now = Date.now();
+    stageTimings.push({
+      rotation: takeRotationForItem(),
+      target,
+      timeSeconds: (now - lastStageAt) / 1000
+    });
+    lastStageAt = now;
+
+    completedStages.add(target);
+    gameAudio.stageSucceeded();
+    reportActivityProgress(activity, "mission", Math.min(completedStages.size, missionTotal), missionTotal);
+
+    if (completedStages.size >= missionTotal) {
+      missionCompletionAudio = gameAudio.completeActivity(audioActivityKey);
+    } else {
+      // more stages to go: re-arm the idle timer so encouragement clips can
+      // play again if the user gets stuck on the next stage
+      gameAudio.watchStage(MISSION_INACTIVITY_DELAY_MS);
+    }
+  };
 
   area.innerHTML = `
     <p class="eyebrow">${escapeHtml(activity.title)}</p>
@@ -3174,6 +4154,9 @@ function renderMissionGame(area, activity, mode) {
 function stopUnityMissionRoom() {
   clearMissionPayloadSender();
   window.saferTogetherOpenRadioWire = null;
+  window.saferTogetherMissionCompleted = null;
+  window.saferTogetherMissionStageCompleted = null;
+  window.saferTogetherMissionStageProgress = null;
 
   const unityInstance = window.saferTogetherMissionUnityInstance;
   window.saferTogetherMissionUnityInstance = null;
@@ -3221,9 +4204,13 @@ async function loadUnityMissionRoom(activity, mode) {
 
   window.saferTogetherMissionUnityInstance = unityInstance;
 
-  // when the room wants the radio wired, open the puzzle and tell unity once it's solved
+  // when the room wants the radio wired, open the puzzle and tell unity once it's solved.
+  // each wire level restarts the idle timer, so the nudge is per-step, not for the whole puzzle.
   window.saferTogetherOpenRadioWire = () => {
-    openRadioWirePuzzle(() => sendUnityRadioWired(unityInstance));
+    openRadioWirePuzzle(
+      () => sendUnityRadioWired(unityInstance),
+      () => gameAudio.watchStage(MISSION_INACTIVITY_DELAY_MS)
+    );
   };
 
   renderUnityMissionStatus("Unity mission room ready. Sending mission data...", "good");
@@ -3347,8 +4334,9 @@ function renderUnityMissionStatus(message, tone = "") {
   status.textContent = message;
 }
 
-// mark the room done locally. the unity room self-verifies before it reports done
-async function submitMissionCompletion(activity, mode, detail = {}) {
+// mark the room done locally + persist the per-task results for the stats page.
+// the unity room self-verifies before it reports done.
+async function submitMissionCompletion(activity, mode, detail = {}, stageTimings = []) {
   const missionKey = `${activity.id}:room`;
   state.emergency.submittedResults = state.emergency.submittedResults || {};
 
@@ -3359,7 +4347,41 @@ async function submitMissionCompletion(activity, mode, detail = {}) {
   state.emergency.submittedResults[missionKey] = true;
   state.emergency.missionCompletedAt = secondsSince(state.emergency.activityStartedAt);
   saveState();
+  const missionTotal = Math.max(1, Array.isArray(activity.payload?.tasks) ? activity.payload.tasks.length : 0);
+  reportActivityProgress(activity, "mission", missionTotal, missionTotal);
+
+  await persistMissionResult(activity, mode, stageTimings);
   return true;
+}
+
+// send the per-task mission results to the backend (feeds the stats charts).
+// items are keyed by the task's fixed position in payload.tasks so they line up
+// across users regardless of the order each user completed them in.
+async function persistMissionResult(activity, mode, stageTimings = []) {
+  const group = getActiveGroup();
+  if (!group || !activity?.id) return;
+
+  // missions contribute time + rotation only — the correct/wrong pie is trivia-only
+  // (the mission room self-verifies, so a finished mission has no "wrong" answers)
+  const tasks = Array.isArray(activity.payload?.tasks) ? activity.payload.tasks : [];
+  const items = (stageTimings || [])
+    .map(stage => ({
+      index: tasks.indexOf(stage.target),
+      label: stage.target,
+      rotation: typeof stage.rotation === "number" ? stage.rotation : null,
+      timeSeconds: round(stage.timeSeconds || 0)
+    }))
+    .filter(item => item.index >= 0);
+
+  try {
+    await submitGroupActivityResult(group.id, {
+      activityId: activity.id,
+      mode,
+      payload: { items, kind: "mission", tasks: (stageTimings || []).map(stage => stage.target) }
+    });
+  } catch (error) {
+    console.warn("Failed to submit mission result", error);
+  }
 }
 
 // draw the stress report for one member
@@ -3510,8 +4532,8 @@ function allMembersSafe() {
 
 // status id -> display text
 function statusLabel(status) {
-  if (status === "safe") return "×ž×•×’×Ÿ";
-  if (status === "at_risk") return "×‘×¡×™×›×•×Ÿ";
+  if (status === "safe") return "מוגן";
+  if (status === "at_risk") return "בסיכון";
   return "OFFLINE";
 }
 

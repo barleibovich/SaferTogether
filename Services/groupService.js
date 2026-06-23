@@ -1,6 +1,7 @@
 const { httpError } = require("./errors");
 const { normalizeAvatar } = require("./avatarService");
 const { getLocationsForUsers } = require("./memberLocationService");
+const { getPresenceForUsers } = require("./presenceService");
 const { getSessionContext } = require("./supabaseService");
 
 // make a short join code for a group
@@ -160,6 +161,10 @@ async function getGroupMembers(client, groups, currentUser, currentProfile) {
     client,
     (data || []).map(member => member.user_id)
   );
+  const presenceMap = await getPresenceForUsers(
+    client,
+    (data || []).map(member => member.user_id)
+  );
 
   return (data || []).map(member => {
     const profile = profileMap.get(member.user_id);
@@ -176,6 +181,7 @@ async function getGroupMembers(client, groups, currentUser, currentProfile) {
       avatarImage: profileAvatarImage(isCurrentUser ? currentProfile : profile),
       groupId: member.group_id,
       id: member.user_id,
+      lastSeenAt: presenceMap.get(member.user_id) || null,
       role: isGroupOwner ? "admin" : (profile?.role || (isCurrentUser ? currentProfile.role : "user")),
       username
     };
@@ -198,6 +204,7 @@ async function addMissingGroupOwnersAsMembers(client, groups, members, currentUs
   const ownerIds = missingOwnerGroups.map(group => group.created_by);
   const profileMap = await getProfilesById(client, ownerIds);
   const locationMap = await getLocationsForUsers(client, ownerIds);
+  const presenceMap = await getPresenceForUsers(client, ownerIds);
   const ownerMembers = missingOwnerGroups.map(group => {
     const isCurrentUser = group.created_by === currentUser?.id;
     const profile = profileMap.get(group.created_by);
@@ -214,6 +221,7 @@ async function addMissingGroupOwnersAsMembers(client, groups, members, currentUs
       avatarImage: profileAvatarImage(isCurrentUser ? currentProfile : profile),
       groupId: group.id,
       id: group.created_by,
+      lastSeenAt: presenceMap.get(group.created_by) || null,
       role: "admin",
       username
     };
@@ -739,9 +747,11 @@ module.exports = {
   deleteOwnedGroup,
   endGroupDrill,
   getDrillStatus,
+  getManageableGroupRecord,
   getVisibleGroups,
   leaveGroup,
   markMemberDrillSafe,
+  requireAdminContext,
   requestJoinByCode,
   reviewJoinRequest,
   startGroupDrill,

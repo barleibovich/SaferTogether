@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($p = \"C:\\\\SaferTogether\\\\Unity Avatars\"; if \\(Test-Path $p\\) { Get-ChildItem -Path $p -Recurse -File -ErrorAction SilentlyContinue | Select-Object @{N='KB';E={[math]::Round\\($_.Length/1KB\\)}}, FullName | Format-Table -AutoSize | Out-String -Width 250 } else { \"NOT FOUND: $p\" })"
+    ]
+  }
+}

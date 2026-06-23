@@ -63,7 +63,11 @@ function getConfig() {
     frontendRoot: path.join(repoRoot, "SaferTogetherUI"),
     port: Number(env.PORT || 5173),
     supabaseAnonKey,
-    supabaseUrl
+    supabaseUrl,
+    // Optional: powers the AI "user situation" summary on the stats page.
+    // Kept server-side only — the key must never be sent to the browser.
+    groqApiKey: env.GROQ_API_KEY || "",
+    groqModel: env.GROQ_MODEL || "llama-3.3-70b-versatile"
   };
 
   return cachedConfig;

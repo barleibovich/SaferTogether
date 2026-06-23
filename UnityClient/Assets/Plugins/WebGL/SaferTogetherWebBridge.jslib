@@ -28,6 +28,22 @@ mergeInto(LibraryManager.library, {
     }
   },
 
+  // tell the page that one task inside the room was completed
+  SaferTogetherMissionStageCompleted: function (targetPointer) {
+    if (typeof window.saferTogetherMissionStageCompleted === "function") {
+      window.saferTogetherMissionStageCompleted({
+        target: UTF8ToString(targetPointer)
+      });
+    }
+  },
+
+  // tell the page the player advanced a step inside a task (resets the idle nudge timer)
+  SaferTogetherMissionStageProgress: function () {
+    if (typeof window.saferTogetherMissionStageProgress === "function") {
+      window.saferTogetherMissionStageProgress();
+    }
+  },
+
   // open the radio wire thing on the page
   SaferTogetherOpenRadioWire: function () {
     if (typeof window.saferTogetherOpenRadioWire === "function") {
