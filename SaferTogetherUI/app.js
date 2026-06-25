@@ -28,8 +28,7 @@ import {
   markSafe,
   renameGroup,
   requestJoinByCode,
-  reviewJoinRequest,
-  startDrill
+  reviewJoinRequest
 } from "./src/api/groupGateway.js";
 import {
   getGroupOrefStatus,
@@ -46,6 +45,7 @@ import {
   unlockAlarm
 } from "./src/api/alarmGateway.js";
 import { sendPresenceHeartbeat } from "./src/api/presenceGateway.js";
+import { deletePushSubscription, getPushConfig, savePushSubscription } from "./src/api/pushGateway.js";
 import { startRotationTracking, takeRotationForItem } from "./src/sensors/rotation.js";
 
 const STORAGE_KEY = "saferTogetherState.v5";
@@ -101,10 +101,10 @@ const DEFAULT_CHARACTER_SPEC = {
   topColor: "blue"
 };
 const DEFAULT_FAMILY = [
-  { id: "1", name: "×“×§×œ", role: "×™×œ×“", status: "offline", avatar: "ðŸ¯" },
-  { id: "2", name: "×©×™×¨×”", role: "×™×œ×“×”", status: "offline", avatar: "ðŸ¬" },
-  { id: "3", name: "××‘×™×‘", role: "×™×œ×“", status: "offline", avatar: "ðŸ¦©" },
-  { id: "4", name: "×™×”×œ×™", role: "×™×œ×“", status: "offline", avatar: "ðŸ¦‹" }
+  { id: "1", name: "דקל", role: "ילד", status: "offline", avatar: "🐯" },
+  { id: "2", name: "שירה", role: "ילדה", status: "offline", avatar: "🐬" },
+  { id: "3", name: "אביב", role: "ילד", status: "offline", avatar: "🦩" },
+  { id: "4", name: "יהלי", role: "ילד", status: "offline", avatar: "🦋" }
 ];
 
 const DEFAULT_QUESTIONS = [
@@ -991,6 +991,7 @@ function wireLogoutLink() {
     event.preventDefault();
 
     try {
+      await unsubscribeAlarmPush();
       await logout();
     } catch (error) {
       console.warn(readableAuthError(error));
@@ -1001,6 +1002,101 @@ function wireLogoutLink() {
     sessionStorage.removeItem(STORAGE_KEY);
     window.location.href = "index.html";
   });
+}
+
+// --- web push (alarm notifications even when the app is closed) -------------
+// A device only receives alarms after the member logged in AND allowed
+// notifications at least once — that's when we register it against their user.
+// Re-affirmed on every board load; removed on logout so a logged-out user (or
+// former member) stops getting that group's alarms.
+
+let pushSubscriptionEnsured = false;
+
+// VAPID public key (base64url) -> Uint8Array for PushManager.subscribe
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  const output = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i += 1) {
+    output[i] = raw.charCodeAt(i);
+  }
+  return output;
+}
+
+function pushSupported() {
+  return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+}
+
+// register the service worker + subscribe this device for the current user.
+// Safe to call repeatedly; only acts once per page and only when logged in.
+async function ensureAlarmPushSubscription() {
+  if (pushSubscriptionEnsured || !pushSupported() || !state.user) {
+    return;
+  }
+  pushSubscriptionEnsured = true;
+
+  try {
+    const config = await getPushConfig();
+    if (!config?.enabled || !config.publicKey) {
+      return; // server has no VAPID keys configured — push is off
+    }
+
+    await navigator.serviceWorker.register("/sw.js");
+
+    const subscribeNow = async () => {
+      try {
+        const ready = await navigator.serviceWorker.ready;
+        const existing = await ready.pushManager.getSubscription();
+        const subscription = existing || await ready.pushManager.subscribe({
+          applicationServerKey: urlBase64ToUint8Array(config.publicKey),
+          userVisibleOnly: true
+        });
+        await savePushSubscription(subscription.toJSON(), navigator.userAgent);
+      } catch (error) {
+        console.warn("push subscribe failed:", error?.message || error);
+      }
+    };
+
+    if (Notification.permission === "granted") {
+      await subscribeNow();
+      return;
+    }
+
+    if (Notification.permission === "default") {
+      // Mobile browsers only allow the permission prompt from a user gesture,
+      // so ask on the first tap rather than on load.
+      document.addEventListener("pointerdown", async () => {
+        const permission = await Notification.requestPermission();
+        if (permission === "granted") {
+          await subscribeNow();
+        }
+      }, { once: true });
+    }
+  } catch (error) {
+    console.warn("push setup failed:", error?.message || error);
+  }
+}
+
+// drop this device's subscription so a logged-out user stops getting alarms.
+// Call before logout() so the DELETE request is still authenticated.
+async function unsubscribeAlarmPush() {
+  if (!pushSupported()) {
+    return;
+  }
+
+  try {
+    const registration = await navigator.serviceWorker.getRegistration();
+    const subscription = await registration?.pushManager.getSubscription();
+    if (!subscription) {
+      return;
+    }
+
+    await deletePushSubscription(subscription.endpoint).catch(() => {});
+    await subscription.unsubscribe().catch(() => {});
+  } catch (error) {
+    console.warn("push unsubscribe failed:", error?.message || error);
+  }
 }
 
 // set up the groups screen
@@ -1121,6 +1217,7 @@ async function initGroups() {
   document.querySelector("[data-logout]")?.addEventListener("click", async event => {
     event.preventDefault();
     try {
+      await unsubscribeAlarmPush();
       await logout();
     } catch (error) {
       console.warn(readableAuthError(error));
@@ -1294,6 +1391,16 @@ async function initCreateGroup() {
 
 // set up the group board screen
 async function initBoard() {
+  // Paint the cached group name/id right away. state is hydrated from
+  // sessionStorage synchronously, so this avoids the header flashing the
+  // "הקבוצה שלי" placeholder and then jumping to the real group name once the
+  // network refresh below resolves.
+  const cachedGroup = getActiveGroup();
+  if (cachedGroup) {
+    setText("[data-active-group-name]", cachedGroup.name);
+    setText("[data-active-group-id]", cachedGroup.id);
+  }
+
   try {
     const profile = await loadSessionIntoState();
     if (!profile) {
@@ -1316,6 +1423,7 @@ async function initBoard() {
   setText("[data-active-group-name]", group.name);
   setText("[data-active-group-id]", group.id);
   startPresenceHeartbeat();
+  void ensureAlarmPushSubscription();
   renderBoardMembers(group);
   renderBoardPendingRequests(group);
   initAlertLocationControls();
@@ -1329,20 +1437,8 @@ async function initBoard() {
 
   const isAdmin = isCurrentUserAdminForActiveGroup();
 
-  if (isAdmin) {
-    document.querySelector("[data-start-drill]")?.addEventListener("click", async () => {
-      const group = getActiveGroup();
-      if (!group) return;
-      try {
-        await startDrill(group.id);
-        window.location.href = "practice.html";
-      } catch (error) {
-        console.error("startDrill failed:", error);
-        alert("שגיאה בהפעלת התרגול");
-      }
-    });
-  } else {
-    startDrillPolling();
+  if (!isAdmin) {
+    // Members get pulled into whatever alarm (real or training) the admin raises.
     startAlarmBroadcastPolling();
     startMembersPolling();
   }
@@ -1985,8 +2081,8 @@ function showAlarmBroadcastOverlay(mode) {
     if (heading) heading.textContent = mode === "training" ? "תרגול התחיל!" : "אזעקה!";
     if (subtitle) {
       subtitle.textContent = mode === "training"
-        ? "ה-admin הפעיל תרגול. עוברים למסך החירום..."
-        : "ה-admin הפעיל אזעקה. עוברים למסך החירום...";
+        ? "המנהל הפעיל תרגול. עוברים למסך החירום..."
+        : "המנהל הפעיל אזעקה. עוברים למסך החירום...";
     }
     overlay.classList.remove("hidden");
   }
@@ -2036,12 +2132,12 @@ function initAlertLocationControls() {
 // get gps once, save it, then start watching
 async function enableGpsAlertLocation() {
   if (!navigator.geolocation) {
-    renderGpsLocationStatus("GPS is not available in this browser", "warn");
+    renderGpsLocationStatus("איתור GPS אינו זמין בדפדפן הזה", "warn");
     return;
   }
 
   try {
-    renderGpsLocationStatus("Getting GPS location...");
+    renderGpsLocationStatus("מאתר מיקום GPS…");
     const position = await getCurrentGpsPosition();
     await saveGpsAlertLocation(position, { force: true });
     startGpsAlertLocationWatch();
@@ -2117,7 +2213,7 @@ async function saveGpsAlertLocation(position, { force = false } = {}) {
     }
   }
 
-  renderGpsLocationStatus("Matching GPS to alert area...");
+  renderGpsLocationStatus("מתאים GPS לאזור התרעה…");
   const alertLocation = await saveCurrentUserAlertLocation({
     latitude: coords.latitude,
     longitude: coords.longitude
@@ -2132,7 +2228,7 @@ async function saveGpsAlertLocation(position, { force = false } = {}) {
   await refreshCurrentUserGroups(state.user.role);
   saveState();
 
-  renderGpsLocationStatus(`GPS area: ${alertLocationLabel(alertLocation)}`, "good");
+  renderGpsLocationStatus(`אזור GPS: ${alertLocationLabel(alertLocation)}`, "good");
   renderBoardMembers(getActiveGroup());
   await refreshOrefStatus();
   return alertLocation;
@@ -2155,10 +2251,10 @@ function renderGpsLocationStatus(message, kind = "") {
 
 // geolocation error -> short text
 function readableGpsError(error) {
-  if (error?.code === 1) return "GPS permission was denied";
-  if (error?.code === 2) return "GPS location is unavailable";
-  if (error?.code === 3) return "GPS request timed out";
-  return error?.message || "Could not use GPS";
+  if (error?.code === 1) return "הגישה למיקום GPS נדחתה";
+  if (error?.code === 2) return "מיקום ה-GPS אינו זמין";
+  if (error?.code === 3) return "בקשת ה-GPS חרגה מהזמן המוקצב";
+  return error?.message || "לא ניתן להשתמש ב-GPS";
 }
 
 // distance between two gps coords (haversine)
@@ -2247,13 +2343,13 @@ function renderOrefStatus(status = state.orefStatus, error = null) {
 
   if (refreshState) {
     refreshState.textContent = status?.fetchedAt
-      ? `Checked ${new Date(status.fetchedAt).toLocaleTimeString()}`
-      : "Connecting";
+      ? `נבדק ב-${new Date(status.fetchedAt).toLocaleTimeString("he-IL")}`
+      : "מתחבר…";
   }
 
   if (summary) {
     if (error) {
-      summary.textContent = error.message || "Could not check Pikud HaOref right now. Keep using official alerts.";
+      summary.textContent = error.message || "לא ניתן לבדוק את פיקוד העורף כרגע. המשיכו להסתמך על ההתרעות הרשמיות.";
       summary.className = "notice warn";
     } else if (status?.hasGroupAlert) {
       const names = status.members
@@ -2261,16 +2357,16 @@ function renderOrefStatus(status = state.orefStatus, error = null) {
         .map(member => member.username)
         .join(", ");
       const areas = status.affectedAreas.slice(0, 6).join(", ");
-      summary.textContent = `Real Home Front Command alert for ${names || "this group"}. Affected areas: ${areas || "see official alert"}.`;
+      summary.textContent = `התרעת פיקוד העורף אמיתית עבור ${names || "הקבוצה"}. אזורים מושפעים: ${areas || "ראו התרעה רשמית"}.`;
       summary.className = "notice danger";
     } else if (status?.hasActiveAlert) {
-      summary.textContent = `There is an active Home Front Command alert outside this group's saved areas. Affected areas: ${status.affectedAreas.slice(0, 6).join(", ")}.`;
+      summary.textContent = `קיימת התרעת פיקוד העורף פעילה מחוץ לאזורים השמורים של הקבוצה. אזורים מושפעים: ${status.affectedAreas.slice(0, 6).join(", ")}.`;
       summary.className = "notice warn";
     } else if (!state.user?.alertLocation) {
-      summary.textContent = "Set your alert area so real Home Front Command alarms can be matched to you.";
+      summary.textContent = "הגדירו את אזור ההתרעה שלכם כדי שאזעקות אמת של פיקוד העורף יותאמו אליכם.";
       summary.className = "notice warn";
     } else {
-      summary.textContent = "No active Home Front Command alert for saved group areas.";
+      summary.textContent = "אין התרעת פיקוד העורף פעילה עבור האזורים השמורים של הקבוצה.";
       summary.className = "notice good";
     }
   }
@@ -2295,7 +2391,7 @@ function renderEmergencyOrefSummary(status = state.emergency?.orefStatus || stat
     .map(member => member.username)
     .join(", ");
 
-  node.textContent = `Pikud HaOref real alert: ${affectedMembers || "group member"} must enter protected space now.`;
+  node.textContent = `התרעת אמת של פיקוד העורף: ${affectedMembers || "חבר/ת קבוצה"} חייבים להיכנס עכשיו למרחב מוגן.`;
   node.classList.remove("hidden");
 }
 
@@ -2466,7 +2562,7 @@ function initTrivia() {
   });
 
   document.querySelector("[data-save-questions]")?.addEventListener("click", event => {
-    event.currentTarget.textContent = "×”×©××œ×•×Ÿ × ×©×ž×¨ ×ž×§×•×ž×™×ª";
+    event.currentTarget.textContent = "השאלון נשמר מקומית";
   });
   document.querySelector("[data-save-questions]")?.addEventListener("click", async event => {
     try {
@@ -2958,9 +3054,9 @@ function initSummary() {
         <span class="status-dot ${member.status}"></span>
         <div class="member-main">
           <p class="member-name">${escapeHtml(member.name)}</p>
-          <p class="member-role">×–×ž×Ÿ ××™×©×•×¨: ${report.checkInTime}</p>
-          <p class="member-role">×¤×¢×™×œ×•×ª: ${report.participation}</p>
-          <p class="member-role">× ×›×•×Ÿ: ${report.correct} | ×˜×¢×•×™×•×ª: ${report.mistakes}</p>
+          <p class="member-role">זמן אישור: ${report.checkInTime}</p>
+          <p class="member-role">פעילות: ${report.participation}</p>
+          <p class="member-role">נכון: ${report.correct} | טעויות: ${report.mistakes}</p>
         </div>
         <span class="stress-level ${stressClass(report.stressLevel)}">${stressLabel(report.stressLevel)}</span>
       </article>
@@ -3367,7 +3463,7 @@ function renderQuestionList() {
   container.innerHTML = questions.map((question, index) => `
     <article class="added-item">
       <strong>${index + 1}. ${escapeHtml(question.question)}</strong>
-      <span>${escapeHtml(question.answers[question.correctAnswerIndex])} ×ž×¡×•×ž× ×ª ×›×ª×©×•×‘×” × ×›×•× ×”.</span>
+      <span>${escapeHtml(question.answers[question.correctAnswerIndex])} מסומנת כתשובה נכונה.</span>
     </article>
   `).join("");
 }
@@ -3400,7 +3496,7 @@ function renderPracticeQuestion() {
   if (!container) return;
 
   container.innerHTML = `
-    <h2>×©××œ×ª ×ª×¨×’×•×œ</h2>
+    <h2>שאלת תרגול</h2>
     <p class="subtitle">${escapeHtml(question.question)}</p>
     <div class="answer-grid">
       ${question.answers.map((answer, index) => `
@@ -3423,7 +3519,7 @@ function renderPracticeQuestion() {
       button.classList.add(correct ? "correct" : "wrong");
       container.querySelectorAll("[data-practice-answer]").forEach(item => item.disabled = true);
       const feedback = container.querySelector("[data-practice-feedback]");
-      feedback.textContent = correct ? "×›×œ ×”×›×‘×•×“. ×ª×©×•×‘×” × ×›×•× ×”." : "× ×™×¡×™×•×Ÿ ×˜×•×‘. × ×ª×¨×’×œ ××ª ×–×” ×©×•×‘.";
+      feedback.textContent = correct ? "כל הכבוד. תשובה נכונה." : "ניסיון טוב. נתרגל את זה שוב.";
       feedback.classList.remove("hidden");
     });
   });
@@ -3455,14 +3551,15 @@ function completePractice() {
   if (!summary) return;
 
   summary.innerHTML = `
-    <h2>×”××™×ž×•×Ÿ ×”×¡×ª×™×™×</h2>
+    <h2>האימון הסתיים</h2>
     <div class="comparison-grid">
-      <div class="comparison-box"><span>×–×ž×Ÿ ×ª×©×•×‘×” ×ž×ž×•×¦×¢</span><strong>${state.baseline.averageAnswerTime}s</strong></div>
-      <div class="comparison-box"><span>×ª×©×•×‘×•×ª × ×›×•× ×•×ª</span><strong>${answers.length - mistakes}</strong></div>
-      <div class="comparison-box"><span>×˜×¢×•×™×•×ª</span><strong>${mistakes}</strong></div>
-      <div class="comparison-box"><span>×ª× ×•×¢×” ×ž×“×•×ž×”</span><strong>${state.baseline.averageMovementLevel}</strong></div>
+      <div class="comparison-box"><span>זמן תשובה ממוצע</span><strong>${state.baseline.averageAnswerTime}s</strong></div>
+      <div class="comparison-box"><span>תשובות נכונות</span><strong>${answers.length - mistakes}</strong></div>
+      <div class="comparison-box"><span>טעויות</span><strong>${mistakes}</strong></div>
+      <div class="comparison-box"><span>תנועה מדומה</span><strong>${state.baseline.averageMovementLevel}</strong></div>
     </div>
-    <p class="notice good">× ×ª×•× ×™ ×”×‘×¡×™×¡ × ×©×ž×¨×• ×ž×§×•×ž×™×ª ×œ×”×©×•×•××” ×‘×–×ž×Ÿ ××ž×ª.</p>
+    <p class="notice good">נתוני הבסיס נשמרו מקומית להשוואה בזמן אמת.</p>
+    <a class="btn btn-primary" href="board.html">חזרה ללוח</a>
   `;
   summary.classList.remove("hidden");
 }
@@ -3637,7 +3734,7 @@ function renderAdminProgress() {
   const progress = state.alarmStatus?.progress || [];
 
   if (!members.length) {
-    list.innerHTML = `<p class="notice">No members.</p>`;
+    list.innerHTML = `<p class="notice">אין חברים בקבוצה.</p>`;
     return;
   }
 
@@ -3713,7 +3810,7 @@ function renderLegacyLocalGame() {
   const answered = state.emergency.activityAnswer;
 
   area.innerHTML = `
-    <p class="eyebrow">×©××œ×•×Ÿ</p>
+    <p class="eyebrow">שאלון</p>
     <h2>${escapeHtml(question.question)}</h2>
     <div class="answer-grid">
       ${question.answers.map((answer, index) => {
@@ -3723,12 +3820,12 @@ function renderLegacyLocalGame() {
     </div>
     <p class="notice ${answered ? "good" : "hidden"}" data-game-feedback>${answered ? feedbackText(answered.correct) : ""}</p>
     <div class="card">
-      <p class="eyebrow">×ž×©×™×ž×ª ×‘×˜×™×—×•×ª</p>
+      <p class="eyebrow">משימת בטיחות</p>
       <h3>${escapeHtml(mission.title)}</h3>
       <p class="subtitle">${escapeHtml(mission.description)}</p>
-      <button class="btn btn-secondary" type="button" data-mission-done>${state.emergency.missionCompletedAt ? "×”×ž×©×™×ž×” ×”×•×©×œ×ž×”" : "×¡×™×•×"}</button>
+      <button class="btn btn-secondary" type="button" data-mission-done>${state.emergency.missionCompletedAt ? "המשימה הושלמה" : "סיום"}</button>
     </div>
-    <a class="btn btn-primary" href="summary.html">×¡×™×•× ×•×¦×¤×™×™×” ×‘×¡×™×›×•×</a>
+    <a class="btn btn-primary" href="summary.html">סיום וצפייה בסיכום</a>
   `;
 
   area.querySelectorAll("[data-game-answer]").forEach(button => {
@@ -3755,7 +3852,7 @@ function renderLegacyLocalGame() {
     state.emergency.missionCompletedAt = secondsSince(state.emergency.activityStartedAt);
     state.emergency.telemetry.tapCount += 1;
     saveState();
-    event.currentTarget.textContent = "×”×ž×©×™×ž×” ×”×•×©×œ×ž×”";
+    event.currentTarget.textContent = "המשימה הושלמה";
     event.currentTarget.disabled = true;
   });
 }
@@ -4401,17 +4498,17 @@ function renderReport(memberId) {
 
   detail.innerHTML = `
     <section class="summary-card">
-      <p class="eyebrow">×¡×™×›×•× ×ž×¦×‘</p>
+      <p class="eyebrow">סיכום מצב</p>
       <h2>${escapeHtml(member.name)}: <span class="stress-level ${stressClass(report.stressLevel)}">${stressLabel(report.stressLevel)}</span></h2>
-      <p class="subtitle">×“×§×ª ×œ×—×¥ ×’×‘×•×”×” ×‘×™×•×ª×¨: ×“×§×” ${highest.minute}. ×¡×™×‘×” ×ž×¨×›×–×™×ª: ${escapeHtml(report.reason)}.</p>
+      <p class="subtitle">דקת לחץ גבוהה ביותר: דקה ${highest.minute}. סיבה מרכזית: ${escapeHtml(report.reason)}.</p>
     </section>
 
     <section class="card">
-      <h2>×¨×ž×ª ×œ×—×¥ ×œ×¤×™ ×“×§×”</h2>
+      <h2>רמת לחץ לפי דקה</h2>
       <div class="bar-chart">
         ${stressByMinute.map(item => `
           <div class="bar-row">
-            <span>×“×§×” ${item.minute}</span>
+            <span>דקה ${item.minute}</span>
             <span class="bar-track"><span class="bar-fill" style="--value:${item.stress}%"></span></span>
             <span>${item.stress}</span>
           </div>
@@ -4420,34 +4517,34 @@ function renderReport(memberId) {
     </section>
 
     <section class="card">
-      <h2>×–×ž×Ÿ ×ž×¢× ×”</h2>
+      <h2>זמן מענה</h2>
       <div class="comparison-grid">
-        <div class="comparison-box"><span>×‘×¡×™×¡ ××™×ž×•×Ÿ</span><strong>${baseline.averageAnswerTime}s</strong></div>
-        <div class="comparison-box"><span>××™×¨×•×¢ × ×•×›×—×™</span><strong>${currentAverage}s</strong></div>
+        <div class="comparison-box"><span>בסיס אימון</span><strong>${baseline.averageAnswerTime}s</strong></div>
+        <div class="comparison-box"><span>אירוע נוכחי</span><strong>${currentAverage}s</strong></div>
       </div>
     </section>
 
     <section class="card">
-      <h2>× ×›×•×Ÿ ×ž×•×œ ×©×’×•×™</h2>
+      <h2>נכון מול שגוי</h2>
       <div class="comparison-grid">
-        <div class="comparison-box"><span>× ×›×•×Ÿ</span><strong>${report.correct}</strong></div>
-        <div class="comparison-box"><span>×©×’×•×™</span><strong>${report.mistakes}</strong></div>
+        <div class="comparison-box"><span>נכון</span><strong>${report.correct}</strong></div>
+        <div class="comparison-box"><span>שגוי</span><strong>${report.mistakes}</strong></div>
       </div>
     </section>
 
     <section class="card">
-      <h2>×‘×¡×™×¡ ×ž×•×œ ××™×¨×•×¢ × ×•×›×—×™</h2>
+      <h2>בסיס מול אירוע נוכחי</h2>
       <div class="comparison-grid">
-        <div class="comparison-box"><span>×©×™×¢×•×¨ ×˜×¢×•×™×•×ª ×‘×¡×™×¡</span><strong>${baseline.mistakeRate}</strong></div>
-        <div class="comparison-box"><span>×©×™×¢×•×¨ ×˜×¢×•×™×•×ª × ×•×›×—×™</span><strong>${currentMistakeRate}</strong></div>
-        <div class="comparison-box"><span>×ª× ×•×¢×” ×‘×¡×™×¡×™×ª</span><strong>${baseline.averageMovementLevel}</strong></div>
-        <div class="comparison-box"><span>×ª× ×•×¢×” × ×•×›×—×™×ª</span><strong>${movement}</strong></div>
+        <div class="comparison-box"><span>שיעור טעויות בסיס</span><strong>${baseline.mistakeRate}</strong></div>
+        <div class="comparison-box"><span>שיעור טעויות נוכחי</span><strong>${currentMistakeRate}</strong></div>
+        <div class="comparison-box"><span>תנועה בסיסית</span><strong>${baseline.averageMovementLevel}</strong></div>
+        <div class="comparison-box"><span>תנועה נוכחית</span><strong>${movement}</strong></div>
       </div>
     </section>
 
     <section class="notice warn">
-      ××™× ×“×™×§×¦×™×” ××¤×©×¨×™×ª ×œ×œ×—×¥: ${escapeHtml(report.explanation)}
-      ×”×ž×œ×¦×”: ×œ×©×•×—×— ×‘×¨×•×’×¢ ×œ××—×¨ ×”××™×¨×•×¢ ×•×œ×©××•×œ ××™×š ×”×¨×’×™×©×•.
+      אינדיקציה אפשרית ללחץ: ${escapeHtml(report.explanation)}
+      המלצה: לשוחח ברוגע לאחר האירוע ולשאול איך הרגישו.
     </section>
   `;
 }
@@ -4465,14 +4562,14 @@ function buildMemberReport(member, index) {
   const checkInTime = state.emergency?.checkIns?.[member.id] || (member.status === "safe" ? "00:08" : "Not checked in");
 
   let stressLevel = "Low";
-  let reason = "×”×ª× ×”×’×•×ª ×§×¨×•×‘×” ×œ×‘×¡×™×¡ ×”××™×ž×•×Ÿ";
+  let reason = "התנהגות קרובה לבסיס האימון";
 
   if (currentAverage > baseline.averageAnswerTime * 1.8 && currentMistakeRate > 0.25 && movementLevel > baseline.averageMovementLevel + 0.3) {
     stressLevel = "High";
-    reason = "×–×ž×Ÿ ×ª×’×•×‘×” ××™×˜×™ ×™×•×ª×¨, ×™×•×ª×¨ ×˜×¢×•×™×•×ª ×•×ª× ×•×¢×” ×’×‘×•×”×” ×ž×”×¨×’×™×œ";
+    reason = "זמן תגובה איטי יותר, יותר טעויות ותנועה גבוהה מהרגיל";
   } else if (currentAverage > baseline.averageAnswerTime * 1.25 || currentMistakeRate > baseline.mistakeRate + 0.12) {
     stressLevel = "Medium";
-    reason = "×ž×¢× ×” ×ž×¢×˜ ××™×˜×™ ×™×•×ª×¨ ×ž×‘×¡×™×¡ ×”××™×ž×•×Ÿ";
+    reason = "מענה מעט איטי יותר מבסיס האימון";
   }
 
   const stressBase = stressLevel === "High" ? 78 : stressLevel === "Medium" ? 56 : 32;
@@ -4483,7 +4580,7 @@ function buildMemberReport(member, index) {
 
   return {
     checkInTime,
-    participation: member.id === "1" ? "×©××œ×•×Ÿ ×•×ž×©×™×ž×”" : "××™×©×•×¨ ×ž×•×’×Ÿ ×‘×œ×‘×“",
+    participation: member.id === "1" ? "שאלון ומשימה" : "אישור מוגן בלבד",
     correct,
     mistakes,
     stressLevel,
@@ -4492,7 +4589,7 @@ function buildMemberReport(member, index) {
     currentMistakeRate,
     movementLevel,
     stressByMinute,
-    explanation: `${member.name} ×”×¨××”/×” ${reason} ×‘×ž×”×œ×š ×”××™×¨×•×¢. ×™×™×ª×›×Ÿ ×©×›×“××™ ×œ×©×™× ×œ×‘, ××š ×–×” ××™× ×• ××‘×—×•×Ÿ.`
+    explanation: `${member.name} הראה/ה ${reason} במהלך האירוע. ייתכן שכדאי לשים לב, אך זה אינו אבחון.`
   };
 }
 
@@ -4586,12 +4683,12 @@ function stressClass(level) {
 
 // stress level -> display text
 function stressLabel(level) {
-  if (level === "High") return "×’×‘×•×”";
-  if (level === "Medium") return "×‘×™× ×•× ×™";
-  return "× ×ž×•×š";
+  if (level === "High") return "גבוה";
+  if (level === "Medium") return "בינוני";
+  return "נמוך";
 }
 
 // right/wrong feedback text
 function feedbackText(correct) {
-  return correct ? "×›×œ ×”×›×‘×•×“! ×”×ž×©×™×›×• ×›×š." : "× ×™×¡×™×•×Ÿ ×˜×•×‘. ××ª× ×¢×•×©×™× ×¢×‘×•×“×” ×˜×•×‘×”.";
+  return correct ? "כל הכבוד! המשיכו כך." : "ניסיון טוב. אתם עושים עבודה טובה.";
 }

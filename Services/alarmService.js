@@ -360,6 +360,7 @@ async function endAlarm(accessToken, groupId) {
 module.exports = {
   endAlarm,
   getActiveAlarm,
+  getGroupMemberIds,
   markAlarmSafe,
   reportAlarmProgress,
   startAlarm,

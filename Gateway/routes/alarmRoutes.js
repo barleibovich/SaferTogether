@@ -12,6 +12,7 @@ const {
   startAlarm,
   unlockAlarm
 } = require("../../Services/alarmService");
+const { sendAlarmPushToGroup } = require("../../Services/pushService");
 
 // handle the group alarm routes (broadcast + "I'm safe" + unlock + progress)
 async function handleAlarmRoute(request, response, pathname) {
@@ -26,6 +27,11 @@ async function handleAlarmRoute(request, response, pathname) {
       const body = await readJsonBody(request);
       const alarm = await startAlarm(accessToken, alarmMatch[1], body.mode);
       sendJson(response, 200, { alarm });
+      // Fire-and-forget: push the alarm to the rest of the group's phones, even
+      // if their app is closed. Never let a push failure break raising the alarm.
+      sendAlarmPushToGroup(accessToken, alarmMatch[1], alarm).catch(error => {
+        console.error("alarm push failed:", error?.message || error);
+      });
       return true;
     }
 

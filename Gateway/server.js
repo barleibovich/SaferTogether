@@ -8,6 +8,7 @@ const { handleAuthRoute } = require("./routes/authRoutes");
 const { handleGroupRoute } = require("./routes/groupRoutes");
 const { handleOrefRoute } = require("./routes/orefRoutes");
 const { handlePresenceRoute } = require("./routes/presenceRoutes");
+const { handlePushRoute } = require("./routes/pushRoutes");
 
 const mimeTypes = {
   ".br": "application/octet-stream",
@@ -40,6 +41,10 @@ async function handleApiRoute(request, response, pathname, requestUrl) {
   }
 
   if (await handlePresenceRoute(request, response, pathname)) {
+    return true;
+  }
+
+  if (await handlePushRoute(request, response, pathname)) {
     return true;
   }
 
