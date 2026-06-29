@@ -15,3 +15,11 @@
 *.mdb
 *.opendb
 *.VC.db
+
+# Generated SDK cache + disabled packages (local only, regenerated/unused)
+cache/
+DisabledPackages/
+
+# Auto-generated render-pipeline settings (kept local)
+ProjectSettings/ShaderGraphSettings.asset
+ProjectSettings/URPProjectSettings.asset

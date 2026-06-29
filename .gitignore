@@ -11,6 +11,9 @@ node_modules/
 .env
 *.log
 
+# Supabase DB scripts (kept local, not uploaded)
+/supabase/
+
 # Local Unity source-art packs (kept on disk, never committed)
 /Avatars/
 /AvatarEditor/
