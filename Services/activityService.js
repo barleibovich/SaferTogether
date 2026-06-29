@@ -7,7 +7,17 @@ const RESULT_TABLE = "group_activity_results";
 const ACTIVITY_TYPES = ["trivia", "mission"];
 const ACTIVITY_MODES = ["real", "training"];
 const RESULT_STATUSES = ["pending", "approved", "rejected"];
-const MISSION_TARGETS = ["window", "radio", "radio-wire", "door", "safe-zone", "board", "custom"];
+const MISSION_TARGETS = ["puzzle", "code", "missile", "custom"];
+const MISSION_TASK_LABELS = {
+  code: "קוד הדלת",
+  missile: "טילים",
+  puzzle: "ערכת חירום"
+};
+const MISSION_TASK_STAGE_COUNTS = {
+  code: 4,
+  missile: 1,
+  puzzle: 4
+};
 
 // is this error just because the activity tables aren't set up?
 function isMissingActivitySetupError(error) {
@@ -59,7 +69,7 @@ function cleanActivityType(type) {
   const value = String(type || "").trim().toLowerCase();
 
   if (!ACTIVITY_TYPES.includes(value)) {
-    throw httpError(400, "Activity type must be trivia or mission");
+    throw httpError(400, "סוג המשחק חייב להיות טריוויה או משימה");
   }
 
   return value;
@@ -70,7 +80,7 @@ function cleanActivityMode(mode) {
   const value = String(mode || "").trim().toLowerCase();
 
   if (!ACTIVITY_MODES.includes(value)) {
-    throw httpError(400, "Activity mode must be real or training");
+    throw httpError(400, "מצב המשחק חייב להיות אזעקת אמת או תרגול");
   }
 
   return value;
@@ -81,7 +91,7 @@ function cleanResultStatus(status) {
   const value = String(status || "").trim().toLowerCase();
 
   if (!RESULT_STATUSES.includes(value)) {
-    throw httpError(400, "Result status must be pending, approved, or rejected");
+    throw httpError(400, "סטטוס התוצאה חייב להיות ממתין, אושר או נדחה");
   }
 
   return value;
@@ -145,23 +155,9 @@ function cleanMission(rawMission, index) {
   };
 }
 
-const MISSION_TASKS = ["door", "window", "radio", "board"];
+const MISSION_TASKS = ["puzzle", "code", "missile"];
 
-// validate + tidy up one board exercise
-function cleanExercise(rawExercise, index) {
-  const question = cleanText(rawExercise?.question);
-
-  if (!question) {
-    throw httpError(400, `Exercise ${index + 1} is missing its text`);
-  }
-
-  return {
-    answer: cleanText(rawExercise?.answer),
-    question
-  };
-}
-
-// pull the tasks + board exercises out of the body
+// pull the selected mission mini-games out of the body
 function cleanMissionPayload(body) {
   const rawTasks = Array.isArray(body.tasks)
     ? body.tasks
@@ -174,24 +170,10 @@ function cleanMissionPayload(body) {
   )];
 
   if (!tasks.length) {
-    throw httpError(400, "Choose at least one task for the mission room");
+    throw httpError(400, "בחרו לפחות משימה אחת לחדר המשימות");
   }
 
-  let exercises = [];
-
-  if (tasks.includes("board")) {
-    const rawExercises = Array.isArray(body.exercises)
-      ? body.exercises
-      : (Array.isArray(body.payload?.exercises) ? body.payload.exercises : []);
-
-    if (!rawExercises.length) {
-      throw httpError(400, "Add at least one exercise for the board");
-    }
-
-    exercises = rawExercises.map(cleanExercise);
-  }
-
-  return { exercises, tasks };
+  return { exercises: [], tasks };
 }
 
 // build the right payload depending on type
@@ -202,7 +184,7 @@ function cleanPayload(type, body) {
       : (Array.isArray(body.payload?.questions) ? body.payload.questions : []);
 
     if (!questions.length) {
-      throw httpError(400, "Add at least one trivia question");
+      throw httpError(400, "הוסיפו לפחות שאלת טריוויה אחת");
     }
 
     return {
@@ -286,7 +268,7 @@ async function getGroupRecord(client, groupId) {
   );
 
   if (!group) {
-    throw httpError(404, "Group not found");
+    throw httpError(404, "הקבוצה לא נמצאה");
   }
 
   return group;
@@ -320,7 +302,7 @@ async function requireGroupMemberContext(accessToken, groupId) {
   const membership = await getMembershipRecord(context.client, context.user.id, groupId);
 
   if (!membership) {
-    throw httpError(404, "Group not found");
+    throw httpError(404, "הקבוצה לא נמצאה");
   }
 
   return {
@@ -335,7 +317,7 @@ async function requireGroupAdminContext(accessToken, groupId) {
   const context = await requireGroupMemberContext(accessToken, groupId);
 
   if (context.profile.role !== "admin") {
-    throw httpError(403, "Only admins can manage group games");
+    throw httpError(403, "רק מנהלים יכולים לנהל את משחקי הקבוצה");
   }
 
   return context;
@@ -353,7 +335,7 @@ async function getActivityRecord(client, groupId, activityId) {
   );
 
   if (!activity) {
-    throw httpError(404, "Activity not found");
+    throw httpError(404, "המשחק לא נמצא");
   }
 
   return activity;
@@ -562,7 +544,7 @@ function normalizeResultPayload(payload) {
 }
 
 // pull out well-formed per-item metrics for the stats aggregation.
-// null/missing time or rotation are simply omitted so they never pollute an average.
+// null/missing values are omitted so they never pollute an average.
 function cleanMetricItems(payload) {
   const rawItems = Array.isArray(payload?.items) ? payload.items : [];
 
@@ -576,6 +558,7 @@ function cleanMetricItems(payload) {
     const item = { index, label: cleanText(raw?.label, `#${index + 1}`) };
     const time = Number(raw?.timeSeconds);
     const rotation = Number(raw?.rotation);
+    const mistakes = Number(raw?.mistakes ?? raw?.wrongAttempts ?? raw?.hits);
 
     if (Number.isFinite(time) && time >= 0) {
       item.timeSeconds = time;
@@ -583,6 +566,10 @@ function cleanMetricItems(payload) {
 
     if (Number.isFinite(rotation) && rotation >= 0) {
       item.rotation = rotation;
+    }
+
+    if (Number.isFinite(mistakes) && mistakes >= 0) {
+      item.mistakes = mistakes;
     }
 
     if (typeof raw?.correct === "boolean") {
@@ -623,7 +610,15 @@ function activityItems(row) {
   }
 
   const tasks = Array.isArray(row.payload?.tasks) ? row.payload.tasks : [];
-  return tasks.map((task, index) => ({ index, label: task }));
+  return tasks.flatMap((task, taskIndex) => {
+    const count = MISSION_TASK_STAGE_COUNTS[task] || 1;
+    const base = MISSION_TASK_LABELS[task] || task;
+
+    return Array.from({ length: count }, (_, stageIndex) => ({
+      index: taskIndex * 10 + stageIndex,
+      label: count > 1 ? `${base} - ${stageIndex + 1}` : base
+    }));
+  });
 }
 
 // member submits their answers, missions wait for review
@@ -643,7 +638,7 @@ async function submitGroupActivityResult(accessToken, groupId, body = {}) {
   );
 
   if (!activation) {
-    throw httpError(409, "This game is no longer active for the selected alarm type");
+    throw httpError(409, "המשחק כבר אינו פעיל עבור סוג האזעקה שנבחר");
   }
 
   const status = activity.type === "mission" ? "pending" : "approved";
@@ -709,7 +704,7 @@ async function reviewGroupActivityResult(accessToken, groupId, resultId, body = 
   const status = cleanResultStatus(body.status);
 
   if (status === "pending") {
-    throw httpError(400, "Review status must be approved or rejected");
+    throw httpError(400, "סטטוס הסקירה חייב להיות אושר או נדחה");
   }
 
   // read the row first so we only aggregate metrics on the FIRST approval
@@ -833,6 +828,7 @@ async function getGroupStatistics(accessToken, groupId) {
 
     latestByKey.set(key, {
       activityId: row.activity_id,
+      games: Array.isArray(row.payload?.games) ? row.payload.games : [],
       items: Array.isArray(row.payload?.items) ? row.payload.items : [],
       mode: row.mode,
       submittedAt: row.submitted_at,

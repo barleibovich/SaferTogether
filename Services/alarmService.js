@@ -129,7 +129,7 @@ async function startAlarm(accessToken, groupId, mode) {
   const cleanMode = mode === "training" ? "training" : (mode === "real" ? "real" : null);
 
   if (!cleanMode) {
-    throw httpError(400, "mode must be 'real' or 'training'");
+    throw httpError(400, "המצב חייב להיות 'real' או 'training'");
   }
 
   const context = await requireAdminContext(accessToken);
@@ -253,7 +253,7 @@ async function markAlarmSafe(accessToken, groupId) {
     const alarm = await findActiveAlarm(context.client, groupId);
 
     if (!alarm) {
-      throw httpError(400, "No active alarm for this group");
+      throw httpError(400, "אין אזעקה פעילה לקבוצה זו");
     }
 
     const { error } = await context.client
@@ -312,7 +312,7 @@ async function unlockAlarm(accessToken, groupId) {
     const alarm = await findActiveAlarm(context.client, groupId);
 
     if (!alarm) {
-      throw httpError(400, "No active alarm for this group");
+      throw httpError(400, "אין אזעקה פעילה לקבוצה זו");
     }
 
     const { error } = await context.client

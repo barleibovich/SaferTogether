@@ -42,12 +42,5 @@ mergeInto(LibraryManager.library, {
     if (typeof window.saferTogetherMissionStageProgress === "function") {
       window.saferTogetherMissionStageProgress();
     }
-  },
-
-  // open the radio wire thing on the page
-  SaferTogetherOpenRadioWire: function () {
-    if (typeof window.saferTogetherOpenRadioWire === "function") {
-      window.saferTogetherOpenRadioWire();
-    }
   }
 });

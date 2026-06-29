@@ -253,6 +253,20 @@ namespace SaferTogether.UnityClient
         public const string Female = "female";
         public const string Male = "male";
 
+        // Quaternius "Ultimate Modular Characters" — each is a full rigged character look.
+        // Treated as its own "species" so it maps to Avatars/<id>.prefab and survives id encoding.
+        public const string Adventurer = "adventurer";
+        public const string Beach = "beach";
+        public const string Casual = "casual";
+        public const string Casual2 = "casual2";
+        public const string Farmer = "farmer";
+        public const string King = "king";
+        public const string Punk = "punk";
+        public const string Spacesuit = "spacesuit";
+        public const string Suit = "suit";
+        public const string Swat = "swat";
+        public const string Worker = "worker";
+
         public const string Porcelain = "porcelain";
         public const string Light = "light";
         public const string Tan = "tan";
@@ -312,6 +326,8 @@ namespace SaferTogether.UnityClient
         public const string Vest = "vest";
         public const string Armor = "armor";
         public const string Dress = "dress";
+        public const string Peasant = "peasant";
+        public const string Ranger = "ranger";
 
         public const string Jeans = "jeans";
         public const string Training = "training";
@@ -349,12 +365,24 @@ namespace SaferTogether.UnityClient
         public const string Blue = "blue";
         public const string Yellow = "yellow";
 
+        // selectable 3D avatars. male/female use the Quaternius peasant/ranger outfit
+        // prefabs; the remaining ids are Quaternius Ultimate full-body characters.
+        // dragon/devil were legacy generated avatars and are intentionally excluded.
         public static readonly string[] Species =
         {
             Male,
             Female,
-            Dragon,
-            Devil
+            Adventurer,
+            Beach,
+            Casual,
+            Casual2,
+            Farmer,
+            King,
+            Punk,
+            Spacesuit,
+            Suit,
+            Swat,
+            Worker
         };
 
         public static readonly string[] Sexes =
@@ -433,9 +461,8 @@ namespace SaferTogether.UnityClient
 
         public static readonly string[] Tops =
         {
-            Tee,
-            Sweatshirt,
-            Undershirt
+            Peasant,
+            Ranger
         };
 
         public static readonly string[] Bottoms =
@@ -654,7 +681,7 @@ namespace SaferTogether.UnityClient
                 eyeColor = CharacterAvatarOptions.EyeBrown,
                 hair = CharacterAvatarOptions.Short,
                 hairColor = CharacterAvatarOptions.HairBrown,
-                top = CharacterAvatarOptions.Tee,
+                top = CharacterAvatarOptions.Peasant,
                 topColor = NormalizeColor(builderSpec.baseColor),
                 bottom = CharacterAvatarOptions.Jeans,
                 bottomColor = CharacterAvatarOptions.Denim,
@@ -714,11 +741,13 @@ namespace SaferTogether.UnityClient
             return true;
         }
 
-        // clean up species, map old "human" to male
+        // clean up species, mapping removed/unknown ids to a valid selectable avatar
         public static string NormalizeSpecies(string value)
         {
             string cleanValue = NormalizeValue(value);
-            if (cleanValue == CharacterAvatarOptions.Human)
+            if (cleanValue == CharacterAvatarOptions.Human
+                || cleanValue == CharacterAvatarOptions.Dragon
+                || cleanValue == CharacterAvatarOptions.Devil)
             {
                 return CharacterAvatarOptions.Male;
             }
@@ -771,7 +800,7 @@ namespace SaferTogether.UnityClient
         // clean up top, defaults tee
         public static string NormalizeTop(string value)
         {
-            return NormalizeOption(value, CharacterAvatarOptions.Tops, CharacterAvatarOptions.Tee);
+            return NormalizeOption(value, CharacterAvatarOptions.Tops, CharacterAvatarOptions.Peasant);
         }
 
         // clean up bottom, defaults jeans
@@ -819,7 +848,16 @@ namespace SaferTogether.UnityClient
         // map an old top id onto the new ones
         private static string NormalizeLegacyTop(string value)
         {
-            return NormalizeOption(value, new[] { CharacterAvatarOptions.Tee, CharacterAvatarOptions.Hoodie, CharacterAvatarOptions.Jacket, CharacterAvatarOptions.Vest }, CharacterAvatarOptions.Tee);
+            string cleanValue = NormalizeValue(value);
+
+            if (cleanValue == CharacterAvatarOptions.Hoodie
+                || cleanValue == CharacterAvatarOptions.Jacket
+                || cleanValue == CharacterAvatarOptions.Vest)
+            {
+                return CharacterAvatarOptions.Ranger;
+            }
+
+            return CharacterAvatarOptions.Peasant;
         }
 
         // map old eyes onto the new ones (line -> sleepy)
@@ -921,6 +959,15 @@ namespace SaferTogether.UnityClient
     {
         public string avatar;
         public string avatarImage;
+    }
+
+    // body we send to change the name and/or password. empty fields mean "no change".
+    [Serializable]
+    public class CredentialsUpdateRequest
+    {
+        public string username;
+        public string currentPassword;
+        public string newPassword;
     }
 
     // what signup/login send back

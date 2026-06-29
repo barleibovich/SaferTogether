@@ -101,6 +101,7 @@ a {
   flex-direction: column;
   gap: 14px;
   scrollbar-width: none;
+  position: relative;
 }
 
 .screen::-webkit-scrollbar {
@@ -648,7 +649,6 @@ h3 {
 .avatar-image-badge {
   overflow: hidden;
   padding: 0;
-  background: #06121a;
 }
 
 .avatar-image-render {
@@ -733,6 +733,376 @@ h3 {
   background: #0ab86e;
   box-shadow: 0 7px 16px rgba(0,0,0,.28);
   transform: scale(1.08);
+}
+
+/* --- compact avatar edit button for header placement --- */
+.avatar-launch-panel[data-avatar-launch-panel] {
+  position: absolute;
+  top: clamp(0.5rem, 2.5vw, 0.75rem);
+  right: clamp(0.5rem, 2.5vw, 0.75rem);
+  z-index: 6;
+  width: auto;
+  padding: 0;
+  gap: 0;
+  background: transparent;
+  box-shadow: none;
+  justify-items: end;
+}
+
+body:is([data-page="groups"], [data-page="board"]) .group-top-header {
+  --group-title-side-size: clamp(4.2rem, 16vw, 5.25rem);
+  --oref-title-side-size: clamp(4.85rem, 18vw, 5.95rem);
+  --group-side-pull: clamp(0.55rem, 2.6vw, 0.95rem);
+  display: block;
+  gap: clamp(0.4rem, 2.4vw, 0.95rem);
+  direction: ltr;
+  padding-top: clamp(4.4rem, 11vh, 5.6rem);
+}
+
+body:is([data-page="groups"], [data-page="board"]) .group-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(0.4rem, 2.4vw);
+  width: 100%;
+  direction: ltr;
+}
+
+body:is([data-page="groups"], [data-page="board"]) .group-title-row h1 {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  direction: rtl;
+  text-align: center;
+}
+
+.group-name-heading {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(0.25rem, 1vw, 0.45rem);
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.group-name-edit-button,
+.group-name-save-button,
+.group-name-cancel-button {
+  appearance: none;
+  display: inline-grid;
+  place-items: center;
+  width: clamp(1.75rem, 6.2vw, 2.1rem);
+  height: clamp(1.75rem, 6.2vw, 2.1rem);
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255,255,255,.58);
+  color: #071015;
+  box-shadow: 0 0.24rem 0.55rem rgba(0,0,0,.16);
+  font-family: inherit;
+  font-size: clamp(0.95rem, 3.6vw, 1.12rem);
+  font-weight: 1000;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* Float the rename pencil at the top-right corner of the group name. */
+.group-name-edit-button {
+  position: absolute;
+  top: -0.6rem;
+  right: -1.7rem;
+}
+
+/* Show the rename pencil only when hovering the group name (mouse/trackpad).
+   On touch devices (no hover) it stays visible so it's still reachable. */
+@media (hover: hover) {
+  .group-name-edit-button {
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+  .group-name-heading:hover .group-name-edit-button,
+  .group-name-edit-button:focus-visible {
+    opacity: 1;
+  }
+}
+
+.group-name-save-button {
+  background: #18b866;
+}
+
+.group-name-cancel-button {
+  background: rgba(255,255,255,.42);
+}
+
+.group-name-input {
+  width: min(100%, 12rem);
+  min-width: 0;
+  border: 0.12rem solid rgba(9, 51, 55, .22);
+  border-radius: 999px;
+  background: rgba(255,255,255,.72);
+  color: #020405;
+  padding: clamp(0.35rem, 1.4vw, 0.5rem) clamp(0.65rem, 2vw, 0.85rem);
+  font: inherit;
+  font-size: clamp(1.15rem, 5vw, 1.65rem);
+  font-weight: 1000;
+  text-align: center;
+  direction: rtl;
+}
+
+body:is([data-page="groups"], [data-page="board"]) .group-top-header > .eyebrow {
+  margin: 0 0 clamp(0.2rem, 1vh, 0.45rem);
+  direction: ltr;
+  text-align: center;
+}
+
+body:is([data-page="groups"], [data-page="board"]) .group-top-header .avatar-launch-panel[data-avatar-launch-panel] {
+  flex: 0 0 var(--group-title-side-size);
+  position: static;
+  margin-top: 0;
+  transform: translateX(var(--group-side-pull));
+}
+
+[data-current-avatar-summary] {
+  display: block;
+}
+
+.avatar-edit-preview {
+  width: 3.25rem;
+  height: 3.25rem;
+}
+
+[data-current-avatar-summary] .profile-avatar.avatar-unity-preview,
+[data-current-avatar-summary] .profile-avatar.avatar-image-badge {
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 0.875rem;
+  border-width: 0.125rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,.28);
+}
+
+body:is([data-page="groups"], [data-page="board"]) .group-top-header .avatar-edit-preview,
+body:is([data-page="groups"], [data-page="board"]) .group-top-header [data-current-avatar-summary] .profile-avatar.avatar-unity-preview,
+body:is([data-page="groups"], [data-page="board"]) .group-top-header [data-current-avatar-summary] .profile-avatar.avatar-image-badge {
+  width: clamp(3.25rem, 15vw, 5rem);
+  height: clamp(3.25rem, 15vw, 5rem);
+  border-radius: clamp(0.8rem, 3.5vw, 1rem);
+}
+
+.oref-header-status {
+  appearance: none;
+  flex: 0 0 var(--oref-title-side-size);
+  transform: translateX(calc(-1 * var(--group-side-pull)));
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: clamp(0.18rem, 1vw, 0.3rem);
+  min-width: clamp(3.15rem, 13.5vw, 4.35rem);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #071015;
+  font: inherit;
+  text-align: center;
+}
+
+button.oref-header-status {
+  cursor: default;
+}
+
+button.oref-header-status:not(:disabled) {
+  cursor: pointer;
+}
+
+button.oref-header-status:disabled {
+  opacity: 1;
+}
+
+.oref-header-icon {
+  display: grid;
+  place-items: center;
+  width: clamp(3.1rem, 13.7vw, 3.95rem);
+  height: clamp(3.1rem, 13.7vw, 3.95rem);
+  border-radius: clamp(0.78rem, 3vw, 1rem);
+  border: clamp(0.12rem, 0.6vw, 0.18rem) solid #8f9aa2;
+  background: rgba(255, 255, 255, .72);
+  color: #8f9aa2;
+  overflow: hidden;
+  box-shadow: 0 0.45rem 1rem rgba(0,0,0,.18);
+  font-size: clamp(1.05rem, 4vw, 1.45rem);
+  font-weight: 1000;
+  line-height: 1;
+}
+
+.oref-header-icon-image {
+  display: block;
+  width: 86%;
+  height: 86%;
+  object-fit: contain;
+  border-radius: 50%;
+}
+
+.oref-header-label {
+  display: block;
+  color: #071015;
+  font-size: clamp(0.72rem, 2.85vw, 0.9rem);
+  font-weight: 1000;
+  line-height: 1.05;
+  white-space: normal;
+}
+
+.oref-header-status-good .oref-header-icon {
+  border-color: #05bb68;
+  background: rgba(5,187,104,.16);
+  box-shadow: 0 0.45rem 1rem rgba(5,187,104,.24);
+}
+
+.oref-header-status-good .oref-header-icon-image {
+  filter: saturate(1.05);
+}
+
+.oref-header-status-good .oref-header-label {
+  color: #06884f;
+}
+
+.oref-header-status-danger .oref-header-icon {
+  border-color: #e63f4f;
+  background: rgba(230,63,79,.16);
+  box-shadow: 0 0.45rem 1rem rgba(230,63,79,.28);
+}
+
+.oref-header-status-danger .oref-header-icon-image {
+  filter: saturate(1.08);
+}
+
+.oref-header-status-danger .oref-header-label {
+  color: #c92736;
+}
+
+.oref-header-status-warn .oref-header-icon {
+  border-color: #f5a623;
+  background: rgba(245,166,35,.18);
+  box-shadow: 0 0.45rem 1rem rgba(245,166,35,.26);
+}
+
+.oref-header-status-warn .oref-header-icon-image {
+  filter: saturate(1.06);
+}
+
+.oref-header-status-warn .oref-header-label {
+  color: #9a6200;
+}
+
+.oref-header-status-offline .oref-header-icon {
+  border-color: #8f9aa2;
+  background: rgba(143,154,162,.18);
+  box-shadow: 0 0.45rem 1rem rgba(0,0,0,.16);
+}
+
+.oref-header-status-offline .oref-header-icon-image {
+  filter: grayscale(1) opacity(.78);
+}
+
+.oref-header-status-offline .oref-header-label {
+  color: #6d7880;
+}
+
+button.oref-header-status:not(:disabled):focus-visible .oref-header-icon {
+  outline: 0.18rem solid rgba(7,16,21,.65);
+  outline-offset: 0.18rem;
+}
+
+body[data-page="board"] .group-top-header {
+  padding-top: clamp(4.6rem, 13vh, 5.8rem);
+  margin-bottom: clamp(6rem, 14vh, 7.4rem);
+}
+
+.board-action-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(clamp(3.7rem, 12vw, 4.65rem), auto);
+  gap: clamp(0.55rem, 2.4vw, 0.85rem);
+  align-items: stretch;
+  margin-top: clamp(0.35rem, 1.2vh, 0.75rem);
+}
+
+.board-action-grid .btn {
+  min-width: 0;
+  min-height: clamp(3.7rem, 12vw, 4.65rem);
+  padding: clamp(0.55rem, 2.4vw, 0.9rem);
+  line-height: 1.18;
+  white-space: normal;
+}
+
+.btn-with-badge {
+  position: relative;
+}
+
+.btn-badge {
+  position: absolute;
+  top: clamp(0.25rem, 1vw, 0.4rem);
+  left: clamp(0.45rem, 1.8vw, 0.7rem);
+  display: inline-grid;
+  place-items: center;
+  min-width: clamp(1.05rem, 4vw, 1.25rem);
+  height: clamp(1.05rem, 4vw, 1.25rem);
+  padding: 0 clamp(0.22rem, 0.8vw, 0.35rem);
+  border-radius: 999px;
+  background: #e63f4f;
+  color: #fff;
+  font-family: "Inter", sans-serif;
+  font-size: clamp(0.68rem, 2.4vw, 0.78rem);
+  font-weight: 1000;
+  line-height: 1;
+  box-shadow: 0 0.18rem 0.45rem rgba(0,0,0,.18);
+}
+
+.join-requests-panel {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 0.65rem;
+  padding: clamp(0.75rem, 3vw, 1rem);
+  border: 1px solid rgba(9, 51, 55, 0.12);
+  border-radius: 1rem;
+  background: rgba(255,255,255,.42);
+}
+
+/* the whole square is the edit button; pencil + dim overlay show on hover */
+.avatar-edit-preview .avatar-edit-button {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  right: auto;
+  bottom: auto;
+  border: none;
+  border-radius: inherit;
+  background: rgba(7, 16, 21, 0);
+  box-shadow: none;
+  transition: background .15s ease;
+}
+
+.avatar-edit-preview .avatar-edit-button::before {
+  opacity: 0;
+  font-size: clamp(1rem, 3.8vw, 1.125rem);
+  transition: opacity .15s ease;
+}
+
+.avatar-edit-preview:hover .avatar-edit-button,
+.avatar-edit-preview:focus-within .avatar-edit-button {
+  background: rgba(7, 16, 21, .5);
+  transform: none;
+  box-shadow: none;
+}
+
+.avatar-edit-preview:hover .avatar-edit-button::before,
+.avatar-edit-preview:focus-within .avatar-edit-button::before {
+  opacity: 1;
+}
+
+.avatar-edit-preview:hover .profile-avatar,
+.avatar-edit-preview:focus-within .profile-avatar {
+  transform: none;
 }
 
 .unity-screen {
@@ -1405,23 +1775,25 @@ h3 {
 
 .answer-btn {
   min-height: 58px;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(9, 51, 55, 0.18);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--text);
+  background: #ffffff;
+  color: #0a0f14;
   padding: 13px;
   font-weight: 900;
-  text-align: left;
+  text-align: start;
 }
 
 .answer-btn.correct {
-  background: rgba(41, 179, 106, 0.18);
-  border-color: rgba(41, 179, 106, 0.5);
+  background: rgba(41, 179, 106, 0.9);
+  border-color: var(--safe-dark);
+  color: #04210f;
 }
 
 .answer-btn.wrong {
-  background: rgba(230, 63, 79, 0.18);
-  border-color: rgba(230, 63, 79, 0.5);
+  background: rgba(230, 63, 79, 0.9);
+  border-color: var(--danger-dark);
+  color: #2a060b;
 }
 
 .report-select {
@@ -1519,23 +1891,8 @@ h3 {
   flex: 0 0 auto;
 }
 
-@media (max-width: 430px) {
-  body {
-    padding: 0;
-  }
-
-  .prototype-shell,
-  .phone {
-    width: 100%;
-  }
-
-  .phone {
-    min-height: 100vh;
-    height: 100vh;
-    border-radius: 0;
-    border: 0;
-  }
-}
+/* The real-phone full-screen override lives at the END of this file so it wins
+   the cascade over the .phone / .screen "mockup frame" rules below. */
 
 /* Mockup-inspired light mobile UI */
 body {
@@ -1658,7 +2015,7 @@ body {
   z-index: 1;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: start;
-  gap: 14px 10px;
+  gap: clamp(0.65rem, 2.7vw, 0.9rem) clamp(0.45rem, 2vw, 0.7rem);
 }
 
 .member-card {
@@ -1666,10 +2023,31 @@ body {
   grid-template-columns: 1fr;
   justify-items: center;
   gap: 4px;
+  min-width: 0;
+  max-width: 100%;
   padding: 0;
   background: transparent;
   border: 0;
   text-align: center;
+}
+
+.board-members-panel .member-avatar.avatar-unity-preview,
+.board-members-panel .member-avatar.avatar-image-badge {
+  width: clamp(4.1rem, 18vw, 4.65rem);
+  height: clamp(4.1rem, 18vw, 4.65rem);
+  border-radius: clamp(0.9rem, 3.4vw, 1.1rem);
+  border-width: 0.14rem;
+}
+
+.board-members-panel .member-avatar.avatar-initial-badge {
+  font-size: clamp(1.75rem, 7vw, 2.15rem);
+}
+
+.board-members-panel .member-name {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-size: clamp(0.95rem, 4.2vw, 1.08rem);
+  line-height: 1.05;
 }
 
 .avatar-badge {
@@ -1730,19 +2108,16 @@ body {
 }
 
 .status-pill.safe {
-  border: 0;
-  background: transparent;
-  color: #19b853;
-  font-size: 28px;
+  border-color: #19b853;
+  background: #ecfbf3;
+  color: #128d43;
+  direction: rtl;
+  font-size: 14px;
   transform: none;
 }
 
 .status-pill.safe::before {
-  content: "✓";
-}
-
-.status-pill.safe {
-  font-size: 0;
+  content: none;
 }
 
 .status-pill.at_risk {
@@ -2080,6 +2455,16 @@ body {
   gap: 10px;
 }
 
+.stats-report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.stats-report-actions .btn {
+  flex: 1 1 150px;
+}
+
 .stats-summary-text {
   white-space: pre-wrap;
   line-height: 1.6;
@@ -2122,4 +2507,162 @@ body {
 .dot-current {
   background: #0b1220;
   border: 1px solid rgba(255, 255, 255, 0.65);
+}
+
+.stats-pdf-report {
+  position: fixed;
+  top: 0;
+  left: -10000px;
+  box-sizing: border-box;
+  width: 760px;
+  padding: 32px;
+  direction: rtl;
+  background: #ffffff;
+  color: #111827;
+  font-family: "Heebo", "Arial", sans-serif;
+  pointer-events: none;
+  z-index: 10000;
+}
+
+.stats-pdf-report h1 {
+  margin: 0 0 8px;
+  color: #111827;
+  font-size: 30px;
+  line-height: 1.2;
+}
+
+.stats-pdf-report h2 {
+  margin: 26px 0 10px;
+  color: #111827;
+  font-size: 20px;
+}
+
+.stats-pdf-report h3 {
+  margin: 0 0 10px;
+  color: #111827;
+  font-size: 16px;
+}
+
+.stats-pdf-meta {
+  margin: 0 0 4px;
+  color: #4b5563;
+  font-size: 13px;
+}
+
+.stats-pdf-summary {
+  white-space: pre-wrap;
+  line-height: 1.7;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.stats-pdf-activity {
+  margin-top: 22px;
+}
+
+.stats-pdf-chart {
+  break-inside: avoid;
+  page-break-inside: avoid;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 12px;
+  margin-top: 14px;
+}
+
+.stats-pdf-chart img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.stats-pdf-empty {
+  margin: 0;
+  color: #6b7280;
+}
+
+/* === Real phone: drop the desktop "phone mockup" frame and fill the screen ===
+   On a narrow (real phone) viewport the decorative bezel, rounded corners,
+   notch dot and the 390px width cap look like a phone-inside-a-phone, so strip
+   them and let the app run edge-to-edge. The desktop demo keeps the frame.
+   Sizes that were fixed px are made fluid here (dvh / vw / clamp) so the layout
+   scales down on small iPhones instead of overflowing. Scoped to phones only,
+   and last in the file so it overrides the unconditional .phone / .screen rules
+   earlier on. */
+@media (max-width: 430px) {
+  body {
+    padding: 0;
+    min-height: 100dvh;
+  }
+
+  .prototype-shell,
+  .phone {
+    width: 100%;
+    max-width: none;
+  }
+
+  /* fill the device, drop the mockup frame */
+  .phone {
+    height: 100dvh;
+    min-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    overflow-x: hidden;
+  }
+
+  /* hide the fake camera/notch dot */
+  .phone::before {
+    display: none;
+  }
+
+  /* top spacer grows to clear the real notch / status bar (iOS safe area) */
+  .status-bar {
+    height: auto;
+    min-height: 28px;
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  /* fluid padding; keep content clear of the rounded corners / home indicator */
+  .screen {
+    margin: 0;
+    border-radius: 0;
+    gap: clamp(10px, 2.2vh, 16px);
+    padding:
+      clamp(12px, 2.2vh, 22px)
+      max(14px, env(safe-area-inset-right, 0px))
+      calc(clamp(12px, 2vh, 18px) + env(safe-area-inset-bottom, 0px))
+      max(14px, env(safe-area-inset-left, 0px));
+  }
+
+  /* scale the big mockup type with the screen so nothing overflows on a small
+     iPhone — each caps at its original desktop size */
+  .app-header {
+    min-height: clamp(64px, 13vh, 116px);
+  }
+  .app-header h1 {
+    font-size: clamp(24px, 7.4vw, 34px);
+  }
+  .screen:not(.login-screen)::before {
+    font-size: clamp(28px, 10vw, 43px);
+  }
+  .login-card h1 {
+    font-size: clamp(23px, 7vw, 31px);
+  }
+  .login-logo svg {
+    width: clamp(56px, 16vw, 86px);
+    height: auto;
+  }
+  .login-logo strong {
+    font-size: clamp(30px, 10vw, 43px);
+  }
+  .login-logo span {
+    font-size: clamp(19px, 6vw, 27px);
+  }
+  .big-alert h1 {
+    font-size: clamp(24px, 7.4vw, 32px);
+  }
+  .timer-value {
+    font-size: clamp(23px, 7vw, 30px);
+  }
 }

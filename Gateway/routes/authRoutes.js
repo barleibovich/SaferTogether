@@ -12,7 +12,8 @@ const {
   logout,
   signUpWithUsername,
   updateCurrentUserAlertLocation,
-  updateCurrentUserAvatar
+  updateCurrentUserAvatar,
+  updateCurrentUserCredentials
 } = require("../../Services/authService");
 
 // handle all the auth routes
@@ -63,6 +64,14 @@ async function handleAuthRoute(request, response, pathname) {
       const accessToken = getAccessTokenFromRequest(request);
       const body = await readJsonBody(request);
       const profile = await updateCurrentUserAvatar(accessToken, body);
+      sendJson(response, 200, { profile });
+      return true;
+    }
+
+    if (pathname === "/api/auth/credentials" && request.method === "PATCH") {
+      const accessToken = getAccessTokenFromRequest(request);
+      const body = await readJsonBody(request);
+      const profile = await updateCurrentUserCredentials(accessToken, body);
       sendJson(response, 200, { profile });
       return true;
     }

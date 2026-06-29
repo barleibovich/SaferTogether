@@ -2,13 +2,14 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>SaferTogether - גרפי ביצועים</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
 </head>
 <body data-page="statistics">
 <main class="prototype-shell">
@@ -45,8 +46,11 @@
       <section class="list-stack" data-stats-charts hidden>
         <section class="card stats-card" data-stats-summary-card>
           <h2>סיכום AI של מצב המשתתף</h2>
-          <p class="subtitle">ניתוח מבוסס בינה מלאכותית של זמני התגובה, סיבוב היד והדיוק — כדי להבין את רמת הלחץ של המשתתף.</p>
-          <button class="btn btn-primary" type="button" data-stats-summary-btn>צור סיכום</button>
+          <p class="subtitle">ניתוח מבוסס בינה מלאכותית של כל נתוני המשתתף והגרפים: זמני תגובה, סיבוב יד, טעויות, פגיעות ודיוק.</p>
+          <div class="stats-report-actions">
+            <button class="btn btn-primary" type="button" data-stats-summary-btn>צור ניתוח AI</button>
+            <button class="btn btn-secondary" type="button" data-stats-pdf-btn>הורד PDF</button>
+          </div>
           <p class="notice hidden" data-stats-summary-status></p>
           <div class="stats-summary-text hidden" data-stats-summary-text></div>
         </section>
@@ -65,6 +69,17 @@
           <h2>תשובות נכונות מול שגויות</h2>
           <div class="chart-box chart-box-pie"><canvas data-chart-pie></canvas></div>
           <p class="notice hidden" data-pie-empty>אין עדיין נתוני תשובות עבור משתתף זה.</p>
+        </section>
+
+        <section class="card stats-card">
+          <h2>טעויות / פגיעות</h2>
+          <div class="chart-legend">
+            <span><i class="dot dot-real"></i>אזעקת אמת (ממוצע)</span>
+            <span><i class="dot dot-training"></i>תרגול (ממוצע)</span>
+            <span><i class="dot dot-current"></i>המשתתף (נוכחי)</span>
+          </div>
+          <div class="chart-box"><canvas data-chart-mistakes></canvas></div>
+          <p class="notice hidden" data-mistakes-empty>אין עדיין נתוני טעויות או פגיעות עבור משחק זה.</p>
         </section>
 
         <section class="card stats-card">

@@ -96,7 +96,7 @@ async function saveCurrentUserAlertLocation(accessToken, { latitude, longitude }
   const location = await findOrefLocationByCoordinates({ latitude, longitude });
 
   if (!location) {
-    throw httpError(400, "Could not match this location to a Home Front Command alert area");
+    throw httpError(400, "לא ניתן להתאים מיקום זה לאזור התרעה של פיקוד העורף");
   }
 
   const { data, error } = await context.client

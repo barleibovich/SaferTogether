@@ -33,7 +33,7 @@ function normalizeAvatarImage(avatarImage) {
   }
 
   if (value.length > 1500000 || !/^data:image\/png;base64,[a-zA-Z0-9+/=]+$/.test(value)) {
-    throw httpError(400, "Avatar image must be a PNG data URL");
+    throw httpError(400, "תמונת הדמות חייבת להיות בפורמט PNG (data URL)");
   }
 
   return value;
@@ -150,7 +150,7 @@ async function signInWithKnownDomains(client, username, password) {
     lastError = error;
   }
 
-  throw lastError || httpError(401, "Invalid login credentials");
+  throw lastError || httpError(401, "שם משתמש או סיסמה שגויים");
 }
 
 // make a supabase auth user + matching profile
@@ -163,12 +163,12 @@ async function signUpWithUsername({ username, password, role = "user", avatar, a
   if (!validateUsername(cleanUsername)) {
     throw httpError(
       400,
-      "Username must be 3-30 characters and contain only letters, numbers, or underscore"
+      "שם המשתמש חייב להכיל 3-30 תווים, ורק אותיות, ספרות או קו תחתון"
     );
   }
 
   if (!password || password.length < 6) {
-    throw httpError(400, "Password must be at least 6 characters");
+    throw httpError(400, "הסיסמה חייבת להכיל לפחות 6 תווים");
   }
 
   const client = createPublicClient();
@@ -190,7 +190,7 @@ async function signUpWithUsername({ username, password, role = "user", avatar, a
   }
 
   if (!authData.user) {
-    throw httpError(500, "Signup failed: user was not created");
+    throw httpError(500, "ההרשמה נכשלה: המשתמש לא נוצר");
   }
 
   const sessionData = authData.session
@@ -230,14 +230,14 @@ async function loginWithUsername({ username, password }) {
   const cleanUsername = normalizeUsername(username);
 
   if (!validateUsername(cleanUsername)) {
-    throw httpError(400, "Invalid username");
+    throw httpError(400, "שם משתמש לא תקין");
   }
 
   const client = createPublicClient();
   const data = await signInWithKnownDomains(client, cleanUsername, password);
 
   if (!data.session?.access_token) {
-    throw httpError(401, "Login failed");
+    throw httpError(401, "ההתחברות נכשלה");
   }
 
   const profile = await getCurrentUserProfile(data.session.access_token);
@@ -283,6 +283,111 @@ async function updateCurrentUserAvatar(accessToken, { avatar, avatarImage }) {
   return buildProfile(profile, user, alertLocation);
 }
 
+// PUT an arbitrary update (password / email / metadata) to the supabase auth user
+async function updateAuthUser(accessToken, payload) {
+  const { supabaseAnonKey, supabaseUrl } = getConfig();
+  const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    body: JSON.stringify(payload),
+    headers: {
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    method: "PUT"
+  });
+
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw httpError(response.status, result?.msg || result?.message || "Profile update failed");
+  }
+
+  return result;
+}
+
+// the existing password can never be shown (it is hashed); the only way to confirm it is
+// to attempt a fresh sign-in with it.
+async function verifyCurrentPassword(username, currentPassword) {
+  if (!currentPassword) {
+    throw httpError(400, "יש להזין את הסיסמה הנוכחית");
+  }
+
+  try {
+    await signInWithKnownDomains(createPublicClient(), username, currentPassword);
+  } catch {
+    throw httpError(401, "הסיסמה הנוכחית שגויה");
+  }
+}
+
+// update the logged-in user's name and/or password. password change requires the current
+// password. NOTE: the username is the login identity (auth email = username@domain), so a
+// name change also rewrites the auth email — this needs Supabase "Confirm email change" OFF.
+async function updateCurrentUserCredentials(accessToken, { username, currentPassword, newPassword } = {}) {
+  const context = await getSessionContext(accessToken);
+  const currentUsername = context.profile.username;
+
+  const nextUsername = normalizeUsername(username);
+  const wantsName = Boolean(nextUsername) && nextUsername !== currentUsername;
+  const wantsPassword = typeof newPassword === "string" && newPassword.length > 0;
+
+  if (!wantsName && !wantsPassword) {
+    throw httpError(400, "אין שינויים לשמירה");
+  }
+
+  const payload = {};
+
+  if (wantsPassword) {
+    if (newPassword.length < 6) {
+      throw httpError(400, "הסיסמה החדשה חייבת להכיל לפחות 6 תווים");
+    }
+
+    // the session is already authenticated. only re-verify the current password when the
+    // caller actually supplied one; the inline avatar editor omits it and relies on the
+    // session token instead.
+    if (currentPassword) {
+      await verifyCurrentPassword(currentUsername, currentPassword);
+    }
+
+    payload.password = newPassword;
+  }
+
+  if (wantsName) {
+    if (!validateUsername(nextUsername)) {
+      throw httpError(400, "שם המשתמש חייב להכיל 3-30 תווים, ורק אותיות, ספרות או קו תחתון");
+    }
+
+    const { data: taken } = await context.client
+      .from("profiles")
+      .select("id")
+      .eq("username", nextUsername)
+      .neq("id", context.user.id)
+      .maybeSingle();
+
+    if (taken) {
+      throw httpError(409, "שם המשתמש כבר תפוס");
+    }
+
+    payload.email = usernameToAuthEmail(nextUsername);
+    payload.data = {
+      ...(context.user.user_metadata || {}),
+      username: nextUsername
+    };
+  }
+
+  await updateAuthUser(accessToken, payload);
+
+  if (wantsName) {
+    // keep the public profile + the denormalized group member rows in sync with the new name
+    await context.client.from("profiles").update({ username: nextUsername }).eq("id", context.user.id);
+    await context.client
+      .from("user_groups")
+      .update({ member_username: nextUsername })
+      .eq("user_id", context.user.id);
+  }
+
+  return getCurrentUserProfile(accessToken);
+}
+
 // update the user's HFC alert area
 async function updateCurrentUserAlertLocation(accessToken, location) {
   return saveCurrentUserAlertLocation(accessToken, location);
@@ -294,5 +399,6 @@ module.exports = {
   logout,
   signUpWithUsername,
   updateCurrentUserAlertLocation,
-  updateCurrentUserAvatar
+  updateCurrentUserAvatar,
+  updateCurrentUserCredentials
 };

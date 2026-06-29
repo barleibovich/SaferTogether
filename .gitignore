@@ -1,2 +1,26 @@
-# Avatar source art (kept locally, not tracked in git)
+# OS / editor junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Claude local project settings
+.claude/
+
+# Node
+node_modules/
+.env
+*.log
+
+# Local Unity source-art packs (kept on disk, never committed)
+/Avatars/
+/AvatarEditor/
+/MissionRoomGames3D/
+/Modular Character Outfits - Fantasy\[Standard\]/
+/Universal Animation Library\[Standard\]/
+/Universal Base Characters\[Standard\]/
 /Unity Avatars/
+/Unity Room/
+/Music/
+
+# NOTE: SaferTogetherUI/unity/**/Build is intentionally committed
+# (served WebGL build — pullers need it to see the Unity screens)

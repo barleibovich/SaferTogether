@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>SaferTogether - Family Presence Board</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,39 +18,45 @@
     </div>
 
     <div class="screen">
-      <header class="app-header">
-        <div>
-          <p class="eyebrow">SAFER TOGETHER</p>
-          <h1 data-active-group-name>&#1492;&#1511;&#1489;&#1493;&#1510;&#1492; &#1513;&#1500;&#1497;</h1>
+      <header class="app-header group-top-header">
+        <p class="eyebrow">SAFER TOGETHER</p>
+        <div class="group-title-row">
+          <button class="oref-header-status oref-header-status-offline" type="button" data-oref-header-status data-open-oref-emergency aria-live="polite" aria-label="Pikud HaOref status" disabled>
+            <span class="oref-header-icon" aria-hidden="true">
+              <img class="oref-header-icon-image" src="assets/pikud-haoref.png" alt="">
+            </span>
+            <span class="oref-header-label">&#1508;&#1497;&#1511;&#1493;&#1491; &#1492;&#1506;&#1493;&#1512;&#1507;</span>
+          </button>
+          <h1 class="group-name-heading">
+            <span data-active-group-name>&#1492;&#1511;&#1489;&#1493;&#1510;&#1492; &#1513;&#1500;&#1497;</span>
+            <button class="group-name-edit-button hidden" type="button" data-rename-group data-admin-only aria-label="&#1506;&#1512;&#1497;&#1499;&#1514; &#1513;&#1501; &#1511;&#1489;&#1493;&#1510;&#1492;">&#9998;</button>
+            <input class="group-name-input hidden" data-group-name-input aria-label="&#1513;&#1501; &#1511;&#1489;&#1493;&#1510;&#1492;">
+            <button class="group-name-save-button hidden" type="button" data-save-group-name aria-label="&#1513;&#1502;&#1497;&#1512;&#1514; &#1513;&#1501; &#1511;&#1489;&#1493;&#1510;&#1492;">&#10003;</button>
+            <button class="group-name-cancel-button hidden" type="button" data-cancel-group-name aria-label="&#1489;&#1497;&#1496;&#1493;&#1500; &#1506;&#1512;&#1497;&#1499;&#1492;">&#215;</button>
+          </h1>
+          <section class="avatar-launch-panel" data-avatar-launch-panel aria-label="Avatar">
+            <div data-current-avatar-summary></div>
+          </section>
         </div>
-        <span class="room-chip" data-active-group-id></span>
       </header>
 
-      <section class="button-grid" aria-label="Dashboard actions">
-        <a class="btn btn-secondary" href="create-activity.html" data-admin-only>&#1497;&#1510;&#1497;&#1512;&#1514; &#1502;&#1513;&#1495;&#1511;&#1493;&#1503;</a>
-        <a class="btn btn-secondary" href="report.html" data-admin-only>&#1491;&#1493;&#1495; &#1505;&#1496;&#1496;&#1497;&#1505;&#1496;&#1497;&#1511;&#1493;&#1514;</a>
-        <button class="btn btn-secondary" type="button" data-rename-group data-admin-only>&#1513;&#1497;&#1504;&#1493;&#1497; &#1513;&#1501; &#1511;&#1489;&#1493;&#1510;&#1492;</button>
-        <button class="btn btn-danger" type="button" data-trigger-emergency data-admin-only>&#1488;&#1494;&#1506;&#1511;&#1514; &#1488;&#1502;&#1514;</button>
-        <button class="btn btn-secondary" type="button" data-trigger-training data-admin-only>אזעקת תרגול</button>
+      <section class="button-grid board-action-grid" aria-label="Dashboard actions">
+        <a class="btn btn-secondary hidden" href="create-activity.html" data-admin-only>&#1497;&#1510;&#1497;&#1512;&#1514; &#1502;&#1513;&#1495;&#1511;&#1493;&#1503;</a>
+        <a class="btn btn-secondary hidden" href="report.html" data-admin-only>&#1491;&#1493;&#1495; &#1505;&#1496;&#1496;&#1497;&#1505;&#1496;&#1497;&#1511;&#1493;&#1514;</a>
+        <button class="btn btn-secondary hidden" type="button" data-open-group-games data-admin-only aria-expanded="false">&#1502;&#1513;&#1495;&#1511;&#1497; &#1492;&#1511;&#1489;&#1493;&#1510;&#1492;</button>
+        <button class="btn btn-secondary btn-with-badge hidden" type="button" data-open-pending-requests data-admin-only aria-expanded="false">
+          <span>&#1489;&#1511;&#1513;&#1493;&#1514; &#1492;&#1510;&#1496;&#1512;&#1508;&#1493;&#1514;</span>
+          <span class="btn-badge hidden" data-pending-requests-count>0</span>
+        </button>
+        <button class="btn btn-danger hidden" type="button" data-trigger-emergency data-admin-only>&#1488;&#1494;&#1506;&#1511;&#1514; &#1488;&#1502;&#1514;</button>
+        <button class="btn btn-secondary hidden" type="button" data-trigger-training data-admin-only>אזעקת תרגול</button>
       </section>
 
-      <section class="card oref-panel" aria-label="התרעות פיקוד העורף">
-        <div class="oref-panel-head">
-          <h2>פיקוד העורף</h2>
-          <span class="timer-chip" data-oref-refresh-state>מתחבר…</span>
-        </div>
-        <p class="notice" data-oref-alert-summary>בודק התרעות פעילות עבור הקבוצה.</p>
-        <p class="notice warn oref-official-note">יש להסתמך על התרעות, צפירות והנחיות פיקוד העורף הרשמיות כמקור המידע העיקרי.</p>
-        <p class="notice hidden" data-alert-location-status></p>
-        <button class="btn btn-danger hidden" type="button" data-open-oref-emergency>פתיחת מצב חירום</button>
-      </section>
-
-      <section class="card" data-pending-requests-panel data-admin-only aria-label="Join requests">
-        <h2>&#1489;&#1511;&#1513;&#1493;&#1514; &#1492;&#1510;&#1496;&#1512;&#1508;&#1493;&#1514;</h2>
+      <section class="join-requests-panel hidden" data-pending-requests-panel aria-label="Join requests">
         <div data-pending-requests-list></div>
       </section>
 
-      <section class="card activity-admin-panel" data-activity-admin-panel data-admin-only aria-label="Group games">
+      <section class="card activity-admin-panel hidden" data-activity-admin-panel aria-label="Group games">
         <div class="oref-panel-head">
           <h2>משחקי הקבוצה</h2>
           <a class="btn btn-secondary btn-small" href="create-activity.html">יצירה</a>
@@ -58,14 +64,14 @@
         <div class="added-list" data-admin-activity-list></div>
       </section>
 
-      <section class="card board-members-panel" aria-label="Group members">
-        <h2>&#1502;&#1513;&#1514;&#1514;&#1508;&#1497; &#1492;&#1511;&#1489;&#1493;&#1510;&#1492;</h2>
+      <section class="card board-members-panel" aria-label="Connected members">
+        <h2>&#1502;&#1495;&#1493;&#1489;&#1512;&#1497;&#1501; &#1489;&#1511;&#1489;&#1493;&#1510;&#1492;</h2>
         <div class="member-list" data-group-members></div>
       </section>
 
       <nav class="bottom-nav" aria-label="Bottom navigation">
         <a class="home-round" href="groups.html">&#8962;</a>
-        <a class="settings-round" href="create-activity.html">&#9881;</a>
+        <a class="settings-round hidden" href="create-activity.html" data-admin-only>&#9881;</a>
       </nav>
 
       <div class="drill-overlay hidden" data-drill-overlay aria-live="polite">

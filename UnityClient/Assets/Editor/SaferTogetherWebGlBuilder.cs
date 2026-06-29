@@ -9,7 +9,7 @@ namespace SaferTogether.UnityClient.Editor
     // builds the avatar editor as a webgl module for the web app
     public static class SaferTogetherWebGlBuilder
     {
-        private const string ScenePath = "Assets/Scenes/RuntimeAvatar.unity";
+        private const string AvatarEditorScenePath = "Assets/Scenes/RuntimeAvatar.unity";
         private const string MissionRoomScenePath = "Assets/Scenes/MissionRoom.unity";
         private const string ProductName = "avatar-editor";
         private const string MissionRoomProductName = "mission-room";
@@ -19,27 +19,28 @@ namespace SaferTogether.UnityClient.Editor
         public static void BuildAvatarEditor()
         {
             string outputPath = GetFrontendBuildPath();
-            Directory.CreateDirectory(outputPath);
 
             string previousProductName = PlayerSettings.productName;
             PlayerSettings.productName = ProductName;
 
             try
             {
-                if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
+                if (!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
                 {
                     return;
                 }
 
-                EnsureRuntimeScene();
-                SaferTogetherGeneratedAvatarInstaller.GenerateAssets(true);
-                SaferTogetherGeneratedAvatarInstaller.InstallBuilderInRuntimeScene();
+                // rebuild every avatar prefab/thumbnail from the pack, register the avatar
+                // shaders as Always Included (so they aren't stripped → pink), and rewrite the
+                // RuntimeAvatar scene with the new editor controller.
+                SaferTogetherAvatarPackInstaller.Generate(true);
+                Directory.CreateDirectory(outputPath);
 
                 BuildPipeline.BuildPlayer(new BuildPlayerOptions
                 {
                     locationPathName = outputPath,
                     options = BuildOptions.None,
-                    scenes = new[] { ScenePath },
+                    scenes = new[] { AvatarEditorScenePath },
                     target = BuildTarget.WebGL
                 });
             }
@@ -54,19 +55,23 @@ namespace SaferTogether.UnityClient.Editor
         public static void BuildMissionRoom()
         {
             string outputPath = GetFrontendMissionRoomBuildPath();
-            Directory.CreateDirectory(outputPath);
 
             string previousProductName = PlayerSettings.productName;
             PlayerSettings.productName = MissionRoomProductName;
 
             try
             {
-                if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
+                if (!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
                 {
                     return;
                 }
 
+                // mission room spawns the same pack characters; rebuild the prefabs/shaders but
+                // leave the avatar-editor scene alone (the mission room uses its own scene).
+                SaferTogetherAvatarPackInstaller.Generate(false);
+                SaferTogetherMissionGamesInstaller.Generate();
                 EnsureMissionRoomScene();
+                Directory.CreateDirectory(outputPath);
 
                 BuildPipeline.BuildPlayer(new BuildPlayerOptions
                 {
@@ -106,20 +111,6 @@ namespace SaferTogether.UnityClient.Editor
                 "unity",
                 "mission-room"
             ));
-        }
-
-        // make a basic saved scene for the build if we don't have one
-        private static void EnsureRuntimeScene()
-        {
-            if (File.Exists(ScenePath))
-            {
-                return;
-            }
-
-            Directory.CreateDirectory(Path.GetDirectoryName(ScenePath));
-            Scene scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
-            EditorSceneManager.SaveScene(scene, ScenePath);
-            AssetDatabase.Refresh();
         }
 
         // set up the mission room scene the build uses

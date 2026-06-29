@@ -70,6 +70,23 @@ namespace SaferTogether.UnityClient
             }, onError);
         }
 
+        // change my name and/or password. leave a field empty to skip changing it; changing
+        // the password requires currentPassword (the existing one can't be shown, only confirmed).
+        public IEnumerator UpdateCredentials(string username, string currentPassword, string newPassword, Action<UserProfile> onSuccess, Action<string> onError)
+        {
+            var body = new CredentialsUpdateRequest
+            {
+                username = username,
+                currentPassword = currentPassword,
+                newPassword = newPassword
+            };
+
+            yield return SendJson<ProfileResponse>("/api/auth/credentials", "PATCH", body, response =>
+            {
+                onSuccess?.Invoke(response.profile);
+            }, onError);
+        }
+
         // log out and wipe the local token
         public IEnumerator Logout(Action onSuccess, Action<string> onError)
         {

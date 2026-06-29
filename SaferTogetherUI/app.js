@@ -4,7 +4,6 @@ import {
   logout,
   signUpWithUsername
 } from "./src/api/authGateway.js";
-import { openRadioWirePuzzle } from "./src/radioWire.js";
 import {
   activateGroupActivity,
   createGroupActivity,
@@ -80,8 +79,22 @@ const CHARACTER_HAIR_STYLES = ["short", "bob", "curls", "spiky", "long", "ponyta
 const CHARACTER_SEXES = ["female", "male"];
 const CHARACTER_SHOES = ["sneakers", "boots", "space-shoes"];
 const CHARACTER_SKINS = ["porcelain", "light", "tan", "brown", "deep", "green", "red", "gray", "gold"];
-const CHARACTER_SPECIES = ["male", "female", "dragon", "devil"];
-const CHARACTER_TOPS = ["tee", "sweatshirt", "undershirt"];
+const CHARACTER_SPECIES = [
+  "male",
+  "female",
+  "adventurer",
+  "beach",
+  "casual",
+  "casual2",
+  "farmer",
+  "king",
+  "punk",
+  "spacesuit",
+  "suit",
+  "swat",
+  "worker"
+];
+const CHARACTER_TOPS = ["peasant", "ranger"];
 const DEFAULT_CHARACTER_SPEC = {
   accessory: "none",
   background: "sky",
@@ -97,7 +110,7 @@ const DEFAULT_CHARACTER_SPEC = {
   shoeColor: "white",
   skin: "tan",
   species: "male",
-  top: "tee",
+  top: "peasant",
   topColor: "blue"
 };
 const DEFAULT_FAMILY = [
@@ -110,12 +123,12 @@ const DEFAULT_FAMILY = [
 const DEFAULT_QUESTIONS = [
   {
     id: "q1",
-    question: "What should we do after entering the protected room?",
+    question: "מה צריך לעשות אחרי שנכנסים למרחב המוגן?",
     answers: [
-      "Leave after one minute",
-      "Stay for 10 minutes",
-      "Open the window",
-      "Stand near the door"
+      "לצאת אחרי דקה",
+      "להישאר 10 דקות",
+      "לפתוח את החלון",
+      "לעמוד ליד הדלת"
     ],
     correctAnswerIndex: 1
   }
@@ -124,34 +137,49 @@ const DEFAULT_QUESTIONS = [
 const DEFAULT_MISSIONS = [
   {
     id: "m1",
-    title: "Close the window",
-    description: "Make sure the window is closed before sitting down.",
+    title: "משחק ערכת חירום",
+    description: "בחרו בכל שלב את הפריט שצריך להביא למרחב המוגן.",
     expectedChannel: "",
-    requiredAction: "Close the window",
-    target: "window"
+    requiredAction: "בחירת פריטי חירום",
+    target: "puzzle"
   },
   {
     id: "m2",
-    title: "Bring water",
-    description: "Bring a water bottle to the protected room.",
+    title: "משחק קוד הדלת",
+    description: "זכרו את רצף הספרות וחזרו עליו בלוח המקשים.",
     expectedChannel: "",
-    requiredAction: "Stand in the safe zone with water",
-    target: "safe-zone"
+    requiredAction: "חזרה על רצף קוד הדלת",
+    target: "code"
   },
   {
     id: "m3",
-    title: "Sit away from windows",
-    description: "Sit on the floor and stay away from glass.",
+    title: "משחק הטילים",
+    description: "התחמקו מטילים נופלים במשך דקה בעזרת תנועה או הטיית הטלפון.",
     expectedChannel: "",
-    requiredAction: "Move away from the window",
-    target: "safe-zone"
+    requiredAction: "התחמקות מטילים",
+    target: "missile"
   }
 ];
 
-const MISSION_TARGETS = ["window", "radio", "radio-wire", "door", "safe-zone", "board", "custom"];
+const MISSION_GAME_DEFINITIONS = {
+  puzzle: {
+    label: "ערכת חירום",
+    description: "משחק בחירת פריטים למרחב המוגן: בכל אחד מארבעה שלבים מוצגות ארבע תמונות, והילד בוחר מה צריך להביא."
+  },
+  code: {
+    label: "קוד הדלת",
+    description: "משחק זיכרון רצפים: המערכת מאירה ספרות בלוח המקשים, והילד חוזר על הרצף בשלבים באורך 3, 4, 5 ו-5 ספרות."
+  },
+  missile: {
+    label: "טילים",
+    description: "משחק התחמקות מטילים במשך דקה: הילד מזיז את הדמות, ובטלפון גם מטה את המכשיר, כדי להימנע מפגיעות."
+  }
+};
+const MISSION_GAME_IDS = Object.keys(MISSION_GAME_DEFINITIONS);
+
 const ACTIVITY_MODES = ["real", "training"];
 // play an encouragement clip if the player is stuck on a single mission-room
-// stage (a step inside a task, e.g. one radio-wire level) this long
+// stage (a step inside a task) this long
 const MISSION_INACTIVITY_DELAY_MS = 15000;
 
 const DEFAULT_BASELINE = {
@@ -165,6 +193,7 @@ const DEFAULT_BASELINE = {
 let state = loadState();
 let orefGpsWatchId = null;
 let lastGpsLocationSave = null;
+let emergencyActivityRedirectTimer = null;
 
 document.addEventListener("DOMContentLoaded", () => {
   ensureDefaults();
@@ -313,10 +342,11 @@ function optionValue(value, options, fallback) {
   return options.includes(cleanValue) ? cleanValue : fallback;
 }
 
-// pick a valid species, treating old "human" as "male"
+// pick a valid species, mapping removed legacy creature ids back to a selectable avatar
 function characterSpeciesValue(value) {
   const cleanValue = String(value || "").trim().toLowerCase();
   if (cleanValue === "human") return "male";
+  if (cleanValue === "dragon" || cleanValue === "devil") return "male";
   return optionValue(cleanValue, CHARACTER_SPECIES, DEFAULT_CHARACTER_SPEC.species);
 }
 
@@ -522,9 +552,33 @@ function parseCharacterAvatar(avatar) {
   };
 }
 
-// accept preset, builder, or character avatar ids
+// the Quaternius pack characters are the only selectable avatars now ("pack:<character>")
+const PACK_CHARACTERS = [
+  "adventurer", "beach", "casual", "casual2", "farmer", "king",
+  "punk", "spacesuit", "suit", "swat", "worker"
+];
+
+// parse a pack avatar id ("pack:<character>")
+function parsePackAvatar(avatar) {
+  const cleanAvatar = String(avatar || "").trim().toLowerCase();
+
+  if (!cleanAvatar.startsWith("pack:")) {
+    return null;
+  }
+
+  const name = cleanAvatar.slice("pack:".length);
+  return PACK_CHARACTERS.includes(name) ? `pack:${name}` : null;
+}
+
+// accept pack, preset, builder, or legacy character avatar ids
 function normalizeAvatar(avatar, username) {
   const cleanAvatar = String(avatar || "").trim().toLowerCase();
+  const packAvatar = parsePackAvatar(cleanAvatar);
+
+  if (packAvatar) {
+    return packAvatar;
+  }
+
   const characterAvatar = parseCharacterAvatar(cleanAvatar);
   const legacyCharacterAvatar = parseLegacyCharacterAvatar(cleanAvatar);
   const builderAvatar = parseBuilderAvatar(cleanAvatar);
@@ -643,7 +697,7 @@ function initSignup() {
       await loadSessionIntoState();
       saveState();
       sessionStorage.removeItem(SIGNUP_AVATAR_KEY);
-      showFormSuccess(form, "Saved successfully");
+      showFormSuccess(form, "נשמר בהצלחה");
       window.setTimeout(() => {
         window.location.href = "groups.html";
       }, 900);
@@ -707,7 +761,7 @@ async function refreshCurrentUserGroups(role = state.user?.role || "user") {
             : (member.avatarImage || "")
         }))
         : [],
-      name: group.name || "Untitled group",
+      name: group.name || "קבוצה ללא שם",
       pendingRequests: Array.isArray(group.pendingRequests) ? group.pendingRequests : [],
       userRole: group.userRole || (role === "admin" ? "admin" : "user")
     }));
@@ -782,7 +836,7 @@ function readableError(error, fallback) {
 
 // auth error -> displayable text
 function readableAuthError(error) {
-  return readableError(error, "Authentication failed. Please try again.");
+  return readableError(error, "ההתחברות נכשלה. נסו שוב.");
 }
 
 // guard admin-only pages, then run their init
@@ -836,7 +890,7 @@ function renderCurrentAvatar() {
     preview.innerHTML = `
       <div class="avatar-edit-preview">
         ${summaryMarkup}
-        <button class="avatar-edit-button" type="button" data-open-avatar-editor aria-label="Edit avatar"></button>
+        <button class="avatar-edit-button" type="button" data-open-avatar-editor aria-label="עריכת דמות"></button>
       </div>
     `;
   });
@@ -865,7 +919,7 @@ async function initUnityAvatarEditor() {
 
   wireLogoutLink();
   if (status) {
-    status.textContent = profile ? `Logged in as ${profile.username}` : "Unity avatar editor";
+    status.textContent = profile ? `מחובר/ת כ-${profile.username}` : "עורך הדמות";
   }
   await loadUnityAvatarEditor(profile);
 }
@@ -888,7 +942,7 @@ function loadScript(src) {
     script.async = true;
     script.src = src;
     script.onload = resolve;
-    script.onerror = () => reject(new Error("Unity WebGL build was not found"));
+    script.onerror = () => reject(new Error("בניית ה-Unity WebGL לא נמצאה"));
     document.head.append(script);
   });
 }
@@ -920,7 +974,7 @@ async function loadUnityAvatarEditor(profile) {
     }, updateUnityProgress);
 
     sendWebSessionToUnity(unityInstance, profile);
-    showUnityStatus("Avatar editor ready", "good");
+    showUnityStatus("");
   } catch (error) {
     showUnityStartupError(error);
   }
@@ -943,6 +997,12 @@ function showUnityStatus(message, tone = "") {
     return;
   }
 
+  if (!message) {
+    status.className = "notice hidden";
+    status.textContent = "";
+    return;
+  }
+
   status.className = `notice ${tone}`.trim();
   status.textContent = message;
 }
@@ -954,7 +1014,7 @@ function showUnityBuildMissing(error) {
 
   host?.classList.add("unity-webgl-host-missing");
   missing?.classList.remove("hidden");
-  showUnityStatus(readableError(error, "Unity WebGL build was not found"), "warn");
+  showUnityStatus(readableError(error, "בניית ה-Unity WebGL לא נמצאה"), "warn");
 }
 
 // report a real unity startup error (not a missing-file one)
@@ -964,7 +1024,7 @@ function showUnityStartupError(error) {
 
   host?.classList.remove("unity-webgl-host-missing");
   missing?.classList.add("hidden");
-  showUnityStatus(readableError(error, "Unity editor could not start"), "warn");
+  showUnityStatus(readableError(error, "לא ניתן להפעיל את עורך הדמות"), "warn");
 }
 
 // send the web profile into the running unity instance
@@ -1126,10 +1186,11 @@ async function initGroups() {
 
   renderCurrentUserSummary(currentUser);
   startPresenceHeartbeat();
+  renderOrefStatus();
+  refreshOrefStatus();
+  startOrefStatusPolling();
 
   renderGroupsList();
-  renderGroupPresence();
-  startGroupsPresencePolling();
   if (user.role !== "admin" && state.groups.length) {
     startAlarmBroadcastPolling();
   }
@@ -1159,7 +1220,7 @@ async function initGroups() {
             <span class="group-icon">.</span>
             <span>
               <strong>${escapeHtml(activeGroup.name)}</strong>
-              <small>Member</small>
+              <small>חבר/ה</small>
             </span>
           </button>
         </div>
@@ -1206,7 +1267,7 @@ async function initGroups() {
       setFormBusy(joinForm, true);
       await requestJoinByCode({ code });
       joinForm.reset();
-      showFormSuccess(joinForm, "Request sent");
+      showFormSuccess(joinForm, "הבקשה נשלחה");
     } catch (error) {
       showFormError(joinForm, readableAuthError(error));
     } finally {
@@ -1249,7 +1310,7 @@ function renderGroupsList() {
   if (!container) return;
 
   if (!state.groups.length) {
-    container.innerHTML = `<p class="notice">No groups yet.</p>`;
+    container.innerHTML = `<p class="notice">אין עדיין קבוצות.</p>`;
     return;
   }
 
@@ -1257,19 +1318,19 @@ function renderGroupsList() {
     <article class="group-entry">
       <div class="group-card">
         ${group.userRole === "admin" ? `
-          <button class="group-delete-button" type="button" data-delete-group="${group.id}" aria-label="Delete group" title="Delete group">&#128465;</button>
+          <button class="group-delete-button" type="button" data-delete-group="${group.id}" aria-label="מחיקת קבוצה" title="מחיקת קבוצה">&#128465;</button>
         ` : ""}
         <button class="group-card-main" type="button" data-open-group="${group.id}">
           <span class="group-icon">${group.userRole === "admin" ? "*" : "."}</span>
           <span>
             <strong>${escapeHtml(group.name)}</strong>
-            <small>${group.userRole === "admin" ? "Admin" : "Member"}</small>
+            <small>${group.userRole === "admin" ? "מנהל/ת" : "חבר/ה"}</small>
           </span>
         </button>
       </div>
       ${group.userRole === "admin" ? `
         <div class="group-extra">
-          <p class="notice">Team code: <strong class="join-code-value">${escapeHtml(group.joinCode)}</strong></p>
+          <p class="notice">קוד קבוצה: <strong class="join-code-value">${escapeHtml(group.joinCode)}</strong></p>
         </div>
       ` : ""}
     </article>
@@ -1321,7 +1382,7 @@ function renderGroupPresence() {
           <p class="member-name">
             <span class="presence-dot ${online ? "online" : "offline"}" title="${online ? "מחובר" : "לא מחובר"}"></span>
             ${escapeHtml(member.username)}
-            ${isMe ? `<span class="member-me-pill">Me</span>` : ""}
+            ${isMe ? `<span class="member-me-pill">אני</span>` : ""}
           </p>
         </div>
         <span class="status-pill ${online ? "safe" : "offline"}">${online ? "מחובר" : "לא מחובר"}</span>
@@ -1367,7 +1428,7 @@ async function initCreateGroup() {
     clearFormMessage(form);
 
     const data = new FormData(form);
-    const name = data.get("groupName")?.toString().trim() || "New group";
+    const name = data.get("groupName")?.toString().trim() || "קבוצה חדשה";
 
     try {
       setFormBusy(form, true);
@@ -1398,7 +1459,6 @@ async function initBoard() {
   const cachedGroup = getActiveGroup();
   if (cachedGroup) {
     setText("[data-active-group-name]", cachedGroup.name);
-    setText("[data-active-group-id]", cachedGroup.id);
   }
 
   try {
@@ -1421,8 +1481,8 @@ async function initBoard() {
 
   const group = getActiveGroup();
   setText("[data-active-group-name]", group.name);
-  setText("[data-active-group-id]", group.id);
   startPresenceHeartbeat();
+  initUnityAvatarLaunch();
   void ensureAlarmPushSubscription();
   renderBoardMembers(group);
   renderBoardPendingRequests(group);
@@ -1431,11 +1491,7 @@ async function initBoard() {
   refreshOrefStatus();
   startOrefStatusPolling();
 
-  document.querySelectorAll("[data-admin-only]").forEach(node => {
-    node.classList.toggle("hidden", !isCurrentUserAdminForActiveGroup());
-  });
-
-  const isAdmin = isCurrentUserAdminForActiveGroup();
+  const isAdmin = applyAdminOnlyVisibility();
 
   if (!isAdmin) {
     // Members get pulled into whatever alarm (real or training) the admin raises.
@@ -1453,12 +1509,25 @@ async function initBoard() {
     await raiseGroupAlarm("training");
   });
 
-  document.querySelector("[data-open-oref-emergency]")?.addEventListener("click", () => {
-    startEmergency(state.orefStatus, "real");
-    window.location.href = "emergency.html";
+  document.querySelectorAll("[data-open-oref-emergency]").forEach(button => {
+    button.addEventListener("click", () => {
+      if (!state.orefStatus?.hasGroupAlert) return;
+      startEmergency(state.orefStatus, "real");
+      window.location.href = "emergency.html";
+    });
   });
 
-  document.querySelector("[data-rename-group]")?.addEventListener("click", async () => {
+  document.querySelector("[data-open-pending-requests]")?.addEventListener("click", event => {
+    const panel = document.querySelector("[data-pending-requests-panel]");
+    if (!panel) return;
+
+    const isOpen = panel.classList.toggle("hidden") === false;
+    document.querySelector("[data-activity-admin-panel]")?.classList.add("hidden");
+    document.querySelector("[data-open-group-games]")?.setAttribute("aria-expanded", "false");
+    event.currentTarget.setAttribute("aria-expanded", String(isOpen));
+  });
+
+  document.querySelector("[data-old-rename-group]")?.addEventListener("click", async () => {
     const group = getActiveGroup();
     const newName = prompt("שם חדש לקבוצה:", group.name);
     if (!newName || newName.trim() === group.name) return;
@@ -1473,9 +1542,114 @@ async function initBoard() {
     }
   });
 
+  document.querySelector("[data-open-group-games]")?.addEventListener("click", event => {
+    const panel = document.querySelector("[data-activity-admin-panel]");
+    if (!panel) return;
+
+    const isOpen = panel.classList.toggle("hidden") === false;
+    document.querySelector("[data-pending-requests-panel]")?.classList.add("hidden");
+    document.querySelector("[data-open-pending-requests]")?.setAttribute("aria-expanded", "false");
+    event.currentTarget.setAttribute("aria-expanded", String(isOpen));
+    if (isOpen) {
+      void renderAdminActivities(getActiveGroup());
+    }
+  });
+
+  initBoardGroupNameEditor();
+
   if (isCurrentUserAdminForActiveGroup()) {
     startBoardRequestsPolling();
     renderAdminActivities(group);
+  }
+}
+
+function initBoardGroupNameEditor() {
+  document.querySelector("[data-rename-group]")?.addEventListener("click", () => {
+    setBoardGroupNameEditing(true);
+  });
+
+  document.querySelector("[data-save-group-name]")?.addEventListener("click", () => {
+    void saveBoardGroupNameEdit();
+  });
+
+  document.querySelector("[data-cancel-group-name]")?.addEventListener("click", () => {
+    setBoardGroupNameEditing(false);
+  });
+
+  document.querySelector("[data-group-name-input]")?.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void saveBoardGroupNameEdit();
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setBoardGroupNameEditing(false);
+    }
+  });
+}
+
+function setBoardGroupNameEditing(isEditing) {
+  const group = getActiveGroup();
+  const label = document.querySelector("[data-active-group-name]");
+  const input = document.querySelector("[data-group-name-input]");
+  const editButton = document.querySelector("[data-rename-group]");
+  const saveButton = document.querySelector("[data-save-group-name]");
+  const cancelButton = document.querySelector("[data-cancel-group-name]");
+
+  if (!label || !input || !editButton || !saveButton || !cancelButton) return;
+
+  if (isEditing) {
+    input.value = group?.name || label.textContent.trim();
+    window.requestAnimationFrame(() => {
+      input.focus();
+      input.select();
+    });
+  }
+
+  label.classList.toggle("hidden", isEditing);
+  input.classList.toggle("hidden", !isEditing);
+  saveButton.classList.toggle("hidden", !isEditing);
+  cancelButton.classList.toggle("hidden", !isEditing);
+  editButton.classList.toggle("hidden", isEditing || !isCurrentUserAdminForActiveGroup());
+}
+
+async function saveBoardGroupNameEdit() {
+  const group = getActiveGroup();
+  const input = document.querySelector("[data-group-name-input]");
+  const saveButton = document.querySelector("[data-save-group-name]");
+  const cancelButton = document.querySelector("[data-cancel-group-name]");
+
+  if (!group || !input) return;
+
+  const newName = input.value.trim();
+  if (!newName) {
+    input.focus();
+    return;
+  }
+
+  if (newName === group.name) {
+    setBoardGroupNameEditing(false);
+    return;
+  }
+
+  input.disabled = true;
+  if (saveButton) saveButton.disabled = true;
+  if (cancelButton) cancelButton.disabled = true;
+
+  try {
+    await renameGroup(group.id, newName);
+    group.name = newName;
+    state.familyName = newName;
+    saveState();
+    setText("[data-active-group-name]", group.name);
+    setBoardGroupNameEditing(false);
+  } catch {
+    alert("×©×’×™××” ×‘×©×™× ×•×™ ×©× ×”×§×‘×•×¦×”");
+  } finally {
+    input.disabled = false;
+    if (saveButton) saveButton.disabled = false;
+    if (cancelButton) cancelButton.disabled = false;
   }
 }
 
@@ -1530,9 +1704,13 @@ function isMemberOnline(member) {
 
 // reflect server-known safe users onto the local emergency member list
 function syncFamilyFromAlarm() {
+  if (!state.alarmStatus?.active) {
+    return;
+  }
+
   const safe = new Set(state.alarmStatus?.safeUserIds || []);
   (state.familyMembers || []).forEach(member => {
-    if (safe.has(member.id)) member.status = "safe";
+    member.status = safe.has(member.id) ? "safe" : "at_risk";
   });
 }
 
@@ -1612,6 +1790,43 @@ function activitiesUnlocked() {
   return allMembersSafe();
 }
 
+// members should move into the opened activity automatically; admins stay here
+// to watch live progress, and members who finished stay here until the alarm ends.
+function shouldAutoOpenActivityFromEmergency() {
+  return document.body.dataset.page === "emergency" &&
+    activitiesUnlocked() &&
+    !isCurrentUserAdminForActiveGroup() &&
+    !state.emergency?.activitiesFinished;
+}
+
+function clearActivityAutoOpen() {
+  if (!emergencyActivityRedirectTimer) {
+    return;
+  }
+
+  window.clearTimeout(emergencyActivityRedirectTimer);
+  emergencyActivityRedirectTimer = null;
+}
+
+function scheduleActivityAutoOpen() {
+  if (!shouldAutoOpenActivityFromEmergency()) {
+    clearActivityAutoOpen();
+    return;
+  }
+
+  if (emergencyActivityRedirectTimer) {
+    return;
+  }
+
+  emergencyActivityRedirectTimer = window.setTimeout(() => {
+    emergencyActivityRedirectTimer = null;
+
+    if (shouldAutoOpenActivityFromEmergency()) {
+      window.location.href = "game.html";
+    }
+  }, 700);
+}
+
 // report play progress to the server so the admin can watch it live (best effort)
 function reportActivityProgress(activity, type, completed, total) {
   const group = getActiveGroup();
@@ -1630,7 +1845,7 @@ function renderBoardMembers(group) {
   if (!container || !group) return;
 
   if (!group.members?.length) {
-    container.innerHTML = `<p class="notice">No members yet.</p>`;
+    container.innerHTML = `<p class="notice">אין עדיין חברים.</p>`;
     return;
   }
 
@@ -1649,7 +1864,7 @@ function renderBoardMembers(group) {
           <p class="member-name">
             <span class="presence-dot ${isOnline ? "online" : "offline"}" title="${isOnline ? "מחובר" : "לא מחובר"}"></span>
             ${escapeHtml(member.username)}
-            ${isCurrentMember ? `<span class="member-me-pill">Me</span>` : ""}
+            ${isCurrentMember ? `<span class="member-me-pill">אני</span>` : ""}
           </p>
         </div>
         <span class="status-pill ${statusClass}">${escapeHtml(statusLabel)}</span>
@@ -1674,10 +1889,10 @@ function orefMemberStatusClass(memberStatus, location = null, showLocation = fal
 
 // HFC member status -> display text
 function orefMemberStatusLabel(memberStatus, location = null) {
-  if (memberStatus?.status === "alert") return "ALERT";
+  if (memberStatus?.status === "alert") return "אזעקה";
   const areaName = alertLocationLabel(memberStatus?.alertLocation || location);
   if (areaName) return areaName;
-  return "No area";
+  return "אין אזור";
 }
 
 // best area name we have (hebrew first)
@@ -1685,9 +1900,24 @@ function alertLocationLabel(location) {
   return location?.areaNameHebrew || location?.areaName || "";
 }
 
+function updatePendingRequestsButton(group) {
+  const count = group?.pendingRequests?.length || 0;
+  const button = document.querySelector("[data-open-pending-requests]");
+  const badge = document.querySelector("[data-pending-requests-count]");
+
+  if (button) {
+    button.setAttribute("aria-label", count ? `בקשות הצטרפות: ${count}` : "בקשות הצטרפות");
+  }
+
+  if (!badge) return;
+  badge.textContent = String(count);
+  badge.classList.toggle("hidden", count === 0);
+}
+
 // draw pending join requests on the board
 function renderBoardPendingRequests(group) {
   const container = document.querySelector("[data-pending-requests-list]");
+  updatePendingRequestsButton(group);
   if (!container || !group) return;
 
   if (!group.pendingRequests?.length) {
@@ -1749,7 +1979,7 @@ async function renderAdminActivities(group = getActiveGroup()) {
   const container = document.querySelector("[data-admin-activity-list]");
   if (!container || !group) return;
 
-  container.innerHTML = `<p class="notice">Loading games...</p>`;
+  container.innerHTML = `<p class="notice">טוען משחקים...</p>`;
 
   try {
     const activities = await getGroupActivities(group.id);
@@ -1758,10 +1988,10 @@ async function renderAdminActivities(group = getActiveGroup()) {
 
     if (!activities.length) {
       container.innerHTML = `
-        <p class="notice">No games yet. Create trivia questions or a room mission for this group.</p>
+        <p class="notice">אין עדיין משחקים. צרו שאלון טריוויה או חדר משימות לקבוצה זו.</p>
         <div class="button-grid">
-          <a class="btn btn-secondary" href="trivia.html">Trivia</a>
-          <a class="btn btn-secondary" href="missions.html">Mission</a>
+          <a class="btn btn-secondary" href="trivia.html">טריוויה</a>
+          <a class="btn btn-secondary" href="missions.html">משימה</a>
         </div>
       `;
       return;
@@ -1774,12 +2004,12 @@ async function renderAdminActivities(group = getActiveGroup()) {
       <article class="added-item activity-admin-item">
         <div>
           <strong>${escapeHtml(activity.title)}</strong>
-          <span>${escapeHtml(activity.type === "trivia" ? "Trivia" : "Room mission")} - ${activityItemCount(activity)} item(s)</span>
-          <span class="activity-mode-line">${assigned ? "Assigned to alarm + training" : "Not assigned"}</span>
+          <span>${escapeHtml(activity.type === "trivia" ? "טריוויה" : "חדר משימות")} - ${activityItemCount(activity)} פריטים</span>
+          <span class="activity-mode-line">${assigned ? "משויך לאזעקה + תרגול" : "לא משויך"}</span>
         </div>
         <div class="activity-action-grid">
-          <button class="mini-btn ${assigned ? "active safe" : ""}" type="button" data-assign-activity="${activity.id}" data-assigned="${assigned ? "1" : ""}" title="Assign to alarm and training">${assigned ? "✓ Assigned" : "📌 Assign"}</button>
-          <button class="mini-btn icon-btn danger" type="button" data-delete-activity="${activity.id}" data-activity-title="${escapeHtml(activity.title)}" aria-label="Delete" title="Delete">🗑</button>
+          <button class="mini-btn ${assigned ? "active safe" : ""}" type="button" data-assign-activity="${activity.id}" data-assigned="${assigned ? "1" : ""}" title="שיוך לאזעקה ולתרגול">${assigned ? "✓ משויך" : "📌 שיוך"}</button>
+          <button class="mini-btn icon-btn danger" type="button" data-delete-activity="${activity.id}" data-activity-title="${escapeHtml(activity.title)}" aria-label="מחיקה" title="מחיקה">🗑</button>
         </div>
       </article>
     `;
@@ -1804,8 +2034,8 @@ async function renderAdminActivities(group = getActiveGroup()) {
     container.querySelectorAll("[data-delete-activity]").forEach(button => {
       button.addEventListener("click", async () => {
         const activityId = button.dataset.deleteActivity;
-        const title = button.dataset.activityTitle || "this game";
-        if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return;
+        const title = button.dataset.activityTitle || "המשחק הזה";
+        if (!window.confirm(`למחוק את "${title}"? לא ניתן לבטל פעולה זו.`)) return;
         await runBoardActivityAction(button, async () => {
           await deleteGroupActivity(group.id, activityId);
         });
@@ -1840,18 +2070,12 @@ function activityItemCount(activity) {
   return activity.payload?.tasks?.length || 0;
 }
 
-// text for which modes a game is active in
-function activityModeText(modes = []) {
-  const cleanModes = ACTIVITY_MODES.filter(mode => modes.includes(mode));
-  return cleanModes.length ? `Active for: ${cleanModes.join(", ")}` : "Not active";
-}
-
 // draw submitted results waiting on admin review
 async function renderAdminActivityResults(group = getActiveGroup()) {
   const container = document.querySelector("[data-admin-results-list]");
   if (!container || !group) return;
 
-  container.innerHTML = `<p class="notice">Loading results...</p>`;
+  container.innerHTML = `<p class="notice">טוען תוצאות...</p>`;
 
   try {
     const results = await getGroupActivityResults(group.id);
@@ -1859,20 +2083,20 @@ async function renderAdminActivityResults(group = getActiveGroup()) {
     saveState();
 
     if (!results.length) {
-      container.innerHTML = `<p class="notice">No game results yet.</p>`;
+      container.innerHTML = `<p class="notice">אין עדיין תוצאות משחק.</p>`;
       return;
     }
 
     container.innerHTML = results.map(result => `
       <article class="added-item activity-result-item">
         <div>
-          <strong>${escapeHtml(result.username)} - ${escapeHtml(result.activity?.title || "Game")}</strong>
-          <span>${escapeHtml(result.mode)} - ${escapeHtml(result.status)} - ${resultSummaryText(result)}</span>
+          <strong>${escapeHtml(result.username)} - ${escapeHtml(result.activity?.title || "משחק")}</strong>
+          <span>${escapeHtml(modeLabel(result.mode))} - ${escapeHtml(resultStatusLabel(result.status))} - ${resultSummaryText(result)}</span>
         </div>
         ${result.status === "pending" ? `
           <div class="activity-action-grid">
-            <button class="mini-btn active safe" type="button" data-review-result="${result.id}" data-review-status="approved">Approve</button>
-            <button class="mini-btn active at_risk" type="button" data-review-result="${result.id}" data-review-status="rejected">Reject</button>
+            <button class="mini-btn active safe" type="button" data-review-result="${result.id}" data-review-status="approved">אישור</button>
+            <button class="mini-btn active at_risk" type="button" data-review-result="${result.id}" data-review-status="rejected">דחייה</button>
           </div>
         ` : ""}
       </article>
@@ -1904,17 +2128,19 @@ function resultSummaryText(result) {
   const payload = result.payload || {};
 
   if (payload.kind === "trivia") {
-    return `${payload.correctCount || 0}/${payload.totalQuestions || 0} correct`;
+    return `${payload.correctCount || 0}/${payload.totalQuestions || 0} נכון`;
   }
 
   if (payload.kind === "mission") {
     const tasks = Array.isArray(payload.tasks) ? payload.tasks : [];
-    const labels = { door: "door", window: "window", radio: "radio", board: "exercises" };
+    const labels = Object.fromEntries(
+      Object.entries(MISSION_GAME_DEFINITIONS).map(([id, definition]) => [id, definition.label])
+    );
     const done = tasks.map(task => labels[task] || task).join(", ");
-    return done ? `Completed: ${done}` : "Room tasks completed";
+    return done ? `הושלם: ${done}` : "משימות החדר הושלמו";
   }
 
-  return "Submitted";
+  return "נשלח";
 }
 
 // check the server every 15s for new join requests
@@ -1962,54 +2188,6 @@ function startMembersPolling() {
   }, INTERVAL_MS);
 
   window.addEventListener("beforeunload", () => clearInterval(intervalId));
-}
-
-// This function polls the server every 5 seconds to detect when an admin starts a drill.
-// It snapshots the drill state on the first poll so it only alarms on transitions
-// (inactive → active), not on a drill that was already running when the user loaded.
-function startDrillPolling() {
-  const INTERVAL_MS = 5000;
-  let initialized = false;
-  let wasActive = false;
-
-  async function poll() {
-    if (document.hidden) return;
-    try {
-      const groups = await getCurrentUserGroups();
-      const activeGroupId = getActiveGroup()?.id;
-      const group = (groups || []).find(g => g.id === activeGroupId);
-      const isActive = group?.drillActive ?? false;
-
-      if (!initialized) {
-        initialized = true;
-        wasActive = isActive;
-        return;
-      }
-
-      if (isActive && !wasActive) {
-        clearInterval(intervalId);
-        showDrillOverlay();
-      }
-      wasActive = isActive;
-    } catch {
-      // silently ignore polling errors
-    }
-  }
-
-  poll();
-  const intervalId = setInterval(poll, INTERVAL_MS);
-  window.addEventListener("beforeunload", () => clearInterval(intervalId));
-}
-
-// This function shows the drill overlay and redirects to practice after a short delay.
-function showDrillOverlay() {
-  const overlay = document.querySelector("[data-drill-overlay]");
-  if (overlay) {
-    overlay.classList.remove("hidden");
-  }
-  setTimeout(() => {
-    window.location.href = "practice.html";
-  }, 3000);
 }
 
 // This function polls every 5s so members get pulled into an alarm the admin raised.
@@ -2335,11 +2513,68 @@ async function refreshOrefStatus() {
   }
 }
 
+function getOrefHeaderView(status = state.orefStatus, error = null) {
+  if (error || !state.user?.alertLocation) {
+    return {
+      className: "oref-header-status-offline",
+      canOpenEmergency: false,
+      title: "לא מחובר לאזור התרעה"
+    };
+  }
+
+  if (status?.hasGroupAlert) {
+    return {
+      className: "oref-header-status-danger",
+      canOpenEmergency: true,
+      title: "אזעקה באזור שלך"
+    };
+  }
+
+  if (status?.hasActiveAlert) {
+    return {
+      className: "oref-header-status-warn",
+      canOpenEmergency: false,
+      title: "אזעקה באזור אחר"
+    };
+  }
+
+  return {
+    className: "oref-header-status-good",
+    canOpenEmergency: false,
+    title: "אין אזעקה באזור שלך"
+  };
+}
+
+function renderOrefHeaderStatus(status = state.orefStatus, error = null) {
+  const view = getOrefHeaderView(status, error);
+  const stateClasses = [
+    "oref-header-status-good",
+    "oref-header-status-danger",
+    "oref-header-status-warn",
+    "oref-header-status-offline",
+    "oref-header-status-action"
+  ];
+
+  document.querySelectorAll("[data-oref-header-status]").forEach(node => {
+    node.classList.remove(...stateClasses);
+    node.classList.add(view.className);
+    node.classList.toggle("oref-header-status-action", view.canOpenEmergency);
+    node.title = view.title;
+    node.setAttribute("aria-label", `פיקוד העורף: ${view.title}`);
+
+    if (node instanceof HTMLButtonElement) {
+      node.disabled = !view.canOpenEmergency;
+    }
+  });
+}
+
 // draw the HFC summary on board + emergency screens
 function renderOrefStatus(status = state.orefStatus, error = null) {
   const summary = document.querySelector("[data-oref-alert-summary]");
   const refreshState = document.querySelector("[data-oref-refresh-state]");
-  const emergencyButton = document.querySelector("[data-open-oref-emergency]");
+  const emergencyButtons = document.querySelectorAll("[data-open-oref-emergency]");
+
+  renderOrefHeaderStatus(status, error);
 
   if (refreshState) {
     refreshState.textContent = status?.fetchedAt
@@ -2371,7 +2606,13 @@ function renderOrefStatus(status = state.orefStatus, error = null) {
     }
   }
 
-  emergencyButton?.classList.toggle("hidden", !status?.hasGroupAlert);
+  emergencyButtons.forEach(button => {
+    if (button.matches("[data-oref-header-status]")) {
+      return;
+    }
+
+    button.classList.toggle("hidden", !status?.hasGroupAlert);
+  });
   renderEmergencyOrefSummary(status);
 }
 
@@ -2404,7 +2645,7 @@ function createActivityDraft(type) {
     groupId: group?.id || "",
     questions: [],
     tasks: [],
-    title: type === "trivia" ? "New trivia game" : "New mission room",
+    title: type === "trivia" ? "משחק טריוויה חדש" : "חדר משימות חדש",
     type
   };
 }
@@ -2431,33 +2672,13 @@ function clearActivityDraft(type) {
   }
 }
 
-// mission target with a safe fallback to "custom"
-function normalizeMissionTarget(value) {
-  const target = String(value || "").trim().toLowerCase();
-  return MISSION_TARGETS.includes(target) ? target : "custom";
-}
-
-// guess the room object for old missions with no target
-function inferMissionTarget(mission) {
-  if (mission?.target) {
-    return normalizeMissionTarget(mission.target);
-  }
-
-  const text = `${mission?.title || ""} ${mission?.description || ""}`.toLowerCase();
-
-  if (text.includes("radio")) return "radio";
-  if (text.includes("door")) return "door";
-  if (text.includes("window") || text.includes("חלון")) return "window";
-  return "safe-zone";
-}
-
 // save an authored activity to the active group
 async function saveActivityDraft(type, button) {
   const group = getActiveGroup();
   const draft = getActivityDraft(type);
 
   if (!group) {
-    throw new Error("Choose a group before saving a game");
+    throw new Error("בחרו קבוצה לפני שמירת משחק");
   }
 
   const activity = {
@@ -2469,32 +2690,28 @@ async function saveActivityDraft(type, button) {
     activity.questions = draft.questions;
 
     if (!activity.questions.length) {
-      throw new Error("Add at least one question");
+      throw new Error("הוסיפו לפחות שאלה אחת");
     }
   } else {
-    activity.tasks = draft.tasks;
-    activity.exercises = draft.exercises;
+    activity.tasks = (draft.tasks || []).filter(task => MISSION_GAME_IDS.includes(task));
+    activity.exercises = [];
 
     if (!activity.tasks.length) {
-      throw new Error("Choose at least one task for the room");
-    }
-
-    if (activity.tasks.includes("board") && !activity.exercises.length) {
-      throw new Error("Add at least one exercise for the board");
+      throw new Error("בחרו לפחות משימה אחת לחדר");
     }
   }
 
   if (button) {
     button.disabled = true;
     button.dataset.originalText = button.dataset.originalText || button.textContent;
-    button.textContent = "Saving...";
+    button.textContent = "שומר...";
   }
 
   try {
     const saved = await createGroupActivity(group.id, activity);
     clearActivityDraft(type);
     saveState();
-    if (button) button.textContent = "Saved";
+    if (button) button.textContent = "נשמר";
     window.setTimeout(() => {
       window.location.href = "board.html";
     }, 650);
@@ -2502,7 +2719,7 @@ async function saveActivityDraft(type, button) {
   } catch (error) {
     if (button) {
       button.disabled = false;
-      button.textContent = button.dataset.originalText || "Save";
+      button.textContent = button.dataset.originalText || "שמירה";
     }
 
     throw error;
@@ -2513,7 +2730,7 @@ async function saveActivityDraft(type, button) {
 function cleanActivityTitle(title, type) {
   const cleanTitle = String(title || "").trim();
   if (cleanTitle) return cleanTitle;
-  return type === "trivia" ? "Trivia game" : "Room mission";
+  return type === "trivia" ? "משחק טריוויה" : "חדר משימות";
 }
 
 // set up the trivia question builder
@@ -2573,11 +2790,13 @@ function initTrivia() {
   });
 }
 
-// set up the mission-room builder: pick tasks + add board exercises
+// set up the mission-room builder: pick the new room mini-games
 function initMissions() {
   const draft = getActivityDraft("mission");
-  draft.tasks = Array.isArray(draft.tasks) ? draft.tasks : [];
-  draft.exercises = Array.isArray(draft.exercises) ? draft.exercises : [];
+  draft.tasks = Array.isArray(draft.tasks)
+    ? draft.tasks.filter(task => MISSION_GAME_IDS.includes(task))
+    : [];
+  draft.exercises = [];
 
   const titleInput = document.querySelector("[data-activity-title]");
   if (titleInput) {
@@ -2587,14 +2806,6 @@ function initMissions() {
       saveState();
     });
   }
-
-  const exerciseEditor = document.querySelector("[data-exercise-editor]");
-  // only show the exercise editor when the board task is picked
-  const syncExerciseEditor = () => {
-    if (exerciseEditor) {
-      exerciseEditor.hidden = !draft.tasks.includes("board");
-    }
-  };
 
   document.querySelectorAll("[data-task]").forEach(checkbox => {
     const task = checkbox.dataset.task;
@@ -2606,41 +2817,7 @@ function initMissions() {
         draft.tasks = draft.tasks.filter(item => item !== task);
       }
       saveState();
-      syncExerciseEditor();
     });
-  });
-
-  syncExerciseEditor();
-  renderExerciseList();
-
-  // auto-fill the answer if there's math in the question (e.g. "how much is 7 + 8?" -> 15)
-  const exerciseQuestionInput = document.querySelector("[data-exercise-question]");
-  const exerciseAnswerInput = document.querySelector("[data-exercise-answer]");
-  exerciseQuestionInput?.addEventListener("input", () => {
-    const computed = computeExerciseAnswer(exerciseQuestionInput.value);
-    if (computed !== null && exerciseAnswerInput) {
-      exerciseAnswerInput.value = computed;
-    }
-  });
-
-  document.querySelector("[data-add-exercise]")?.addEventListener("click", () => {
-    // only add exercises when the board task is on
-    if (!draft.tasks.includes("board")) return;
-
-    const questionInput = document.querySelector("[data-exercise-question]");
-    const answerInput = document.querySelector("[data-exercise-answer]");
-    const question = questionInput?.value.trim() || "";
-    const answer = answerInput?.value.trim() || "";
-
-    if (!question) return;
-
-    draft.exercises.push({ answer, question });
-    saveState();
-    renderExerciseList();
-
-    if (questionInput) questionInput.value = "";
-    if (answerInput) answerInput.value = "";
-    questionInput?.focus();
   });
 
   document.querySelector("[data-save-missions]")?.addEventListener("click", async event => {
@@ -2650,88 +2827,6 @@ function initMissions() {
       alert(readableAuthError(error));
     }
   });
-}
-
-// draw the board exercises in the current draft
-function renderExerciseList() {
-  const container = document.querySelector("[data-exercise-list]");
-  if (!container) return;
-
-  const exercises = state.activityDraft?.type === "mission"
-    ? (state.activityDraft.exercises || [])
-    : [];
-
-  if (!exercises.length) {
-    container.innerHTML = `<p class="notice">No exercises yet.</p>`;
-    return;
-  }
-
-  container.innerHTML = exercises.map((exercise, index) => `
-    <article class="added-item">
-      <strong>${index + 1}. ${escapeHtml(exercise.question)}</strong>
-      <span>Answer: ${escapeHtml(exercise.answer || "(any answer accepted)")}</span>
-      <button class="mini-btn" type="button" data-remove-exercise="${index}">Remove</button>
-    </article>
-  `).join("");
-
-  container.querySelectorAll("[data-remove-exercise]").forEach(button => {
-    button.addEventListener("click", () => {
-      const index = Number(button.dataset.removeExercise);
-      if (state.activityDraft?.exercises) {
-        state.activityDraft.exercises.splice(index, 1);
-        saveState();
-        renderExerciseList();
-      }
-    });
-  });
-}
-
-// find math in the text and return the answer as text, null if there's none.
-// handles + - * / and × ÷
-function computeExerciseAnswer(text) {
-  const normalized = String(text || "")
-    .replace(/×/g, "*")
-    .replace(/÷/g, "/");
-
-  const match = normalized.match(/\d+(?:\.\d+)?(?:\s*[-+*/]\s*\d+(?:\.\d+)?)+/);
-  if (!match) {
-    return null;
-  }
-
-  const value = evaluateArithmetic(match[0]);
-  if (value === null || !isFinite(value)) {
-    return null;
-  }
-
-  // round off float noise like 0.1 + 0.2
-  return String(Math.round(value * 1e6) / 1e6);
-}
-
-// eval a simple + - * / expression with normal precedence
-function evaluateArithmetic(expression) {
-  const tokens = expression.match(/\d+(?:\.\d+)?|[-+*/]/g);
-  if (!tokens || tokens.length < 3) {
-    return null;
-  }
-
-  // do * and / first, collecting terms to add up
-  const terms = [parseFloat(tokens[0])];
-  for (let i = 1; i < tokens.length - 1; i += 2) {
-    const operator = tokens[i];
-    const number = parseFloat(tokens[i + 1]);
-
-    if (operator === "*") {
-      terms[terms.length - 1] *= number;
-    } else if (operator === "/") {
-      terms[terms.length - 1] /= number;
-    } else if (operator === "+") {
-      terms.push(number);
-    } else if (operator === "-") {
-      terms.push(-number);
-    }
-  }
-
-  return terms.reduce((sum, term) => sum + term, 0);
 }
 
 // set up the practice flow
@@ -3080,6 +3175,25 @@ function initReport() {
 // ---- admin statistics page (per-user performance charts) ----
 const STATS_COLORS = { current: "#0b1220", real: "#e63f4f", training: "#4b8ff0" };
 const statsState = { activityId: "", charts: {}, data: null, memberId: "" };
+const STATS_PDF_CHARTS = [
+  { empty: "אין נתוני זמן להצגה בגרף זה.", key: "time", title: "זמן לכל שאלה / משימה" },
+  { empty: "אין נתוני תשובות להצגה בגרף זה.", key: "pie", title: "תשובות נכונות מול שגויות" },
+  { empty: "אין נתוני טעויות או פגיעות להצגה בגרף זה.", key: "mistakes", title: "טעויות / פגיעות" },
+  { empty: "אין נתוני סיבוב יד להצגה בגרף זה.", key: "rotation", title: "סיבוב היד" }
+];
+const STATS_PDF_PRINT_STYLE = `
+  body { margin: 0; background: #ffffff; color: #111827; font-family: Heebo, Arial, sans-serif; direction: rtl; }
+  .stats-pdf-report { box-sizing: border-box; width: 100%; max-width: 820px; margin: 0 auto; padding: 32px; }
+  .stats-pdf-report h1 { margin: 0 0 8px; font-size: 30px; }
+  .stats-pdf-report h2 { margin: 26px 0 10px; font-size: 20px; }
+  .stats-pdf-report h3 { margin: 0 0 10px; font-size: 16px; }
+  .stats-pdf-meta { color: #4b5563; font-size: 13px; margin: 0; }
+  .stats-pdf-summary { white-space: pre-wrap; line-height: 1.7; border: 1px solid #d1d5db; border-radius: 10px; padding: 14px; }
+  .stats-pdf-activity { margin-top: 22px; }
+  .stats-pdf-chart { border: 1px solid #d1d5db; border-radius: 10px; padding: 12px; margin-top: 14px; break-inside: avoid; page-break-inside: avoid; }
+  .stats-pdf-chart img { display: block; width: 100%; height: auto; }
+  .stats-pdf-empty { margin: 0; color: #6b7280; }
+`;
 
 function round1(value) {
   return Math.round(Number(value) * 10) / 10;
@@ -3125,6 +3239,7 @@ async function initStatistics() {
     renderStatsActivitySelect();
     renderStatsCharts();
     wireStatsSummary();
+    wireStatsPdfExport();
     void maybeShowStatsEndAlarm();
   } catch (error) {
     setStatsStatus(status, readableAuthError(error), "warn");
@@ -3222,12 +3337,12 @@ function renderStatsCharts() {
   const labels = items.map(item => item.label);
 
   // average for a metric+mode, aligned to the activity's canonical item order
-  const aggSeries = (metric, mode) => {
+  const aggSeries = (metric, mode, targetItems = items) => {
     const byIndex = new Map();
     (data.aggregates || [])
       .filter(row => row.activityId === activity.id && row.metric === metric && row.mode === mode)
       .forEach(row => byIndex.set(row.itemIndex, row.avgValue));
-    return items.map(item => (byIndex.has(item.index) ? round1(byIndex.get(item.index)) : null));
+    return targetItems.map(item => (byIndex.has(item.index) ? round1(byIndex.get(item.index)) : null));
   };
 
   // this member's latest result for this activity (black series + pie)
@@ -3238,22 +3353,40 @@ function renderStatsCharts() {
   (latest?.items || []).forEach(item => {
     if (Number.isInteger(item.index)) latestByIndex.set(item.index, item);
   });
-  const currentSeries = key => items.map(item => {
+  const currentSeries = (key, targetItems = items) => targetItems.map(item => {
     const value = latestByIndex.get(item.index)?.[key];
     return typeof value === "number" ? round1(value) : null;
   });
 
   // 1) time per item
-  drawSeriesChart("time", "bar", labels, {
-    current: currentSeries("timeSeconds"),
-    real: aggSeries("time", "real"),
-    training: aggSeries("time", "training")
+  const timeItems = items.filter(item => !isMissileStatsItem(item));
+  drawSeriesChart("time", "bar", timeItems.map(item => item.label), {
+    current: currentSeries("timeSeconds", timeItems),
+    real: aggSeries("time", "real", timeItems),
+    training: aggSeries("time", "training", timeItems)
   });
 
-  // 2) correct vs wrong — trivia only (the mission room self-verifies)
+  // 2) correct vs wrong
   drawPieChart(activity, latest);
 
-  // 3) hand rotation per item
+  // 3) mistakes / hits per item
+  const mistakes = {
+    current: currentSeries("mistakes"),
+    real: aggSeries("mistakes", "real"),
+    training: aggSeries("mistakes", "training")
+  };
+  const hasMistakes = [mistakes.current, mistakes.real, mistakes.training]
+    .some(series => series.some(value => value !== null));
+
+  if (hasMistakes) {
+    toggleStatsEmpty("[data-mistakes-empty]", "[data-chart-mistakes]", true);
+    drawSeriesChart("mistakes", "bar", labels, mistakes);
+  } else {
+    destroyStatsChart("mistakes");
+    toggleStatsEmpty("[data-mistakes-empty]", "[data-chart-mistakes]", false);
+  }
+
+  // 4) hand rotation per item
   const rotation = {
     current: currentSeries("rotation"),
     real: aggSeries("rotation", "real"),
@@ -3269,6 +3402,11 @@ function renderStatsCharts() {
     destroyStatsChart("rotation");
     toggleStatsEmpty("[data-rotation-empty]", "[data-chart-rotation]", false);
   }
+}
+
+function isMissileStatsItem(item) {
+  const label = String(item?.label || "").trim().toLowerCase();
+  return item?.game === "missile" || label === "טילים" || label.includes("missile");
 }
 
 function destroyStatsChart(key) {
@@ -3323,6 +3461,7 @@ function drawSeriesChart(key, type, labels, series) {
       labels
     },
     options: {
+      animation: false,
       maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       responsive: true,
@@ -3342,10 +3481,7 @@ function drawPieChart(activity, latest) {
 
   destroyStatsChart("pie");
 
-  // the correct/wrong pie is for trivia only — missions self-verify in the room
-  const scored = activity.type === "trivia"
-    ? (latest?.items || []).filter(item => typeof item.correct === "boolean")
-    : [];
+  const scored = (latest?.items || []).filter(item => typeof item.correct === "boolean");
   const correct = scored.filter(item => item.correct).length;
   const wrong = scored.length - correct;
 
@@ -3354,7 +3490,7 @@ function drawPieChart(activity, latest) {
     if (empty) {
       empty.textContent = activity.type === "trivia"
         ? "אין עדיין נתוני תשובות עבור משתתף זה."
-        : "גרף התשובות זמין עבור טריוויה בלבד.";
+        : "אין עדיין נתוני הצלחה/טעויות עבור משחק זה.";
       empty.classList.remove("hidden");
     }
     return;
@@ -3374,6 +3510,7 @@ function drawPieChart(activity, latest) {
       labels: ["נכון", "שגוי"]
     },
     options: {
+      animation: false,
       maintainAspectRatio: false,
       plugins: { legend: { labels: { color: "#f8fafc" } } },
       responsive: true
@@ -3393,9 +3530,42 @@ function resetStatsSummary() {
   const status = document.querySelector("[data-stats-summary-status]");
   if (text) {
     text.textContent = "";
+    delete text.dataset.memberId;
     text.classList.add("hidden");
   }
   status?.classList.add("hidden");
+}
+
+function currentStatsSummaryText() {
+  const text = document.querySelector("[data-stats-summary-text]");
+  if (!text || text.classList.contains("hidden")) return "";
+  if (text.dataset.memberId && text.dataset.memberId !== statsState.memberId) return "";
+  return text.textContent.trim();
+}
+
+async function generateStatsSummary() {
+  const group = getActiveGroup();
+  if (!group || !statsState.memberId) {
+    throw new Error("אין נתוני משתתף לניתוח.");
+  }
+
+  const status = document.querySelector("[data-stats-summary-status]");
+  const text = document.querySelector("[data-stats-summary-text]");
+
+  text?.classList.add("hidden");
+  setStatsStatus(status, "מנתח את המדידות האמיתיות...", "");
+
+  const result = await getUserStatsSummary(group.id, statsState.memberId);
+  const summary = result?.summary || "לא התקבל סיכום.";
+  status?.classList.add("hidden");
+
+  if (text) {
+    text.textContent = summary;
+    text.dataset.memberId = statsState.memberId;
+    text.classList.remove("hidden");
+  }
+
+  return summary;
 }
 
 // hook up the "generate AI summary" button: send the selected member's
@@ -3410,25 +3580,228 @@ function wireStatsSummary() {
     if (!group || !statsState.memberId) return;
 
     const status = document.querySelector("[data-stats-summary-status]");
-    const text = document.querySelector("[data-stats-summary-text]");
 
     button.disabled = true;
-    text?.classList.add("hidden");
-    setStatsStatus(status, "מנתח את המדידות...", "");
 
     try {
-      const result = await getUserStatsSummary(group.id, statsState.memberId);
-      status?.classList.add("hidden");
-      if (text) {
-        text.textContent = result?.summary || "לא התקבל סיכום.";
-        text.classList.remove("hidden");
-      }
+      await generateStatsSummary();
     } catch (error) {
       setStatsStatus(status, readableAuthError(error), "warn");
     } finally {
       button.disabled = false;
     }
   });
+}
+
+function wireStatsPdfExport() {
+  const button = document.querySelector("[data-stats-pdf-btn]");
+  if (!button || button.dataset.wired === "1") return;
+  button.dataset.wired = "1";
+
+  button.addEventListener("click", async () => {
+    const status = document.querySelector("[data-stats-summary-status]");
+    const summaryButton = document.querySelector("[data-stats-summary-btn]");
+
+    button.disabled = true;
+    if (summaryButton) summaryButton.disabled = true;
+
+    try {
+      const summary = currentStatsSummaryText() || await generateStatsSummary();
+      setStatsStatus(status, "מכין PDF עם הסיכום והגרפים...", "");
+      await downloadStatsPdfReport(summary);
+      setStatsStatus(status, "ה-PDF נוצר בהצלחה.", "good");
+    } catch (error) {
+      setStatsStatus(status, readableAuthError(error), "warn");
+    } finally {
+      button.disabled = false;
+      if (summaryButton) summaryButton.disabled = false;
+    }
+  });
+}
+
+async function downloadStatsPdfReport(summary) {
+  if (!statsState.data || !statsState.memberId || !statsState.activityId) {
+    throw new Error("אין נתונים זמינים ליצירת PDF.");
+  }
+
+  const activityChartGroups = await collectStatsPdfActivityChartGroups();
+  const report = buildStatsPdfReport(summary, activityChartGroups);
+  document.body.appendChild(report);
+
+  try {
+    await nextAnimationFrame();
+
+    if (typeof window.html2pdf === "function") {
+      await window.html2pdf()
+        .set({
+          filename: statsPdfFilename(),
+          html2canvas: {
+            backgroundColor: "#ffffff",
+            scale: 2,
+            useCORS: true
+          },
+          image: { quality: 0.98, type: "jpeg" },
+          jsPDF: { format: "a4", orientation: "portrait", unit: "mm" },
+          margin: [8, 8, 8, 8],
+          pagebreak: { mode: ["avoid-all", "css", "legacy"] }
+        })
+        .from(report)
+        .save();
+      return;
+    }
+
+    printStatsPdfReport(report);
+  } finally {
+    report.remove();
+  }
+}
+
+async function collectStatsPdfActivityChartGroups() {
+  const activities = statsState.data?.activities || [];
+  const originalActivityId = statsState.activityId;
+  const activitySelect = document.querySelector("[data-stats-activity]");
+  const groups = [];
+
+  try {
+    for (const activity of activities) {
+      statsState.activityId = activity.id;
+      if (activitySelect) activitySelect.value = activity.id;
+      renderStatsCharts();
+      await nextAnimationFrame();
+
+      groups.push({
+        activity,
+        charts: STATS_PDF_CHARTS.map(chart => ({
+          ...chart,
+          image: statsChartImage(chart.key)
+        }))
+      });
+    }
+  } finally {
+    statsState.activityId = originalActivityId;
+    if (activitySelect) activitySelect.value = originalActivityId;
+    renderStatsCharts();
+  }
+
+  return groups;
+}
+
+function buildStatsPdfReport(summary, activityChartGroups = []) {
+  const member = selectedStatsMember();
+  const group = getActiveGroup();
+  const generatedAt = new Date().toLocaleString("he-IL", { dateStyle: "short", timeStyle: "short" });
+  const chartMarkup = activityChartGroups.map(grouped => {
+    const charts = grouped.charts.map(chart => {
+      const body = chart.image
+        ? `<img src="${escapeHtml(chart.image)}" alt="${escapeHtml(chart.title)}">`
+        : `<p class="stats-pdf-empty">${escapeHtml(chart.empty)}</p>`;
+
+      return `
+        <section class="stats-pdf-chart">
+          <h3>${escapeHtml(chart.title)}</h3>
+          ${body}
+        </section>
+      `;
+    }).join("");
+
+    const typeLabel = grouped.activity?.type === "mission" ? "חדר משימות" : "טריוויה";
+    return `
+      <section class="stats-pdf-activity">
+        <h2>${escapeHtml(grouped.activity?.title || typeLabel)} · ${typeLabel}</h2>
+        ${charts}
+      </section>
+    `;
+  }).join("");
+
+  const report = document.createElement("article");
+  report.className = "stats-pdf-report";
+  report.setAttribute("dir", "rtl");
+  report.innerHTML = `
+    <header>
+      <h1>דוח ביצועים וניתוח AI</h1>
+      <p class="stats-pdf-meta">קבוצה: ${escapeHtml(group?.name || "לא ידוע")} · משתתף: ${escapeHtml(member?.username || "לא ידוע")}</p>
+      <p class="stats-pdf-meta">משחקים בדוח: ${activityChartGroups.length} · נוצר: ${escapeHtml(generatedAt)}</p>
+    </header>
+    <section>
+      <h2>סיכום AI</h2>
+      <div class="stats-pdf-summary">${escapeHtml(summary).replaceAll("\n", "<br>")}</div>
+    </section>
+    <section>
+      <h2>כל הגרפים</h2>
+      ${chartMarkup}
+    </section>
+  `;
+
+  return report;
+}
+
+function selectedStatsMember() {
+  return (statsState.data?.members || []).find(member => member.userId === statsState.memberId) || null;
+}
+
+function selectedStatsActivity() {
+  return (statsState.data?.activities || []).find(activity => activity.id === statsState.activityId) || null;
+}
+
+function nextAnimationFrame() {
+  return new Promise(resolve => {
+    const requestFrame = typeof requestAnimationFrame === "function"
+      ? requestAnimationFrame
+      : callback => window.setTimeout(callback, 0);
+    requestFrame(resolve);
+  });
+}
+
+function statsChartImage(key) {
+  const chart = statsState.charts[key];
+  if (!chart || chart.canvas?.classList.contains("hidden")) return "";
+
+  if (typeof chart.toBase64Image === "function") {
+    const image = chart.toBase64Image("image/png", 1);
+    if (image && image !== "data:,") return image;
+  }
+
+  return typeof chart.canvas?.toDataURL === "function"
+    ? chart.canvas.toDataURL("image/png")
+    : "";
+}
+
+function statsPdfFilename() {
+  const member = selectedStatsMember();
+  const memberName = safeFilenamePart(member?.username || "member");
+  return `SaferTogether-${memberName}-statistics.pdf`;
+}
+
+function safeFilenamePart(value) {
+  return String(value || "report")
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g, "-")
+    .replace(/\s+/g, "-")
+    .slice(0, 60) || "report";
+}
+
+function printStatsPdfReport(report) {
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    throw new Error("לא ניתן לפתוח חלון הדפסה. בדקו שחוסם חלונות קופצים לא פעיל.");
+  }
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html lang="he" dir="rtl">
+    <head>
+      <meta charset="UTF-8">
+      <title>SaferTogether PDF</title>
+      <style>${STATS_PDF_PRINT_STYLE}</style>
+    </head>
+    <body>
+      <article class="stats-pdf-report">${report.innerHTML}</article>
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
 }
 
 // draw the local family member cards
@@ -3456,7 +3829,7 @@ function renderQuestionList() {
     : state.questions;
 
   if (!questions.length) {
-    container.innerHTML = `<p class="notice">No questions yet.</p>`;
+    container.innerHTML = `<p class="notice">אין עדיין שאלות.</p>`;
     return;
   }
 
@@ -3464,27 +3837,6 @@ function renderQuestionList() {
     <article class="added-item">
       <strong>${index + 1}. ${escapeHtml(question.question)}</strong>
       <span>${escapeHtml(question.answers[question.correctAnswerIndex])} מסומנת כתשובה נכונה.</span>
-    </article>
-  `).join("");
-}
-
-// draw the saved missions
-function renderMissionList() {
-  const container = document.querySelector("[data-mission-list]");
-  if (!container) return;
-  const missions = state.activityDraft?.type === "mission"
-    ? state.activityDraft.missions
-    : state.missions;
-
-  if (!missions.length) {
-    container.innerHTML = `<p class="notice">No missions yet.</p>`;
-    return;
-  }
-
-  container.innerHTML = missions.map((mission, index) => `
-    <article class="added-item">
-      <strong>${index + 1}. ${escapeHtml(mission.title)}</strong>
-      <span>${escapeHtml(mission.description)} (${escapeHtml(inferMissionTarget(mission))})</span>
     </article>
   `).join("");
 }
@@ -3516,8 +3868,13 @@ function renderPracticeQuestion() {
       state.practiceSession.taps += 1;
       saveState();
 
-      button.classList.add(correct ? "correct" : "wrong");
-      container.querySelectorAll("[data-practice-answer]").forEach(item => item.disabled = true);
+      // always show the correct answer in green; mark a wrong pick red
+      container.querySelectorAll("[data-practice-answer]").forEach(item => {
+        const itemIndex = Number(item.dataset.practiceAnswer);
+        if (itemIndex === question.correctAnswerIndex) item.classList.add("correct");
+        else if (itemIndex === answerIndex) item.classList.add("wrong");
+        item.disabled = true;
+      });
       const feedback = container.querySelector("[data-practice-feedback]");
       feedback.textContent = correct ? "כל הכבוד. תשובה נכונה." : "ניסיון טוב. נתרגל את זה שוב.";
       feedback.classList.remove("hidden");
@@ -3621,7 +3978,7 @@ function buildEmergencyMembers(orefStatus = null) {
       avatarImage: member.avatarImage,
       id: member.id,
       name: member.username,
-      role: member.role === "admin" ? "Admin" : "User",
+      role: member.role === "admin" ? "מנהל/ת" : "חבר/ה",
       status
     };
   });
@@ -3650,6 +4007,7 @@ function renderEmergency() {
   if (activitiesUnlocked()) {
     // the admin doesn't play — they watch the group's live progress instead
     if (isAdmin) {
+      clearActivityAutoOpen();
       button.classList.add("hidden");
       message.textContent = "הפעילויות פתוחות. מעקב אחר התקדמות הקבוצה:";
       message.className = "notice good";
@@ -3657,17 +4015,21 @@ function renderEmergency() {
     }
     // member who finished all the games: wait here until the admin ends the alert
     if (state.emergency?.activitiesFinished) {
+      clearActivityAutoOpen();
       button.classList.add("hidden");
       message.textContent = "סיימת את כל הפעילויות. ממתין שהמנהל יסיים את האזעקה...";
       message.className = "notice good";
       return;
     }
-    button.textContent = "פתיחת פעילות";
-    button.disabled = false;
-    message.textContent = "הפעילויות פתוחות. אפשר להתחיל.";
+    button.classList.add("hidden");
+    button.disabled = true;
+    message.textContent = "טוען פעילות...";
     message.className = "notice good";
+    scheduleActivityAutoOpen();
     return;
   }
+
+  clearActivityAutoOpen();
 
   if (current?.status === "safe") {
     button.textContent = "אישור מוגן נשלח";
@@ -3783,80 +4145,6 @@ function simulateFamilyCheckIns() {
   });
 }
 
-// old local-only game screen (kept around as a fallback)
-function renderLegacyLocalGame() {
-  const locked = document.querySelector("[data-game-locked]");
-  const unlocked = document.querySelector("[data-game-unlocked]");
-  const area = document.querySelector("[data-game-area]");
-  if (!locked || !unlocked || !area) return;
-
-  if (!allMembersSafe()) {
-    locked.classList.remove("hidden");
-    unlocked.classList.add("hidden");
-    return;
-  }
-
-  locked.classList.add("hidden");
-  unlocked.classList.remove("hidden");
-
-  if (!state.emergency) startEmergency();
-  if (!state.emergency.activityStartedAt) {
-    state.emergency.activityStartedAt = Date.now();
-    saveState();
-  }
-
-  const question = state.questions[0] || DEFAULT_QUESTIONS[0];
-  const mission = state.missions[0] || DEFAULT_MISSIONS[0];
-  const answered = state.emergency.activityAnswer;
-
-  area.innerHTML = `
-    <p class="eyebrow">שאלון</p>
-    <h2>${escapeHtml(question.question)}</h2>
-    <div class="answer-grid">
-      ${question.answers.map((answer, index) => {
-        const className = answered && index === answered.answerIndex ? (answered.correct ? "correct" : "wrong") : "";
-        return `<button class="answer-btn ${className}" type="button" data-game-answer="${index}" ${answered ? "disabled" : ""}>${escapeHtml(answer)}</button>`;
-      }).join("")}
-    </div>
-    <p class="notice ${answered ? "good" : "hidden"}" data-game-feedback>${answered ? feedbackText(answered.correct) : ""}</p>
-    <div class="card">
-      <p class="eyebrow">משימת בטיחות</p>
-      <h3>${escapeHtml(mission.title)}</h3>
-      <p class="subtitle">${escapeHtml(mission.description)}</p>
-      <button class="btn btn-secondary" type="button" data-mission-done>${state.emergency.missionCompletedAt ? "המשימה הושלמה" : "סיום"}</button>
-    </div>
-    <a class="btn btn-primary" href="summary.html">סיום וצפייה בסיכום</a>
-  `;
-
-  area.querySelectorAll("[data-game-answer]").forEach(button => {
-    button.addEventListener("click", () => {
-      const answerIndex = Number(button.dataset.gameAnswer);
-      const correct = answerIndex === question.correctAnswerIndex;
-      const timeToAnswer = secondsSince(state.emergency.activityStartedAt);
-
-      state.emergency.activityAnswer = { answerIndex, correct, timeToAnswer };
-      state.emergency.telemetry.answerTimes.push(timeToAnswer);
-      state.emergency.telemetry.tapCount += 1;
-      if (correct) state.emergency.telemetry.correct += 1;
-      if (!correct) {
-        state.emergency.telemetry.incorrect += 1;
-        state.emergency.telemetry.mistakes += 1;
-      }
-
-      saveState();
-      renderGame();
-    });
-  });
-
-  area.querySelector("[data-mission-done]")?.addEventListener("click", event => {
-    state.emergency.missionCompletedAt = secondsSince(state.emergency.activityStartedAt);
-    state.emergency.telemetry.tapCount += 1;
-    saveState();
-    event.currentTarget.textContent = "המשימה הושלמה";
-    event.currentTarget.disabled = true;
-  });
-}
-
 // draw the active group game for the current alarm mode
 async function renderGame() {
   const locked = document.querySelector("[data-game-locked]");
@@ -3883,7 +4171,7 @@ async function renderGame() {
   // start sampling hand rotation (phone only; no-op / no data on desktop)
   startRotationTracking();
 
-  area.innerHTML = `<p class="notice">Loading active game...</p>`;
+  area.innerHTML = `<p class="notice">טוען פעילות...</p>`;
 
   const group = getActiveGroup();
   const mode = activeEmergencyMode();
@@ -3891,8 +4179,8 @@ async function renderGame() {
   if (!group) {
     gameAudio.stopActivity();
     area.innerHTML = `
-      <p class="notice warn">No group is selected.</p>
-      <a class="btn btn-secondary" href="groups.html">Back to groups</a>
+      <p class="notice warn">לא נבחרה קבוצה.</p>
+      <a class="btn btn-secondary" href="groups.html">חזרה לקבוצות</a>
     `;
     return;
   }
@@ -3905,8 +4193,8 @@ async function renderGame() {
     if (!activities.length) {
       gameAudio.stopActivity();
       area.innerHTML = `
-        <p class="notice warn">No ${escapeHtml(mode)} game is active for this group.</p>
-        <a class="btn btn-secondary" href="board.html">Back to group</a>
+        <p class="notice warn">אין משחק ${escapeHtml(modeLabel(mode))} פעיל לקבוצה זו.</p>
+        <a class="btn btn-secondary" href="board.html">חזרה לקבוצה</a>
       `;
       return;
     }
@@ -3916,9 +4204,9 @@ async function renderGame() {
     if (index >= activities.length) {
       gameAudio.stopActivity();
       area.innerHTML = `
-        <p class="eyebrow">All done</p>
-        <h2>Every game complete</h2>
-        <a class="btn btn-primary" href="summary.html">Finish</a>
+        <p class="eyebrow">סיימתם</p>
+        <h2>כל המשחקים הושלמו</h2>
+        <a class="btn btn-primary" href="summary.html">סיום</a>
       `;
       return;
     }
@@ -3996,8 +4284,14 @@ function renderTriviaGame(area, activity, mode) {
         gameAudio.stageSucceeded();
       }
 
-      button.classList.add(correct ? "correct" : "wrong");
-      area.querySelectorAll("[data-game-answer]").forEach(item => { item.disabled = true; });
+      // always highlight the correct answer in green; if the user picked a
+      // wrong one, also paint their pick red so the mistake is clear.
+      area.querySelectorAll("[data-game-answer]").forEach(item => {
+        const itemIndex = Number(item.dataset.gameAnswer);
+        if (itemIndex === question.correctAnswerIndex) item.classList.add("correct");
+        else if (itemIndex === answerIndex) item.classList.add("wrong");
+        item.disabled = true;
+      });
       const feedback = area.querySelector("[data-game-feedback]");
       if (feedback) {
         feedback.textContent = feedbackText(correct);
@@ -4048,8 +4342,8 @@ async function renderTriviaComplete(area, activity, mode, questions, answers) {
 
   area.innerHTML = `
     <p class="eyebrow">${escapeHtml(activity.title)}</p>
-    <h2>${correctCount}/${questions.length} correct</h2>
-    <p class="notice good">Trivia complete.</p>
+    <h2>${correctCount}/${questions.length} נכונות</h2>
+    <p class="notice good">הטריוויה הושלמה.</p>
     ${nextOrFinishButton()}
   `;
   wireNextActivityButton(area);
@@ -4096,8 +4390,8 @@ function hasMoreActivities() {
 // "next game" button if more remain, else "finish"
 function nextOrFinishButton() {
   return hasMoreActivities()
-    ? `<button class="btn btn-primary" type="button" data-next-activity>Next game</button>`
-    : `<button class="btn btn-primary" type="button" data-next-activity>Finish</button>`;
+    ? `<button class="btn btn-primary" type="button" data-next-activity>המשחק הבא</button>`
+    : `<button class="btn btn-primary" type="button" data-next-activity>סיום</button>`;
 }
 
 // hook the "next game" button up
@@ -4204,9 +4498,9 @@ function renderMissionGame(area, activity, mode) {
 
   area.innerHTML = `
     <p class="eyebrow">${escapeHtml(activity.title)}</p>
-    <h2>Mission room</h2>
-    <p class="subtitle">Complete every chosen task, then submit.</p>
-    <p class="notice" data-unity-mission-status>Loading Unity mission room...</p>
+    <h2>חדר משימות</h2>
+    <p class="subtitle">השלימו את כל המשימות שנבחרו, ולאחר מכן שלחו.</p>
+    <p class="notice" data-unity-mission-status>טוען את חדר המשימות...</p>
     <section
       class="unity-webgl-host mission-unity-host"
       data-unity-room-host
@@ -4223,19 +4517,19 @@ function renderMissionGame(area, activity, mode) {
       </div>
     </section>
     <section class="unity-build-missing hidden" data-unity-room-missing>
-      <p>Build the Unity WebGL mission room into:</p>
+      <p>יש לבנות את חדר המשימות (Unity WebGL) אל:</p>
       <code>SaferTogetherUI/unity/mission-room</code>
     </section>
   `;
 
   loadUnityMissionRoom(activity, mode).catch(error => {
-    const message = readableError(error, "Unity mission room could not start");
+    const message = readableError(error, "לא ניתן להפעיל את חדר המשימות");
     const host = document.querySelector("[data-unity-room-host]");
     const missing = document.querySelector("[data-unity-room-missing]");
 
     console.warn("Unity mission room startup failed", error);
 
-    if (/Unity WebGL build was not found/i.test(message)) {
+    if (/לא נמצאה|Unity WebGL build was not found/i.test(message)) {
       host?.classList.add("unity-webgl-host-missing");
       missing?.classList.remove("hidden");
     } else {
@@ -4250,7 +4544,6 @@ function renderMissionGame(area, activity, mode) {
 // tear down the old mission-room unity instance before reusing the canvas
 function stopUnityMissionRoom() {
   clearMissionPayloadSender();
-  window.saferTogetherOpenRadioWire = null;
   window.saferTogetherMissionCompleted = null;
   window.saferTogetherMissionStageCompleted = null;
   window.saferTogetherMissionStageProgress = null;
@@ -4301,39 +4594,8 @@ async function loadUnityMissionRoom(activity, mode) {
 
   window.saferTogetherMissionUnityInstance = unityInstance;
 
-  // when the room wants the radio wired, open the puzzle and tell unity once it's solved.
-  // each wire level restarts the idle timer, so the nudge is per-step, not for the whole puzzle.
-  window.saferTogetherOpenRadioWire = () => {
-    openRadioWirePuzzle(
-      () => sendUnityRadioWired(unityInstance),
-      () => gameAudio.watchStage(MISSION_INACTIVITY_DELAY_MS)
-    );
-  };
-
-  renderUnityMissionStatus("Unity mission room ready. Sending mission data...", "good");
+  renderUnityMissionStatus("");
   sendUnityMissionPayload(unityInstance, createUnityMissionPayload(activity, mode));
-}
-
-// tell the unity room the radio wire puzzle is done
-function sendUnityRadioWired(unityInstance) {
-  if (!unityInstance?.SendMessage) {
-    return;
-  }
-
-  const targets = [
-    "SaferTogether Mission Room Controller",
-    "Mission Room Controller",
-    "MissionRoomController",
-    "GameObject"
-  ];
-
-  targets.forEach(targetName => {
-    try {
-      unityInstance.SendMessage(targetName, "CompleteRadioWire", "");
-    } catch (error) {
-      // one of the other target names will hit the controller
-    }
-  });
 }
 
 // keep sending mission data to unity until it acks
@@ -4358,7 +4620,7 @@ function sendUnityMissionPayload(unityInstance, payload) {
   window.saferTogetherMissionRoomAck = () => {
     acknowledged = true;
     clearMissionPayloadSender();
-    renderUnityMissionStatus("Mission loaded. Walk your avatar to the object to complete it.", "good");
+    renderUnityMissionStatus("");
   };
 
   // one send attempt, gives up after maxAttempts
@@ -4380,7 +4642,7 @@ function sendUnityMissionPayload(unityInstance, payload) {
     if (attempts >= maxAttempts) {
       clearMissionPayloadSender();
       renderUnityMissionStatus(
-        "The mission room did not respond. Rebuild it in Unity (SaferTogether > Build WebGL Mission Room), then reload.",
+        "חדר המשימות לא הגיב. בנו אותו מחדש ב-Unity (SaferTogether > Build WebGL Mission Room) וטענו מחדש.",
         "warn"
       );
     }
@@ -4414,7 +4676,7 @@ function createUnityMissionPayload(activity, mode) {
     profile: {
       avatar: state.user?.avatar || "",
       avatarImage: state.user?.avatarImage || "",
-      username: state.user?.username || state.user?.name || "User"
+      username: state.user?.username || state.user?.name || "משתמש"
     }
   };
 }
@@ -4424,6 +4686,12 @@ function renderUnityMissionStatus(message, tone = "") {
   const status = document.querySelector("[data-unity-mission-status]");
 
   if (!status) {
+    return;
+  }
+
+  if (!message) {
+    status.className = "notice hidden";
+    status.textContent = "";
     return;
   }
 
@@ -4447,34 +4715,120 @@ async function submitMissionCompletion(activity, mode, detail = {}, stageTimings
   const missionTotal = Math.max(1, Array.isArray(activity.payload?.tasks) ? activity.payload.tasks.length : 0);
   reportActivityProgress(activity, "mission", missionTotal, missionTotal);
 
-  await persistMissionResult(activity, mode, stageTimings);
+  await persistMissionResult(activity, mode, detail, stageTimings);
   return true;
 }
 
-// send the per-task mission results to the backend (feeds the stats charts).
-// items are keyed by the task's fixed position in payload.tasks so they line up
-// across users regardless of the order each user completed them in.
-async function persistMissionResult(activity, mode, stageTimings = []) {
-  const group = getActiveGroup();
-  if (!group || !activity?.id) return;
+function missionGameLabel(id) {
+  return MISSION_GAME_DEFINITIONS[id]?.label || id;
+}
 
-  // missions contribute time + rotation only — the correct/wrong pie is trivia-only
-  // (the mission room self-verifies, so a finished mission has no "wrong" answers)
-  const tasks = Array.isArray(activity.payload?.tasks) ? activity.payload.tasks : [];
-  const items = (stageTimings || [])
+function missionGameDescription(id) {
+  return MISSION_GAME_DEFINITIONS[id]?.description || "";
+}
+
+function numberOrNull(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function normalizeMissionGames(detail = {}) {
+  const rawGames = Array.isArray(detail?.games) ? detail.games : [];
+
+  return rawGames
+    .map(rawGame => {
+      const id = String(rawGame?.game || "").trim().toLowerCase();
+      const stages = Array.isArray(rawGame?.stages) ? rawGame.stages : [];
+
+      return {
+        description: missionGameDescription(id),
+        id,
+        label: missionGameLabel(id),
+        stages: stages.map((stage, index) => ({
+          correct: typeof stage?.correct === "boolean" ? stage.correct : null,
+          index: Number.isInteger(Number(stage?.index)) ? Number(stage.index) : index,
+          label: String(stage?.label || `${missionGameLabel(id)} ${index + 1}`),
+          rotation: numberOrNull(stage?.rotation),
+          timeSeconds: numberOrNull(stage?.timeSeconds),
+          wrongAttempts: Number.isInteger(Number(stage?.wrongAttempts)) ? Number(stage.wrongAttempts) : 0
+        })),
+        hits: id === "missile" ? numberOrNull(rawGame?.hits) : null,
+        tiltStrength: id === "missile" ? numberOrNull(rawGame?.tiltStrength) : null,
+        totalSeconds: numberOrNull(rawGame?.totalSeconds),
+        weightedScore: id === "code" ? numberOrNull(rawGame?.weightedScore) : null
+      };
+    })
+    .filter(game => MISSION_GAME_IDS.includes(game.id));
+}
+
+function missionMetricItems(activity, games, stageTimings = []) {
+  const taskOrder = Array.isArray(activity.payload?.tasks)
+    ? activity.payload.tasks.filter(task => MISSION_GAME_IDS.includes(task))
+    : [];
+  const taskOffset = new Map(taskOrder.map((task, index) => [task, index * 10]));
+  const items = [];
+
+  games.forEach(game => {
+    const offset = taskOffset.has(game.id) ? taskOffset.get(game.id) : items.length * 10;
+
+    game.stages.forEach((stage, stageIndex) => {
+      const label = game.stages.length > 1
+        ? `${game.label} - ${stageIndex + 1}`
+        : game.label;
+      const item = {
+        description: game.description,
+        game: game.id,
+        index: offset + stageIndex,
+        label,
+        wrongAttempts: stage.wrongAttempts
+      };
+
+      if (typeof stage.timeSeconds === "number") item.timeSeconds = round(stage.timeSeconds);
+      if (typeof stage.rotation === "number") item.rotation = round(stage.rotation);
+      if (typeof stage.correct === "boolean") item.correct = stage.correct;
+      if (typeof stage.wrongAttempts === "number") item.mistakes = stage.wrongAttempts;
+      if (typeof game.weightedScore === "number") item.weightedScore = round(game.weightedScore);
+      if (typeof game.hits === "number") item.hits = game.hits;
+      if (typeof game.tiltStrength === "number") item.tiltStrength = round(game.tiltStrength);
+      if (game.id === "missile" && typeof game.hits === "number") item.mistakes = game.hits;
+
+      items.push(item);
+    });
+  });
+
+  if (items.length) {
+    return items;
+  }
+
+  // Backward-compatible fallback for older builds that only report completed task timings.
+  return (stageTimings || [])
     .map(stage => ({
-      index: tasks.indexOf(stage.target),
-      label: stage.target,
+      index: taskOffset.has(stage.target) ? taskOffset.get(stage.target) : -1,
+      label: missionGameLabel(stage.target),
       rotation: typeof stage.rotation === "number" ? stage.rotation : null,
       timeSeconds: round(stage.timeSeconds || 0)
     }))
     .filter(item => item.index >= 0);
+}
+
+// send the per-stage mission results to the backend (feeds the stats charts).
+// Unity sends games[]. Each stage becomes a stable metric item so per-stage time,
+// correct/wrong counts, hit counts and phone tilt can be summarized later.
+async function persistMissionResult(activity, mode, detail = {}, stageTimings = []) {
+  const group = getActiveGroup();
+  if (!group || !activity?.id) return;
+
+  const games = normalizeMissionGames(detail);
+  const items = missionMetricItems(activity, games, stageTimings);
+  const completedTasks = games.length
+    ? games.map(game => game.id)
+    : (stageTimings || []).map(stage => stage.target);
 
   try {
     await submitGroupActivityResult(group.id, {
       activityId: activity.id,
       mode,
-      payload: { items, kind: "mission", tasks: (stageTimings || []).map(stage => stage.target) }
+      payload: { games, items, kind: "mission", tasks: completedTasks }
     });
   } catch (error) {
     console.warn("Failed to submit mission result", error);
@@ -4559,7 +4913,7 @@ function buildMemberReport(member, index) {
   const mistakes = (telemetry.mistakes || 0) + (index === 2 ? 2 : index === 1 ? 1 : 0);
   const currentMistakeRate = round(mistakes / Math.max(correct + mistakes, 1));
   const movementLevel = round((telemetry.movementLevel || 0.7) + index * 0.06);
-  const checkInTime = state.emergency?.checkIns?.[member.id] || (member.status === "safe" ? "00:08" : "Not checked in");
+  const checkInTime = state.emergency?.checkIns?.[member.id] || (member.status === "safe" ? "00:08" : "לא דווח");
 
   let stressLevel = "Low";
   let reason = "התנהגות קרובה לבסיס האימון";
@@ -4617,11 +4971,6 @@ function updateEventTimer() {
   });
 }
 
-// count family members with a given status
-function countStatus(status) {
-  return state.familyMembers.filter(member => member.status === status).length;
-}
-
 // is everyone safe?
 function allMembersSafe() {
   return state.familyMembers.every(member => member.status === "safe");
@@ -4631,7 +4980,22 @@ function allMembersSafe() {
 function statusLabel(status) {
   if (status === "safe") return "מוגן";
   if (status === "at_risk") return "בסיכון";
-  return "OFFLINE";
+  return "לא מחובר";
+}
+
+// alarm mode -> hebrew
+function modeLabel(mode) {
+  if (mode === "training") return "תרגול";
+  if (mode === "real") return "אזעקת אמת";
+  return mode || "";
+}
+
+// result review status -> hebrew
+function resultStatusLabel(status) {
+  if (status === "approved") return "אושר";
+  if (status === "rejected") return "נדחה";
+  if (status === "pending") return "ממתין";
+  return status || "";
 }
 
 // set textContent if the element exists

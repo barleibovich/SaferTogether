@@ -33,7 +33,7 @@ async function requireAdminContext(accessToken) {
   const context = await getSessionContext(accessToken);
 
   if (context.profile.role !== "admin") {
-    throw httpError(403, "Only admins can manage groups");
+    throw httpError(403, "רק מנהלים יכולים לנהל קבוצות");
   }
 
   return context;
@@ -52,7 +52,7 @@ async function getManageableGroupRecord(client, userId, groupId) {
   }
 
   if (!data) {
-    throw httpError(404, "Group not found");
+    throw httpError(404, "הקבוצה לא נמצאה");
   }
 
   if (data.created_by === userId) {
@@ -71,7 +71,7 @@ async function getManageableGroupRecord(client, userId, groupId) {
   }
 
   if (!membership) {
-    throw httpError(404, "Group not found");
+    throw httpError(404, "הקבוצה לא נמצאה");
   }
 
   return data;
@@ -82,7 +82,7 @@ async function getOwnedGroupRecord(client, userId, groupId) {
   const group = await getManageableGroupRecord(client, userId, groupId);
 
   if (group.created_by !== userId) {
-    throw httpError(404, "Group not found");
+    throw httpError(404, "הקבוצה לא נמצאה");
   }
 
   return group;
@@ -361,7 +361,7 @@ async function createGroupForCurrentUser(accessToken, { name }) {
   const groupName = String(name || "").trim();
 
   if (!groupName) {
-    throw httpError(400, "Group name is required");
+    throw httpError(400, "יש להזין שם קבוצה");
   }
 
   const { data: group, error } = await context.client
@@ -400,7 +400,7 @@ async function requestJoinByCode(accessToken, { code }) {
   const joinCode = String(code || "").trim().toUpperCase();
 
   if (!joinCode) {
-    throw httpError(400, "Team code is required");
+    throw httpError(400, "יש להזין קוד קבוצה");
   }
 
   const { data: group, error: groupError } = await context.client
@@ -414,7 +414,7 @@ async function requestJoinByCode(accessToken, { code }) {
   }
 
   if (!group) {
-    throw httpError(404, "Invalid team code");
+    throw httpError(404, "קוד קבוצה לא תקין");
   }
 
   const { data: membership, error: membershipError } = await context.client
@@ -429,7 +429,7 @@ async function requestJoinByCode(accessToken, { code }) {
   }
 
   if (membership) {
-    throw httpError(400, "You are already in this group");
+    throw httpError(400, "אתם כבר חברים בקבוצה זו");
   }
 
   const { data: existingRequest, error: requestError } = await context.client
@@ -451,14 +451,14 @@ async function requestJoinByCode(accessToken, { code }) {
   };
 
   if (existingRequest?.status === "pending") {
-    throw httpError(400, "You already sent a request");
+    throw httpError(400, "כבר שלחתם בקשה");
   }
 
-  if (existingRequest?.status === "approved") {
-    throw httpError(400, "You are already in this group");
-  }
-
-  if (existingRequest?.status === "declined") {
+  if (existingRequest) {
+    // A leftover approved/declined request means the user previously left the
+    // group (or was turned down). We already confirmed above that they are not a
+    // current member, so the old row is stale — reopen it as a fresh pending
+    // request instead of blocking the rejoin.
     const { error: updateError } = await context.client
       .from("group_join_requests")
       .update({ requested_username: context.profile.username, status: "pending" })
@@ -489,7 +489,7 @@ async function reviewJoinRequest(accessToken, groupId, requestId, { status }) {
   const context = await requireAdminContext(accessToken);
 
   if (status !== "approved" && status !== "declined") {
-    throw httpError(400, "Invalid request status");
+    throw httpError(400, "סטטוס בקשה לא תקין");
   }
 
   await getManageableGroupRecord(context.client, context.user.id, groupId);
@@ -506,7 +506,7 @@ async function reviewJoinRequest(accessToken, groupId, requestId, { status }) {
   }
 
   if (!request) {
-    throw httpError(404, "Request not found");
+    throw httpError(404, "הבקשה לא נמצאה");
   }
 
   if (status === "approved") {
@@ -591,7 +591,7 @@ async function updateOwnedGroup(accessToken, groupId, { name, description }) {
   }
 
   if (!Object.keys(payload).length) {
-    throw httpError(400, "Nothing to update");
+    throw httpError(400, "אין מה לעדכן");
   }
 
   const { data: group, error } = await context.client
@@ -620,10 +620,10 @@ async function leaveGroup(accessToken, groupId) {
     .maybeSingle();
 
   if (groupError) throw groupError;
-  if (!group) throw httpError(404, "Group not found");
+  if (!group) throw httpError(404, "הקבוצה לא נמצאה");
 
   if (group.created_by === context.user.id) {
-    throw httpError(403, "Group admins cannot leave their own group — delete the group instead");
+    throw httpError(403, "מנהל קבוצה אינו יכול לעזוב את הקבוצה שלו — יש למחוק את הקבוצה במקום זאת");
   }
 
   const { error: deleteError } = await context.client

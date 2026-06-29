@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>SaferTogether - Create Safety Mission</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -28,25 +28,17 @@
 
       <form class="form-panel" data-mission-form>
         <div class="input-group">
-          <label for="activityTitle">Game name</label>
-          <input class="field" id="activityTitle" name="activityTitle" data-activity-title value="New mission room">
+          <label for="activityTitle">שם המשחק</label>
+          <input class="field" id="activityTitle" name="activityTitle" data-activity-title value="חדר משימות חדש">
         </div>
 
         <fieldset class="task-select">
-          <legend>Tasks for this room</legend>
-          <label class="task-option"><input type="checkbox" data-task="door"> Close the door</label>
-          <label class="task-option"><input type="checkbox" data-task="window"> Close the window</label>
-          <label class="task-option"><input type="checkbox" data-task="radio"> Wire the radio</label>
-          <label class="task-option"><input type="checkbox" data-task="board"> Add exercises</label>
+          <legend>משימות לחדר זה</legend>
+          <label class="task-option"><input type="checkbox" data-task="puzzle"> משחק ערכת חירום</label>
+          <label class="task-option"><input type="checkbox" data-task="code"> משחק קוד הדלת</label>
+          <label class="task-option"><input type="checkbox" data-task="missile"> משחק הטילים</label>
         </fieldset>
 
-        <div class="input-group" data-exercise-editor hidden>
-          <label>Board exercises</label>
-          <input class="field" data-exercise-question placeholder="Exercise, e.g. How much is 7 + 8?">
-          <input class="field" data-exercise-answer placeholder="Answer (auto-filled for math, or type it)">
-          <button class="btn btn-secondary" type="button" data-add-exercise>Add exercise</button>
-          <div class="added-list" data-exercise-list></div>
-        </div>
       </form>
 
       <div class="button-stack">

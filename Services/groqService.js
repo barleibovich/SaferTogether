@@ -15,7 +15,7 @@ async function chatCompletion(messages, options = {}) {
   const { groqApiKey, groqModel } = getConfig();
 
   if (!groqApiKey) {
-    throw httpError(500, "Groq is not configured. Add GROQ_API_KEY to Gateway/.env and restart the gateway.");
+    throw httpError(500, "שירות ה-AI אינו מוגדר. הוסיפו GROQ_API_KEY אל Gateway/.env והפעילו מחדש את השרת.");
   }
 
   if (typeof fetch !== "function") {
@@ -56,7 +56,7 @@ async function chatCompletion(messages, options = {}) {
 
   const content = payload?.choices?.[0]?.message?.content;
   if (!content || !content.trim()) {
-    throw httpError(502, "Groq returned an empty response.");
+    throw httpError(502, "שירות ה-AI החזיר תשובה ריקה.");
   }
 
   return content.trim();

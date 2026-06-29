@@ -24,20 +24,7 @@ namespace SaferTogether.UnityClient
         [DllImport("__Internal")]
         private static extern void SaferTogetherMissionStageProgress();
 
-        // web function that opens the radio wire puzzle
-        [DllImport("__Internal")]
-        private static extern void SaferTogetherOpenRadioWire();
 #endif
-
-        // ask the web page to open the radio wire puzzle
-        public static void OpenRadioWire()
-        {
-#if UNITY_WEBGL && !UNITY_EDITOR
-            SaferTogetherOpenRadioWire();
-#else
-            Debug.Log("Open radio wire puzzle");
-#endif
-        }
 
         // tell the web page we got the mission and we're ready, so it stops resending it
         public static void NotifyLoaded()
@@ -84,6 +71,29 @@ namespace SaferTogether.UnityClient
                 target = target
             };
 
+            SubmitMessage(result);
+        }
+
+        // send the finished mission with rich per-game stats (puzzle/code/missile)
+        public static void SubmitGames(string missionId, string target, MissionGameResult[] games)
+        {
+            var result = new MissionResultMessage
+            {
+                action = "completed",
+                answer = "",
+                completed = true,
+                missionId = missionId,
+                selectedChannel = "",
+                source = "unity-room",
+                target = target,
+                games = games
+            };
+
+            SubmitMessage(result);
+        }
+
+        private static void SubmitMessage(MissionResultMessage result)
+        {
             string json = JsonUtility.ToJson(result);
 
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -105,5 +115,6 @@ namespace SaferTogether.UnityClient
         public string selectedChannel;
         public string source;
         public string target;
+        public MissionGameResult[] games;
     }
 }
