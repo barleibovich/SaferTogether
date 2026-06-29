@@ -4,7 +4,13 @@ const { getConfig } = require("./configService");
 const { httpError } = require("./errors");
 
 const requireFromGateway = createRequire(path.join(__dirname, "..", "Gateway", "package.json"));
-const { createClient } = requireFromGateway("@supabase/supabase-js");
+let createClient;
+
+try {
+  ({ createClient } = require("@supabase/supabase-js"));
+} catch {
+  ({ createClient } = requireFromGateway("@supabase/supabase-js"));
+}
 
 // shared options for the supabase client
 function createBaseOptions(global = {}) {

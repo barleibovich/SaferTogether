@@ -1,0 +1,16 @@
+{
+  "name": "safer-together",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SaferTogether static web UI and API for Vercel.",
+  "scripts": {
+    "start": "node Gateway/server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.105.4",
+    "web-push": "3.6.7"
+  }
+}

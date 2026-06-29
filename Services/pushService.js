@@ -20,7 +20,13 @@ function loadWebPush() {
   }
 
   try {
-    const mod = requireFromGateway("web-push");
+    let mod;
+    try {
+      mod = require("web-push");
+    } catch {
+      mod = requireFromGateway("web-push");
+    }
+
     const { vapidPublicKey, vapidPrivateKey, vapidSubject } = getConfig();
 
     if (vapidPublicKey && vapidPrivateKey) {

@@ -116,23 +116,25 @@ function serveStaticFile(request, response) {
   });
 }
 
+// runs for every incoming request, splits api vs static
+async function handleRequest(request, response) {
+  const requestUrl = new URL(request.url, `http://${request.headers.host}`);
+
+  if (requestUrl.pathname.startsWith("/api/")) {
+    const handled = await handleApiRoute(request, response, requestUrl.pathname, requestUrl);
+    if (!handled) {
+      response.writeHead(404, { "Content-Type": "application/json; charset=utf-8" });
+      response.end(JSON.stringify({ error: "Not found" }));
+    }
+    return;
+  }
+
+  serveStaticFile(request, response);
+}
+
 // make the main http server
 function createServer() {
-  // runs for every incoming request, splits api vs static
-  return http.createServer(async (request, response) => {
-    const requestUrl = new URL(request.url, `http://${request.headers.host}`);
-
-    if (requestUrl.pathname.startsWith("/api/")) {
-      const handled = await handleApiRoute(request, response, requestUrl.pathname, requestUrl);
-      if (!handled) {
-        response.writeHead(404, { "Content-Type": "application/json; charset=utf-8" });
-        response.end(JSON.stringify({ error: "Not found" }));
-      }
-      return;
-    }
-
-    serveStaticFile(request, response);
-  });
+  return http.createServer(handleRequest);
 }
 
 // start it up on the port from config
@@ -155,6 +157,8 @@ function startServer() {
 }
 
 module.exports = {
+  createServer,
+  handleRequest,
   startServer
 };
 
