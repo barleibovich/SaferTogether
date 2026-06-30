@@ -3,6 +3,9 @@
   "framework": null,
   "buildCommand": null,
   "outputDirectory": "SaferTogetherUI",
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api" }
+  ],
   "headers": [
     {
       "source": "/unity/(.*).data.gz",

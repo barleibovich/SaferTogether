@@ -2425,6 +2425,51 @@ body {
   color: rgba(255,255,255,0.85);
 }
 
+/* full-screen tap target shown when iOS blocks the siren until the user taps */
+.alarm-sound-gate {
+  position: absolute;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 2rem;
+  border: 0;
+  border-radius: inherit;
+  background: rgba(150, 0, 0, 0.95);
+  color: #fff;
+  font-family: inherit;
+  text-align: center;
+  cursor: pointer;
+  animation: alarm-sound-gate-pulse 1.1s ease-in-out infinite;
+}
+
+.alarm-sound-gate.hidden {
+  display: none;
+}
+
+.alarm-sound-gate__icon {
+  font-size: 3.5rem;
+}
+
+.alarm-sound-gate__title {
+  font-size: 1.75rem;
+  font-weight: 900;
+}
+
+.alarm-sound-gate__subtitle {
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.85);
+  max-width: 16rem;
+}
+
+@keyframes alarm-sound-gate-pulse {
+  0%, 100% { background: rgba(150, 0, 0, 0.95); }
+  50% { background: rgba(200, 0, 0, 0.98); }
+}
+
 /* ---- admin statistics page ---- */
 .stats-tabs {
   display: flex;

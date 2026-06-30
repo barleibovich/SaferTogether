@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/icons/apple-touch-icon.png">
 <title>SaferTogether - Emergency Mode</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -60,6 +64,12 @@
     </div>
 
     <div class="home-indicator"></div>
+
+    <button class="alarm-sound-gate hidden" type="button" data-alarm-sound-gate aria-live="assertive">
+      <span class="alarm-sound-gate__icon" aria-hidden="true">🔊</span>
+      <span class="alarm-sound-gate__title">הקש להשמעת האזעקה</span>
+      <span class="alarm-sound-gate__subtitle">iPhone חוסם השמעה אוטומטית — הקש כדי להפעיל את הצליל</span>
+    </button>
   </section>
 </main>
 <script type="module" src="/app.js"></script>

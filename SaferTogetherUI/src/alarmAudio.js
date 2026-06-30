@@ -35,6 +35,11 @@ class AlarmAudioController {
     this.activeMode = "";
     this.playStartedAt = 0;
 
+    // let the UI react to "siren wants to play but iOS is blocking it until the
+    // user taps" so the emergency screen can show a tap-to-sound prompt.
+    this.audio.addEventListener("playing", () => this.emitState());
+    this.audio.addEventListener("pause", () => this.emitState());
+
     this.audio.addEventListener("ended", () => {
       const saved = readPlaybackState();
       if (saved?.alarmId === this.activeAlarmId) {
@@ -85,7 +90,7 @@ class AlarmAudioController {
         mode: cleanMode,
         playStartedAt: this.playStartedAt
       });
-      return this.audio.play().catch(() => {});
+      return this.audio.play().catch(() => this.emitState());
     }
 
     const resumeSavedAlarm = saved?.alarmId === cleanAlarmId && saved?.mode === cleanMode;
@@ -126,6 +131,7 @@ class AlarmAudioController {
 
     return this.audio.play().catch(() => {
       // Browsers may wait for the user's next tap before allowing audio.
+      this.emitState();
     });
   }
 
@@ -163,6 +169,24 @@ class AlarmAudioController {
     this.activeAlarmId = "";
     this.activeMode = "";
     this.playStartedAt = 0;
+  }
+
+  // true when there's an active alarm whose audio is held back (waiting for a tap).
+  isBlocked() {
+    return Boolean(this.activeAlarmId) && this.audio.paused;
+  }
+
+  // tell the page whether the siren is sounding or blocked, so it can prompt a tap.
+  emitState() {
+    if (typeof document === "undefined") {
+      return;
+    }
+    document.dispatchEvent(new CustomEvent("saferAlarmAudioState", {
+      detail: {
+        blocked: this.isBlocked(),
+        playing: Boolean(this.activeAlarmId) && !this.audio.paused
+      }
+    }));
   }
 }
 

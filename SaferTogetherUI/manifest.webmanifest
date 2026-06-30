@@ -1,0 +1,21 @@
+{
+  "name": "SaferTogether",
+  "short_name": "SaferTogether",
+  "description": "SaferTogether emergency readiness and group safety app.",
+  "start_url": "/index.html",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#08111f",
+  "theme_color": "#08111f",
+  "dir": "rtl",
+  "lang": "he",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/assets/icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

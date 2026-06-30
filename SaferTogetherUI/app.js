@@ -2987,6 +2987,22 @@ async function initEmergency() {
     void handleEmergencySafeClick();
   });
 
+  // iOS won't auto-play the siren when the app is opened from a notification tap,
+  // so show a full-screen prompt; the member's first tap sounds the alarm.
+  const alarmSoundGate = document.querySelector("[data-alarm-sound-gate]");
+  if (alarmSoundGate) {
+    const syncSoundGate = blocked => {
+      alarmSoundGate.classList.toggle("hidden", !blocked);
+    };
+    document.addEventListener("saferAlarmAudioState", event => {
+      syncSoundGate(Boolean(event.detail?.blocked));
+    });
+    // the document-level pointerdown handler in alarmAudio retries playback on tap;
+    // hide the prompt right away so it doesn't sit over the "אני מוגן" button.
+    alarmSoundGate.addEventListener("click", () => alarmSoundGate.classList.add("hidden"));
+    syncSoundGate(alarmAudio.isBlocked());
+  }
+
   // admin: open the activities for everyone now (override the all-safe gate)
   document.querySelector("[data-alarm-unlock]")?.addEventListener("click", async () => {
     const group = getActiveGroup();
