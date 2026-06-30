@@ -2341,6 +2341,8 @@ async function enableGpsAlertLocation() {
     await saveGpsAlertLocation(position, { force: true });
     startGpsAlertLocationWatch();
   } catch (error) {
+    // surface the real reason (server message / permission / out-of-area) instead of failing silently
+    console.error("GPS alert-location enable failed:", error);
     renderGpsLocationStatus(readableGpsError(error), "warn");
   }
 }
@@ -2365,6 +2367,7 @@ function startGpsAlertLocationWatch() {
   orefGpsWatchId = navigator.geolocation.watchPosition(
     position => {
       saveGpsAlertLocation(position).catch(error => {
+        console.error("GPS alert-location update failed:", error);
         renderGpsLocationStatus(readableGpsError(error), "warn");
       });
     },

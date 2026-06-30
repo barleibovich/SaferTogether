@@ -181,6 +181,13 @@ async function getCurrentOrefAlerts({ force = false } = {}) {
       };
       return value;
     })
+    .catch(error => {
+      // oref.org.il is frequently unreachable from cloud/non-israeli IPs. don't let that
+      // crash the whole status endpoint (which would turn the badge grey) – serve the last
+      // known alerts (usually empty) so locations/status still render.
+      console.error("HFC alerts fetch failed, serving last known alerts:", error?.message || error);
+      return alertCache.value || [];
+    })
     .finally(() => {
       pendingAlertsRequest = null;
     });
@@ -298,14 +305,32 @@ async function findOrefLocationByCoordinates({ latitude, longitude }) {
   }
 
   const polygons = await getOrefAreaPolygons();
-  // polygon map is keyed by area name, then we grab the full area record
+  // polygon map is keyed by the (hebrew) area name, then we grab the full area record
   const areaName = Object.keys(polygons).find(name => pointInPolygon([lat, lon], polygons[name]));
 
   if (!areaName) {
     return null;
   }
 
-  return findOrefLocationByAreaName(areaName);
+  // enrich with the official district record (english label, district, shelter time).
+  // if that lookup fails or is unavailable (e.g. oref.org.il geo-blocks the server),
+  // still connect the user using the matched polygon area name so the badge isn't stuck grey.
+  try {
+    const located = await findOrefLocationByAreaName(areaName);
+    if (located) {
+      return located;
+    }
+  } catch (error) {
+    console.error("HFC districts lookup failed, falling back to polygon area name:", error?.message || error);
+  }
+
+  return {
+    areaId: "",
+    areaName,
+    areaNameHebrew: areaName,
+    districtName: "",
+    shelterTimeSeconds: null
+  };
 }
 
 // ray casting to check if a point is inside a polygon
