@@ -53,6 +53,7 @@ const EVENT_DURATION_SECONDS = 600;
 const OREF_POLL_INTERVAL_MS = 5000;
 const GPS_LOCATION_SAVE_INTERVAL_MS = 15000;
 const GPS_LOCATION_DISTANCE_THRESHOLD_METERS = 50;
+const GPS_LIVENESS_PROBE_MS = 20000;
 const PRESENCE_HEARTBEAT_MS = 15000;
 const PRESENCE_ONLINE_THRESHOLD_MS = 45000;
 const ALARM_POLL_INTERVAL_MS = 5000;
@@ -194,6 +195,10 @@ let state = loadState();
 let orefGpsWatchId = null;
 let lastGpsLocationSave = null;
 let emergencyActivityRedirectTimer = null;
+// whether we currently have a working GPS fix (drives the badge: no live GPS = grey,
+// regardless of any area we saved earlier). starts false until the first fix lands.
+let orefGpsLive = false;
+let gpsLivenessProbeId = null;
 
 document.addEventListener("DOMContentLoaded", () => {
   ensureDefaults();
@@ -2310,13 +2315,14 @@ function initAlertLocationControls() {
 // tapping the HFC badge: open the real-alert screen when there's a group alert,
 // otherwise (grey badge) ask the browser for GPS so we can connect to an area
 function handleOrefHeaderClick() {
-  if (state.orefStatus?.hasGroupAlert) {
+  if (orefGpsLive && state.orefStatus?.hasGroupAlert) {
     startEmergency(state.orefStatus, "real");
     window.location.href = "emergency.html";
     return;
   }
 
-  if (!state.user?.alertLocation) {
+  // grey badge (no live GPS) -> tapping re-requests location
+  if (!orefGpsLive) {
     void enableGpsAlertLocation();
   }
 }
@@ -2331,20 +2337,80 @@ function initOrefHeaderControls() {
 // get gps once, save it, then start watching
 async function enableGpsAlertLocation() {
   if (!navigator.geolocation) {
+    setGpsLive(false);
     renderGpsLocationStatus("איתור GPS אינו זמין בדפדפן הזה", "warn");
     return;
   }
 
   try {
     renderGpsLocationStatus("מאתר מיקום GPS…");
+    // if this throws we genuinely have no fix (permission/location off / timeout) -> grey
     const position = await getCurrentGpsPosition();
-    await saveGpsAlertLocation(position, { force: true });
+    setGpsLive(true);
     startGpsAlertLocationWatch();
+    startGpsLivenessProbe();
+
+    // having a GPS fix is enough to be "located" (green). the server area save is a
+    // separate concern – if it fails we stay green, we just can't match alarms to an area.
+    try {
+      await saveGpsAlertLocation(position, { force: true });
+    } catch (saveError) {
+      console.error("GPS area save failed (still located):", saveError);
+      renderGpsLocationStatus(readableGpsError(saveError), "warn");
+    }
   } catch (error) {
-    // surface the real reason (server message / permission / out-of-area) instead of failing silently
+    setGpsLive(false);
     console.error("GPS alert-location enable failed:", error);
     renderGpsLocationStatus(readableGpsError(error), "warn");
+    // keep probing so we flip back to green the moment GPS returns
+    startGpsLivenessProbe();
   }
+}
+
+// update the live-GPS flag and repaint the badge right away
+function setGpsLive(isLive) {
+  if (orefGpsLive === isLive) {
+    return;
+  }
+
+  orefGpsLive = isLive;
+  renderOrefStatus();
+}
+
+// actively re-check GPS so the badge tracks reality: turning location off drops us to
+// grey within one interval even if watchPosition never fires an error, and turning it
+// back on flips us green again. getCurrentPosition does NOT re-prompt once granted.
+function startGpsLivenessProbe() {
+  if (!navigator.geolocation || gpsLivenessProbeId !== null) {
+    return;
+  }
+
+  const probe = () => {
+    if (document.hidden) {
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        setGpsLive(true);
+        saveGpsAlertLocation(position).catch(error => {
+          console.error("GPS liveness save failed:", error);
+        });
+      },
+      error => {
+        setGpsLive(false);
+        renderGpsLocationStatus(readableGpsError(error), "warn");
+      },
+      { enableHighAccuracy: false, maximumAge: 15000, timeout: 10000 }
+    );
+  };
+
+  gpsLivenessProbeId = window.setInterval(probe, GPS_LIVENESS_PROBE_MS);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      probe();
+    }
+  });
 }
 
 // getCurrentPosition wrapped in a promise
@@ -2366,12 +2432,16 @@ function startGpsAlertLocationWatch() {
 
   orefGpsWatchId = navigator.geolocation.watchPosition(
     position => {
+      setGpsLive(true);
       saveGpsAlertLocation(position).catch(error => {
         console.error("GPS alert-location update failed:", error);
         renderGpsLocationStatus(readableGpsError(error), "warn");
       });
     },
     error => {
+      // lost the fix (location turned off / permission revoked) -> grey
+      setGpsLive(false);
+
       if (error?.code === 1) {
         stopGpsAlertLocationWatch();
       }
@@ -2441,10 +2511,9 @@ function renderGpsLocationStatus(message, kind = "") {
   const node = document.querySelector("[data-alert-location-status]");
   if (!node) return;
 
-  // once we're connected to an area, the HFC status owns this line
-  // (renderOrefHeaderMessage). don't let transient GPS save progress/errors
-  // overwrite the alert message – this is only for the not-yet-connected state.
-  if (state.user?.alertLocation) return;
+  // once GPS is live, the HFC status owns this line (renderOrefHeaderMessage).
+  // GPS progress/error text only shows while we have no live fix (grey badge).
+  if (orefGpsLive) return;
 
   if (!message) {
     node.classList.add("hidden");
@@ -2543,37 +2612,19 @@ async function refreshOrefStatus() {
 }
 
 function getOrefHeaderView(status = state.orefStatus, error = null) {
-  // can't reach the HFC gateway – stay grey and let a tap retry
-  if (error) {
+  // GREY whenever we don't currently have a live GPS fix – no matter what area we saved
+  // before. (turning location off must drop us back to grey in real time.)
+  if (!orefGpsLive) {
     return {
       className: "oref-header-status-offline",
       canOpenEmergency: false,
       canEnableLocation: true,
-      title: "לא ניתן להתחבר לפיקוד העורף, הקישו לניסיון חוזר"
+      title: "אין מיקום GPS, הקישו לאיתור"
     };
   }
 
-  // no GPS area yet – stay grey and let a tap kick off the location request
-  if (!state.user?.alertLocation) {
-    return {
-      className: "oref-header-status-offline",
-      canOpenEmergency: false,
-      canEnableLocation: true,
-      title: "לא מחובר לאזור התרעה, הקישו לאיתור GPS"
-    };
-  }
-
-  // located, but the first status check hasn't returned yet – neutral grey
-  if (!status) {
-    return {
-      className: "oref-header-status-offline",
-      canOpenEmergency: false,
-      canEnableLocation: false,
-      title: "בודק התרעות פיקוד העורף…"
-    };
-  }
-
-  if (status.hasGroupAlert) {
+  // we have a live location now -> RED if there's an alarm in our own area
+  if (status?.hasGroupAlert) {
     return {
       className: "oref-header-status-danger",
       canOpenEmergency: true,
@@ -2582,7 +2633,8 @@ function getOrefHeaderView(status = state.orefStatus, error = null) {
     };
   }
 
-  if (status.hasActiveAlert) {
+  // YELLOW if there's an alarm somewhere else
+  if (status?.hasActiveAlert) {
     return {
       className: "oref-header-status-warn",
       canOpenEmergency: false,
@@ -2591,11 +2643,13 @@ function getOrefHeaderView(status = state.orefStatus, error = null) {
     };
   }
 
+  // GREEN – live location, no alarm (we keep it green even if the status fetch is
+  // momentarily unavailable, because the user does have a current GPS fix)
   return {
     className: "oref-header-status-good",
     canOpenEmergency: false,
     canEnableLocation: false,
-    title: "אין אזעקה באזור שלך"
+    title: error ? "מחובר, ההתרעות אינן זמינות כרגע" : "אין אזעקה באזור שלך"
   };
 }
 
@@ -2643,6 +2697,11 @@ function renderOrefHeaderMessage(status = state.orefStatus) {
     node.className = `notice ${kind}`.trim();
   };
 
+  // no live GPS (grey) -> leave whatever GPS guidance renderGpsLocationStatus set
+  if (!orefGpsLive) {
+    return;
+  }
+
   if (status?.hasGroupAlert) {
     setLine("אזעקה הופעלה, להיכנס למרחב המוגן !", "danger");
     return;
@@ -2654,13 +2713,8 @@ function renderOrefHeaderMessage(status = state.orefStatus) {
     return;
   }
 
-  // connected with no alert (green) -> stay silent, and clear any stale GPS error
-  if (state.user?.alertLocation) {
-    setLine("", "");
-    return;
-  }
-
-  // not connected yet (grey) -> leave whatever GPS guidance renderGpsLocationStatus set
+  // live GPS, no alert (green) -> stay silent, and clear any stale GPS error
+  setLine("", "");
 }
 
 // draw the HFC summary on board + emergency screens
