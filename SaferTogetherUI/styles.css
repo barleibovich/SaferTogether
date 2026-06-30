@@ -918,6 +918,11 @@ button.oref-header-status:disabled {
   opacity: 1;
 }
 
+/* the groups-page badge is a <div>; show it's tappable when it can act */
+.oref-header-status-action {
+  cursor: pointer;
+}
+
 .oref-header-icon {
   display: grid;
   place-items: center;

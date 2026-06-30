@@ -322,7 +322,9 @@ function ensureDefaults() {
   state.groupActivities = Array.isArray(state.groupActivities) ? state.groupActivities : [];
   state.activityResults = Array.isArray(state.activityResults) ? state.activityResults : [];
   state.baseline = state.baseline || copy(DEFAULT_BASELINE);
-  state.orefStatus = state.orefStatus || null;
+  // always start a page load with no cached HFC status so the badge begins
+  // neutral/grey and only turns green/yellow/red after a fresh check returns
+  state.orefStatus = null;
   delete state.gpsAlertLocationEnabled;
   saveState();
 }
@@ -1186,6 +1188,8 @@ async function initGroups() {
 
   renderCurrentUserSummary(currentUser);
   startPresenceHeartbeat();
+  initAlertLocationControls();
+  initOrefHeaderControls();
   renderOrefStatus();
   refreshOrefStatus();
   startOrefStatusPolling();
@@ -1487,6 +1491,7 @@ async function initBoard() {
   renderBoardMembers(group);
   renderBoardPendingRequests(group);
   initAlertLocationControls();
+  initOrefHeaderControls();
   renderOrefStatus();
   refreshOrefStatus();
   startOrefStatusPolling();
@@ -1509,13 +1514,8 @@ async function initBoard() {
     await raiseGroupAlarm("training");
   });
 
-  document.querySelectorAll("[data-open-oref-emergency]").forEach(button => {
-    button.addEventListener("click", () => {
-      if (!state.orefStatus?.hasGroupAlert) return;
-      startEmergency(state.orefStatus, "real");
-      window.location.href = "emergency.html";
-    });
-  });
+  // the board's HFC badge is wired through initOrefHeaderControls() above, which
+  // both opens the real-alert screen and, when grey, requests GPS access.
 
   document.querySelector("[data-open-pending-requests]")?.addEventListener("click", event => {
     const panel = document.querySelector("[data-pending-requests-panel]");
@@ -2307,6 +2307,27 @@ function initAlertLocationControls() {
   void enableGpsAlertLocation();
 }
 
+// tapping the HFC badge: open the real-alert screen when there's a group alert,
+// otherwise (grey badge) ask the browser for GPS so we can connect to an area
+function handleOrefHeaderClick() {
+  if (state.orefStatus?.hasGroupAlert) {
+    startEmergency(state.orefStatus, "real");
+    window.location.href = "emergency.html";
+    return;
+  }
+
+  if (!state.user?.alertLocation) {
+    void enableGpsAlertLocation();
+  }
+}
+
+// wire the HFC badge once per page (board + groups both show it)
+function initOrefHeaderControls() {
+  document.querySelectorAll("[data-oref-header-status]").forEach(node => {
+    node.addEventListener("click", handleOrefHeaderClick);
+  });
+}
+
 // get gps once, save it, then start watching
 async function enableGpsAlertLocation() {
   if (!navigator.geolocation) {
@@ -2514,26 +2535,50 @@ async function refreshOrefStatus() {
 }
 
 function getOrefHeaderView(status = state.orefStatus, error = null) {
-  if (error || !state.user?.alertLocation) {
+  // can't reach the HFC gateway – stay grey and let a tap retry
+  if (error) {
     return {
       className: "oref-header-status-offline",
       canOpenEmergency: false,
-      title: "לא מחובר לאזור התרעה"
+      canEnableLocation: true,
+      title: "לא ניתן להתחבר לפיקוד העורף, הקישו לניסיון חוזר"
     };
   }
 
-  if (status?.hasGroupAlert) {
+  // no GPS area yet – stay grey and let a tap kick off the location request
+  if (!state.user?.alertLocation) {
+    return {
+      className: "oref-header-status-offline",
+      canOpenEmergency: false,
+      canEnableLocation: true,
+      title: "לא מחובר לאזור התרעה, הקישו לאיתור GPS"
+    };
+  }
+
+  // located, but the first status check hasn't returned yet – neutral grey
+  if (!status) {
+    return {
+      className: "oref-header-status-offline",
+      canOpenEmergency: false,
+      canEnableLocation: false,
+      title: "בודק התרעות פיקוד העורף…"
+    };
+  }
+
+  if (status.hasGroupAlert) {
     return {
       className: "oref-header-status-danger",
       canOpenEmergency: true,
+      canEnableLocation: false,
       title: "אזעקה באזור שלך"
     };
   }
 
-  if (status?.hasActiveAlert) {
+  if (status.hasActiveAlert) {
     return {
       className: "oref-header-status-warn",
       canOpenEmergency: false,
+      canEnableLocation: false,
       title: "אזעקה באזור אחר"
     };
   }
@@ -2541,6 +2586,7 @@ function getOrefHeaderView(status = state.orefStatus, error = null) {
   return {
     className: "oref-header-status-good",
     canOpenEmergency: false,
+    canEnableLocation: false,
     title: "אין אזעקה באזור שלך"
   };
 }
@@ -2555,15 +2601,17 @@ function renderOrefHeaderStatus(status = state.orefStatus, error = null) {
     "oref-header-status-action"
   ];
 
+  const actionable = view.canOpenEmergency || view.canEnableLocation;
+
   document.querySelectorAll("[data-oref-header-status]").forEach(node => {
     node.classList.remove(...stateClasses);
     node.classList.add(view.className);
-    node.classList.toggle("oref-header-status-action", view.canOpenEmergency);
+    node.classList.toggle("oref-header-status-action", actionable);
     node.title = view.title;
     node.setAttribute("aria-label", `פיקוד העורף: ${view.title}`);
 
     if (node instanceof HTMLButtonElement) {
-      node.disabled = !view.canOpenEmergency;
+      node.disabled = !actionable;
     }
   });
 }
