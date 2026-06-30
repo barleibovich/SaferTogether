@@ -2441,6 +2441,11 @@ function renderGpsLocationStatus(message, kind = "") {
   const node = document.querySelector("[data-alert-location-status]");
   if (!node) return;
 
+  // once we're connected to an area, the HFC status owns this line
+  // (renderOrefHeaderMessage). don't let transient GPS save progress/errors
+  // overwrite the alert message – this is only for the not-yet-connected state.
+  if (state.user?.alertLocation) return;
+
   if (!message) {
     node.classList.add("hidden");
     node.textContent = "";
@@ -2619,6 +2624,45 @@ function renderOrefHeaderStatus(status = state.orefStatus, error = null) {
   });
 }
 
+// the line under the HFC badge (board + groups):
+//   green  (connected, no alert)        -> silent
+//   yellow (alert in other areas)       -> the areas under alert, e.g. "תל אביב"
+//   red    (alert in your own area)     -> take-cover instruction
+//   grey   (not connected yet)          -> leave the GPS guidance/error in place
+function renderOrefHeaderMessage(status = state.orefStatus) {
+  const node = document.querySelector("[data-alert-location-status]");
+  if (!node) return;
+
+  const setLine = (message, kind) => {
+    if (!message) {
+      node.classList.add("hidden");
+      node.textContent = "";
+      return;
+    }
+    node.textContent = message;
+    node.className = `notice ${kind}`.trim();
+  };
+
+  if (status?.hasGroupAlert) {
+    setLine("אזעקה הופעלה, להיכנס למרחב המוגן !", "danger");
+    return;
+  }
+
+  if (status?.hasActiveAlert) {
+    const areas = (status.affectedAreas || []).slice(0, 8).join(", ");
+    setLine(areas || "אזעקה באזור אחר", "warn");
+    return;
+  }
+
+  // connected with no alert (green) -> stay silent, and clear any stale GPS error
+  if (state.user?.alertLocation) {
+    setLine("", "");
+    return;
+  }
+
+  // not connected yet (grey) -> leave whatever GPS guidance renderGpsLocationStatus set
+}
+
 // draw the HFC summary on board + emergency screens
 function renderOrefStatus(status = state.orefStatus, error = null) {
   const summary = document.querySelector("[data-oref-alert-summary]");
@@ -2626,6 +2670,7 @@ function renderOrefStatus(status = state.orefStatus, error = null) {
   const emergencyButtons = document.querySelectorAll("[data-open-oref-emergency]");
 
   renderOrefHeaderStatus(status, error);
+  renderOrefHeaderMessage(status);
 
   if (refreshState) {
     refreshState.textContent = status?.fetchedAt
