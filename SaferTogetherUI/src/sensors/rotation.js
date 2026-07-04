@@ -90,6 +90,17 @@ export function primeMotionSensors() {
   window.addEventListener("pointerdown", () => { void requestNow(); }, { capture: true, once: true });
 }
 
+// true on iPhone before the sensors are on, so the app can show an "enable" button
+export function motionPermissionMightBeNeeded() {
+  return needsPermissionTap() && !listening;
+}
+
+// request the sensors from a real button tap (iPhone); resolves true once they're on
+export async function requestMotionAccess() {
+  await requestNow();
+  return listening;
+}
+
 // rotation done this task (degrees), or null when there's no phone sensor
 export function takeRotationForItem() {
   if (!gotTilt) return null;

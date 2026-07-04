@@ -84,6 +84,9 @@ namespace SaferTogether.UnityClient
         private float tiltStrength;
         private float lastMoveX = 1f;
         private float avatarYaw;
+        private float tiltNeutralGamma;
+        private float tiltNeutralBeta;
+        private bool tiltCalibrated;
         private int hits;
         private int holdX;
         private int holdY;
@@ -128,6 +131,7 @@ namespace SaferTogether.UnityClient
             avatarY = StartY;
             lastMoveX = 1f;
             avatarYaw = 0f;
+            tiltCalibrated = false;
             timeLeft = GameSeconds;
             spawnTimer = 0.35f;
             holdX = 0;
@@ -438,17 +442,30 @@ namespace SaferTogether.UnityClient
             Vector2 move = new Vector2(holdX, holdY);
 
 #if UNITY_WEBGL && !UNITY_EDITOR
-            // steer by phone rotation from the browser (Input.acceleration is 0 in WebGL):
-            // gamma = left/right tilt, beta = front/back tilt (neutral hold ~ 45 deg)
-            float tiltX = Mathf.Clamp(SaferTogetherGetTiltGamma() / 35f, -1f, 1f);
-            float tiltY = Mathf.Clamp((45f - SaferTogetherGetTiltBeta()) / 30f, -1f, 1f);
-            if (Mathf.Abs(tiltX) < 0.14f) tiltX = 0f;
-            if (Mathf.Abs(tiltY) < 0.14f) tiltY = 0f;
-            if (tiltX != 0f || tiltY != 0f)
+            // steer by phone rotation from the browser (Input.acceleration is 0 in WebGL).
+            // the first reading becomes "center", so however the phone is held is neutral and
+            // it only moves when you actually rotate away from that. 999 = no reading -> no move.
+            float rawGamma = SaferTogetherGetTiltGamma();
+            float rawBeta = SaferTogetherGetTiltBeta();
+            if (Mathf.Abs(rawBeta) < 900f && Mathf.Abs(rawGamma) < 900f)
             {
-                move.x += tiltX;
-                move.y += tiltY;
-                tiltStrength += (Mathf.Abs(tiltX) + Mathf.Abs(tiltY)) * dt;
+                if (!tiltCalibrated)
+                {
+                    tiltNeutralGamma = rawGamma;
+                    tiltNeutralBeta = rawBeta;
+                    tiltCalibrated = true;
+                }
+
+                float tiltX = Mathf.Clamp((rawGamma - tiltNeutralGamma) / 28f, -1f, 1f);  // tilt right -> right
+                float tiltY = Mathf.Clamp((tiltNeutralBeta - rawBeta) / 28f, -1f, 1f);     // tilt forward -> up
+                if (Mathf.Abs(tiltX) < 0.16f) tiltX = 0f;
+                if (Mathf.Abs(tiltY) < 0.16f) tiltY = 0f;
+                if (tiltX != 0f || tiltY != 0f)
+                {
+                    move.x += tiltX;
+                    move.y += tiltY;
+                    tiltStrength += (Mathf.Abs(tiltX) + Mathf.Abs(tiltY)) * dt;
+                }
             }
 #else
             float tiltX = Input.acceleration.x;

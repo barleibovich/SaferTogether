@@ -44,12 +44,13 @@ mergeInto(LibraryManager.library, {
     }
   },
 
-  // current phone tilt (deviceorientation), so the missile game can steer by rotation
+  // current phone tilt (deviceorientation); returns 999 when there's no reading yet,
+  // so the game knows not to move instead of treating "no data" as a tilt
   SaferTogetherGetTiltGamma: function () {
-    return window.__saferTiltGamma || 0;
+    return (typeof window.__saferTiltGamma === "number") ? window.__saferTiltGamma : 999;
   },
 
   SaferTogetherGetTiltBeta: function () {
-    return window.__saferTiltBeta || 0;
+    return (typeof window.__saferTiltBeta === "number") ? window.__saferTiltBeta : 999;
   }
 });

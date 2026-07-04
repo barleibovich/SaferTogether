@@ -32,7 +32,8 @@ async function chatCompletion(messages, options = {}) {
         model: options.model || groqModel,
         messages,
         temperature: options.temperature ?? 0.4,
-        max_tokens: options.maxTokens ?? 700
+        // Hebrew is very token-heavy, so keep this generous or the summary cuts off mid-sentence
+        max_tokens: options.maxTokens ?? 1600
       })
     });
   } catch (error) {

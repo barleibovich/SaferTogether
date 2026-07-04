@@ -46,7 +46,7 @@ import {
 } from "./src/api/alarmGateway.js";
 import { sendPresenceHeartbeat } from "./src/api/presenceGateway.js";
 import { deletePushSubscription, getPushConfig, savePushSubscription } from "./src/api/pushGateway.js";
-import { primeMotionSensors, takeRotationForItem, takeMovementForItem } from "./src/sensors/rotation.js";
+import { primeMotionSensors, takeRotationForItem, takeMovementForItem, requestMotionAccess, motionPermissionMightBeNeeded } from "./src/sensors/rotation.js";
 
 const STORAGE_KEY = "saferTogetherState.v5";
 const SIGNUP_AVATAR_KEY = "saferTogetherSignupAvatar.v1";
@@ -4285,47 +4285,13 @@ function allMembersFinishedActivities() {
   });
 }
 
-// admin live view: each member's play progress (e.g. "טריוויה 2/3")
+// admin view: once the games are open, just show that they're underway
 function renderAdminProgress() {
   const section = document.querySelector("[data-admin-progress]");
-  const list = document.querySelector("[data-admin-progress-list]");
-  if (!section || !list) return;
+  if (!section) return;
 
   const show = isCurrentUserAdminForActiveGroup() && Boolean(state.alarmStatus?.active) && activitiesUnlocked();
   section.classList.toggle("hidden", !show);
-  if (!show) return;
-
-  const group = getActiveGroup();
-  const members = group?.members || [];
-  const progress = state.alarmStatus?.progress || [];
-
-  if (!members.length) {
-    list.innerHTML = `<p class="notice">אין חברים בקבוצה.</p>`;
-    return;
-  }
-
-  list.innerHTML = members.map(member => {
-    const rows = progress.filter(row => row.userId === member.id);
-    const summary = rows.length
-      ? rows.map(row => `${activityTypeLabel(row.activityType)} ${row.completed}/${row.total}`).join(" · ")
-      : "טרם התחיל";
-    const done = rows.length > 0 && rows.every(row => row.total > 0 && row.completed >= row.total);
-    return `
-      <article class="member-card">
-        ${renderAvatarBadge(member.username, "member-avatar avatar-unity-preview", member.avatarImage)}
-        <div class="member-main">
-          <p class="member-name">${escapeHtml(member.username)}</p>
-          <p class="member-role">${escapeHtml(summary)}</p>
-        </div>
-        <span class="status-pill ${done ? "safe" : "located"}">${done ? "סיים" : "בתהליך"}</span>
-      </article>
-    `;
-  }).join("");
-}
-
-// activity type -> short Hebrew label
-function activityTypeLabel(type) {
-  return type === "mission" ? "חדר משימות" : "טריוויה";
 }
 
 // mark a family member safe
@@ -4346,6 +4312,33 @@ function simulateFamilyCheckIns() {
       saveState();
       renderEmergency();
     }, 900 + index * 900);
+  });
+}
+
+// iPhone: show an explicit button to grant motion access (a real tap reliably shows the
+// prompt, unlike the first-tap-anywhere trigger the Unity canvas can swallow)
+function wireMotionEnableButton() {
+  const button = document.querySelector("[data-enable-motion]");
+  if (!button) return;
+
+  if (!motionPermissionMightBeNeeded()) {
+    button.classList.add("hidden");
+    return;
+  }
+
+  button.classList.remove("hidden");
+  if (button.dataset.wired === "1") return;
+  button.dataset.wired = "1";
+
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    const granted = await requestMotionAccess();
+    if (granted) {
+      button.classList.add("hidden");
+    } else {
+      button.disabled = false;
+      button.textContent = "לא ניתן לאפשר חיישני תנועה — בדקו הרשאות בהגדרות";
+    }
   });
 }
 
@@ -4374,6 +4367,7 @@ async function renderGame() {
 
   // start sampling tilt + shake (iPhone asks on the first tap; Android starts now)
   primeMotionSensors();
+  wireMotionEnableButton();
 
   area.innerHTML = `<p class="notice">טוען פעילות...</p>`;
 
@@ -4764,6 +4758,9 @@ function stopUnityMissionRoom() {
 let missionTiltHandler = null;
 function startMissionTiltBridge() {
   if (missionTiltHandler || typeof window === "undefined") return;
+  // undefined = "no reading yet" so the game doesn't drift before the sensor speaks
+  window.__saferTiltGamma = undefined;
+  window.__saferTiltBeta = undefined;
   missionTiltHandler = event => {
     if (typeof event.gamma === "number") window.__saferTiltGamma = event.gamma;
     if (typeof event.beta === "number") window.__saferTiltBeta = event.beta;
@@ -4775,8 +4772,8 @@ function stopMissionTiltBridge() {
     window.removeEventListener("deviceorientation", missionTiltHandler);
     missionTiltHandler = null;
   }
-  window.__saferTiltGamma = 0;
-  window.__saferTiltBeta = 0;
+  window.__saferTiltGamma = undefined;
+  window.__saferTiltBeta = undefined;
 }
 
 // load the mission-room unity build and send it the chosen tasks

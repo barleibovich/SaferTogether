@@ -758,10 +758,11 @@ async function getGroupStatistics(accessToken, groupId) {
       .eq("group_id", groupId)
   );
 
-  const memberIds = [...new Set([
-    ...(memberships || []).map(membership => membership.user_id),
-    context.group.created_by
-  ].filter(Boolean))];
+  // stats are about the group members, not the admin/owner who runs the drills
+  const adminId = context.group.created_by;
+  const memberIds = [...new Set(
+    (memberships || []).map(membership => membership.user_id).filter(Boolean)
+  )].filter(id => id !== adminId);
   const profileMap = await getProfilesById(context.client, memberIds);
   const usernameFallback = new Map((memberships || []).map(membership => [membership.user_id, membership.member_username]));
   const members = memberIds.map(id => ({
