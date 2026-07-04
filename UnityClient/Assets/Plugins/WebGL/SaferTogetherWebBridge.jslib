@@ -42,5 +42,14 @@ mergeInto(LibraryManager.library, {
     if (typeof window.saferTogetherMissionStageProgress === "function") {
       window.saferTogetherMissionStageProgress();
     }
+  },
+
+  // current phone tilt (deviceorientation), so the missile game can steer by rotation
+  SaferTogetherGetTiltGamma: function () {
+    return window.__saferTiltGamma || 0;
+  },
+
+  SaferTogetherGetTiltBeta: function () {
+    return window.__saferTiltBeta || 0;
   }
 });

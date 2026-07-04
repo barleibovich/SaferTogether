@@ -44,6 +44,11 @@ namespace SaferTogether.UnityClient
             currentInstance.transform.localRotation = Quaternion.identity;
             currentInstance.transform.localScale = Vector3.one;
             currentAnimator = currentInstance.GetComponentInChildren<Animator>();
+            if (currentAnimator != null)
+            {
+                // avatar is only drawn to an off-screen texture, so keep animating (don't cull)
+                currentAnimator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+            }
             currentCharacter = character;
             return currentInstance;
         }

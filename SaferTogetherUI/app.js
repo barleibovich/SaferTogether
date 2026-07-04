@@ -4747,6 +4747,7 @@ function renderMissionGame(area, activity, mode) {
 // tear down the old mission-room unity instance before reusing the canvas
 function stopUnityMissionRoom() {
   clearMissionPayloadSender();
+  stopMissionTiltBridge();
   window.saferTogetherMissionCompleted = null;
   window.saferTogetherMissionStageCompleted = null;
   window.saferTogetherMissionStageProgress = null;
@@ -4757,6 +4758,25 @@ function stopUnityMissionRoom() {
   if (unityInstance?.Quit) {
     unityInstance.Quit().catch(() => {});
   }
+}
+
+// mirror the phone's rotation into globals the Unity missile game reads (jslib)
+let missionTiltHandler = null;
+function startMissionTiltBridge() {
+  if (missionTiltHandler || typeof window === "undefined") return;
+  missionTiltHandler = event => {
+    if (typeof event.gamma === "number") window.__saferTiltGamma = event.gamma;
+    if (typeof event.beta === "number") window.__saferTiltBeta = event.beta;
+  };
+  window.addEventListener("deviceorientation", missionTiltHandler, { passive: true });
+}
+function stopMissionTiltBridge() {
+  if (missionTiltHandler) {
+    window.removeEventListener("deviceorientation", missionTiltHandler);
+    missionTiltHandler = null;
+  }
+  window.__saferTiltGamma = 0;
+  window.__saferTiltBeta = 0;
 }
 
 // load the mission-room unity build and send it the chosen tasks
@@ -4796,6 +4816,7 @@ async function loadUnityMissionRoom(activity, mode) {
   });
 
   window.saferTogetherMissionUnityInstance = unityInstance;
+  startMissionTiltBridge();
 
   renderUnityMissionStatus("");
   sendUnityMissionPayload(unityInstance, createUnityMissionPayload(activity, mode));

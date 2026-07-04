@@ -53,27 +53,28 @@ function startListening() {
   listening = true;
 }
 
-// iPhone needs a per-sensor permission (from a tap); other browsers just allow it
-async function allow(sensorEvent) {
-  const ask = sensorEvent && sensorEvent.requestPermission;
-  if (typeof ask !== "function") return true;
-  try {
-    return (await ask()) === "granted";
-  } catch {
-    return false;
-  }
-}
-
 // true only on browsers that gate the sensors behind a tap permission (iPhone)
 function needsPermissionTap() {
   return typeof window.DeviceOrientationEvent?.requestPermission === "function"
     || typeof window.DeviceMotionEvent?.requestPermission === "function";
 }
 
-// ask for the sensors right now (must run inside a real tap on iPhone)
+// ask for the sensors right now (must run inside a real tap on iPhone).
+// fire BOTH requests before the first await: iOS drops the tap gesture after an await,
+// so requesting the second permission later would be denied.
 async function requestNow() {
-  const okTilt = await allow(window.DeviceOrientationEvent);
-  const okShake = await allow(window.DeviceMotionEvent);
+  const orient = typeof window.DeviceOrientationEvent?.requestPermission === "function"
+    ? window.DeviceOrientationEvent.requestPermission()
+    : Promise.resolve("granted");
+  const motion = typeof window.DeviceMotionEvent?.requestPermission === "function"
+    ? window.DeviceMotionEvent.requestPermission()
+    : Promise.resolve("granted");
+
+  let okTilt = false;
+  let okShake = false;
+  try { okTilt = (await orient) === "granted"; } catch { okTilt = false; }
+  try { okShake = (await motion) === "granted"; } catch { okShake = false; }
+
   if (okTilt || okShake) startListening();
 }
 

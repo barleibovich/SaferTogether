@@ -90,6 +90,15 @@ namespace SaferTogether.UnityClient
         private bool running;
         private bool avatarRenderReady;
 
+#if UNITY_WEBGL && !UNITY_EDITOR
+        // current phone tilt from the browser (deviceorientation), in degrees
+        [System.Runtime.InteropServices.DllImport("__Internal")]
+        private static extern float SaferTogetherGetTiltGamma();
+
+        [System.Runtime.InteropServices.DllImport("__Internal")]
+        private static extern float SaferTogetherGetTiltBeta();
+#endif
+
         public bool IsOpen => canvas != null;
 
         public void Open(Sprite avatarSprite, Action<MissionGameResult> done)
@@ -428,6 +437,20 @@ namespace SaferTogether.UnityClient
         {
             Vector2 move = new Vector2(holdX, holdY);
 
+#if UNITY_WEBGL && !UNITY_EDITOR
+            // steer by phone rotation from the browser (Input.acceleration is 0 in WebGL):
+            // gamma = left/right tilt, beta = front/back tilt (neutral hold ~ 45 deg)
+            float tiltX = Mathf.Clamp(SaferTogetherGetTiltGamma() / 35f, -1f, 1f);
+            float tiltY = Mathf.Clamp((45f - SaferTogetherGetTiltBeta()) / 30f, -1f, 1f);
+            if (Mathf.Abs(tiltX) < 0.14f) tiltX = 0f;
+            if (Mathf.Abs(tiltY) < 0.14f) tiltY = 0f;
+            if (tiltX != 0f || tiltY != 0f)
+            {
+                move.x += tiltX;
+                move.y += tiltY;
+                tiltStrength += (Mathf.Abs(tiltX) + Mathf.Abs(tiltY)) * dt;
+            }
+#else
             float tiltX = Input.acceleration.x;
             float tiltY = Input.acceleration.y;
             if (Mathf.Abs(tiltX) > 0.04f || Mathf.Abs(tiltY) > 0.06f)
@@ -436,6 +459,7 @@ namespace SaferTogether.UnityClient
                 move.y += Mathf.Clamp(tiltY + 0.35f, -1f, 1f) * 0.65f;
                 tiltStrength += (Mathf.Abs(tiltX) + Mathf.Abs(tiltY)) * dt;
             }
+#endif
 
             if (Input.GetKey(KeyCode.LeftArrow) || Input.GetKey(KeyCode.A)) move.x -= 1f;
             if (Input.GetKey(KeyCode.RightArrow) || Input.GetKey(KeyCode.D)) move.x += 1f;
