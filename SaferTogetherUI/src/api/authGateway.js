@@ -1,4 +1,4 @@
-import { requestJson, setSessionToken } from "./apiClient.js";
+import { requestJson, setSessionToken, setRefreshToken } from "./apiClient.js";
 
 // create a user account
 export async function signUpWithUsername({ username, password, role, avatar, avatarImage }) {
@@ -7,6 +7,7 @@ export async function signUpWithUsername({ username, password, role, avatar, ava
     method: "POST"
   });
   setSessionToken(result?.accessToken);
+  setRefreshToken(result?.refreshToken);
   return result;
 }
 
@@ -17,6 +18,7 @@ export async function loginWithUsername({ username, password }) {
     method: "POST"
   });
   setSessionToken(result?.accessToken);
+  setRefreshToken(result?.refreshToken);
   return result;
 }
 
@@ -24,6 +26,7 @@ export async function loginWithUsername({ username, password }) {
 export async function logout() {
   const result = await requestJson("/api/auth/logout", { method: "POST" });
   setSessionToken(null);
+  setRefreshToken(null);
   return result;
 }
 

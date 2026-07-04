@@ -543,8 +543,7 @@ function normalizeResultPayload(payload) {
   return payload;
 }
 
-// pull out well-formed per-item metrics for the stats aggregation.
-// null/missing values are omitted so they never pollute an average.
+// pull valid per-item metrics for the stats (skip null/missing so averages stay clean)
 function cleanMetricItems(payload) {
   const rawItems = Array.isArray(payload?.items) ? payload.items : [];
 
@@ -581,8 +580,7 @@ function cleanMetricItems(payload) {
   }, []);
 }
 
-// fold a result's per-item metrics into the running aggregates via the SQL function.
-// best-effort: a missing stats table/function must never fail the underlying submission.
+// add a result's metrics to the running totals; best-effort so a missing table can't fail submit
 async function applyActivityMetrics(client, groupId, activityId, mode, payload) {
   const items = cleanMetricItems(payload);
 
@@ -658,8 +656,7 @@ async function submitGroupActivityResult(accessToken, groupId, body = {}) {
       .single()
   );
 
-  // trivia is auto-approved, so fold its metrics in now. missions stay 'pending'
-  // and are aggregated at approval time (see reviewGroupActivityResult).
+  // trivia auto-approves so add its metrics now; missions wait for admin approval
   if (status === "approved") {
     await applyActivityMetrics(context.client, groupId, activity.id, mode, body.payload);
   }
@@ -736,8 +733,7 @@ async function reviewGroupActivityResult(accessToken, groupId, resultId, body = 
   const activity = await getActivityRecord(context.client, groupId, updatedResult.activity_id);
   const activityMap = new Map([[activity.id, activity]]);
 
-  // missions are aggregated at approval (trivia was aggregated at submit). only on
-  // the first transition to approved, so re-reviews don't double-count.
+  // add mission metrics only on the first approval, so re-reviews don't double-count
   if (status === "approved" && activity.type === "mission" && existing && !existing.reviewed_at) {
     await applyActivityMetrics(
       context.client,
@@ -751,9 +747,7 @@ async function reviewGroupActivityResult(accessToken, groupId, resultId, body = 
   return mapResult(updatedResult, activityMap, profileMap);
 }
 
-// admin-only: everything the statistics page needs — the group's members (so each
-// gets a tab), the activities + their canonical item lists, the running aggregates
-// (red/blue series), and each member's latest result per activity (black series + pie).
+// admin-only: all the data the statistics page needs (members, activities, totals, latest results)
 async function getGroupStatistics(accessToken, groupId) {
   const context = await requireGroupAdminContext(accessToken, groupId);
 

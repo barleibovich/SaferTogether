@@ -182,9 +182,7 @@ async function getCurrentOrefAlerts({ force = false } = {}) {
       return value;
     })
     .catch(error => {
-      // oref.org.il is frequently unreachable from cloud/non-israeli IPs. don't let that
-      // crash the whole status endpoint (which would turn the badge grey) – serve the last
-      // known alerts (usually empty) so locations/status still render.
+      // oref is often blocked from cloud IPs; serve the last known alerts instead of crashing
       console.error("HFC alerts fetch failed, serving last known alerts:", error?.message || error);
       return alertCache.value || [];
     })
@@ -312,9 +310,7 @@ async function findOrefLocationByCoordinates({ latitude, longitude }) {
     return null;
   }
 
-  // enrich with the official district record (english label, district, shelter time).
-  // if that lookup fails or is unavailable (e.g. oref.org.il geo-blocks the server),
-  // still connect the user using the matched polygon area name so the badge isn't stuck grey.
+  // add the official district info; if that lookup fails, just use the polygon area name
   try {
     const located = await findOrefLocationByAreaName(areaName);
     if (located) {

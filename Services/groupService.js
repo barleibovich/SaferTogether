@@ -455,10 +455,7 @@ async function requestJoinByCode(accessToken, { code }) {
   }
 
   if (existingRequest) {
-    // A leftover approved/declined request means the user previously left the
-    // group (or was turned down). We already confirmed above that they are not a
-    // current member, so the old row is stale — reopen it as a fresh pending
-    // request instead of blocking the rejoin.
+    // stale approved/declined row (they left or were declined) -> reopen it as pending
     const { error: updateError } = await context.client
       .from("group_join_requests")
       .update({ requested_username: context.profile.username, status: "pending" })
@@ -673,7 +670,7 @@ async function deleteOwnedGroup(accessToken, groupId) {
   return { success: true };
 }
 
-// This function starts a drill for a group (admin only).
+// start a drill for a group (admin only)
 async function startGroupDrill(accessToken, groupId) {
   const context = await requireAdminContext(accessToken);
   await getManageableGroupRecord(context.client, context.user.id, groupId);
@@ -694,7 +691,7 @@ async function startGroupDrill(accessToken, groupId) {
   return mapGroup(group, "admin");
 }
 
-// This function ends a drill for a group (admin only).
+// end a drill for a group (admin only)
 async function endGroupDrill(accessToken, groupId) {
   const context = await requireAdminContext(accessToken);
   await getManageableGroupRecord(context.client, context.user.id, groupId);
@@ -710,7 +707,7 @@ async function endGroupDrill(accessToken, groupId) {
   return mapGroup(group, "admin");
 }
 
-// This function marks the current user as safe in an active drill.
+// mark me safe in an active drill
 async function markMemberDrillSafe(accessToken, groupId) {
   const context = await getSessionContext(accessToken);
 
@@ -729,7 +726,7 @@ async function markMemberDrillSafe(accessToken, groupId) {
   return { safeUsers: (rows || []).map(r => r.user_id) };
 }
 
-// This function returns the list of members who marked safe in the active drill.
+// who marked safe in the active drill
 async function getDrillStatus(accessToken, groupId) {
   const context = await getSessionContext(accessToken);
 

@@ -8,9 +8,7 @@ function isGroqConfigured() {
   return Boolean(getConfig().groqApiKey);
 }
 
-// call Groq's OpenAI-compatible chat-completions endpoint and return the text.
-// messages is an array of { role, content }. Throws an httpError on any failure
-// so the route layer can surface a clean message to the admin.
+// call Groq's chat endpoint and return the text; throws httpError on failure
 async function chatCompletion(messages, options = {}) {
   const { groqApiKey, groqModel } = getConfig();
 

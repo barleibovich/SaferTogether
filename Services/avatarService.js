@@ -1,7 +1,6 @@
 // avatar id parsing + normalize rules (Quaternius character pack)
 
-// the only selectable avatars are the imported pack characters. ids are stored as
-// "pack:<character>" and map 1:1 to the Unity prefabs under Resources/SaferTogetherAvatars.
+// avatar ids look like "pack:<character>" and match the Unity prefabs 1:1
 const PACK_CHARACTERS = [
   "adventurer",
   "beach",
@@ -45,9 +44,7 @@ function packAvatarFromUsername(username) {
   return `pack:${PACK_CHARACTERS[seed % PACK_CHARACTERS.length]}`;
 }
 
-// keep valid pack ids, fall back to a per-user default otherwise.
-// legacy character:v1/v2 + builder ids are no longer selectable, so they normalize to a
-// pack character the new Unity editor + mission room can actually render.
+// keep a valid pack id, else pick the user's default (old ids map here too)
 function normalizeAvatar(avatar, username) {
   return parsePackAvatar(avatar) || packAvatarFromUsername(username);
 }

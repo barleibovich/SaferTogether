@@ -35,8 +35,7 @@ class AlarmAudioController {
     this.activeMode = "";
     this.playStartedAt = 0;
 
-    // let the UI react to "siren wants to play but iOS is blocking it until the
-    // user taps" so the emergency screen can show a tap-to-sound prompt.
+    // tell the page when iOS is blocking the siren until a tap, so it can prompt
     this.audio.addEventListener("playing", () => this.emitState());
     this.audio.addEventListener("pause", () => this.emitState());
 

@@ -10,6 +10,7 @@ const {
   getCurrentUserProfile,
   loginWithUsername,
   logout,
+  refreshSession,
   signUpWithUsername,
   updateCurrentUserAlertLocation,
   updateCurrentUserAvatar,
@@ -25,7 +26,8 @@ async function handleAuthRoute(request, response, pathname) {
       setAuthCookies(response, result.session);
       sendJson(response, 201, {
         accessToken: result.session.access_token,
-        profile: result.profile
+        profile: result.profile,
+        refreshToken: result.session.refresh_token
       });
       return true;
     }
@@ -36,7 +38,19 @@ async function handleAuthRoute(request, response, pathname) {
       setAuthCookies(response, result.session);
       sendJson(response, 200, {
         accessToken: result.session.access_token,
-        profile: result.profile
+        profile: result.profile,
+        refreshToken: result.session.refresh_token
+      });
+      return true;
+    }
+
+    if (pathname === "/api/auth/refresh" && request.method === "POST") {
+      const body = await readJsonBody(request);
+      const result = await refreshSession(body?.refreshToken);
+      sendJson(response, 200, {
+        accessToken: result.accessToken,
+        profile: result.profile,
+        refreshToken: result.refreshToken
       });
       return true;
     }

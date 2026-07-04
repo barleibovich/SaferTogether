@@ -12,8 +12,7 @@ const SUBSCRIPTION_TABLE = "push_subscriptions";
 // undefined = not loaded yet, null = unavailable (missing dep or unconfigured)
 let webpushModule = undefined;
 
-// load web-push once and wire the VAPID keys. Returns null when push can't run
-// (web-push not installed, or VAPID keys not configured) so callers degrade.
+// load web-push + VAPID keys once; returns null if push isn't configured
 function loadWebPush() {
   if (webpushModule !== undefined) {
     return webpushModule;
@@ -142,10 +141,7 @@ async function deleteSubscription(accessToken, endpoint) {
   }
 }
 
-// push an alarm to every group member's phone. Best-effort and side-channel:
-// callers fire-and-forget this so it never blocks/breaks raising the alarm.
-// Uses the alarm-raising admin's session — RLS (shares_group_with) lets that
-// session read co-members' subscriptions server-side; the keys never leave here.
+// push an alarm to all group members' phones (best-effort; reads subs via shares_group_with RLS)
 async function sendAlarmPushToGroup(accessToken, groupId, alarm, options = {}) {
   const mod = loadWebPush();
   if (!mod) {

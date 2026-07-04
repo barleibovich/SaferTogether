@@ -1,7 +1,5 @@
-// SaferTogether service worker — delivers real/training alarm notifications
-// pushed from the gateway, so members are alerted even when the app is closed
-// or the phone is locked. (Web Push: the OS plays the notification sound; the
-// in-app alarm mp3 plays once the member opens the app via the notification.)
+// service worker: shows alarm push notifications even when the app is closed
+// (OS plays the notification sound; the in-app siren plays once they tap in)
 
 self.addEventListener("install", () => {
   self.skipWaiting();

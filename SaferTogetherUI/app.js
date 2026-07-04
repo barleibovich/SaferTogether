@@ -39,13 +39,14 @@ import {
   endAlarm,
   getActiveAlarm,
   markAlarmSafe,
+  raiseOrefAlarm,
   reportAlarmProgress,
   startAlarm,
   unlockAlarm
 } from "./src/api/alarmGateway.js";
 import { sendPresenceHeartbeat } from "./src/api/presenceGateway.js";
 import { deletePushSubscription, getPushConfig, savePushSubscription } from "./src/api/pushGateway.js";
-import { startRotationTracking, takeRotationForItem } from "./src/sensors/rotation.js";
+import { primeMotionSensors, takeRotationForItem, takeMovementForItem } from "./src/sensors/rotation.js";
 
 const STORAGE_KEY = "saferTogetherState.v5";
 const SIGNUP_AVATAR_KEY = "saferTogetherSignupAvatar.v1";
@@ -54,6 +55,8 @@ const OREF_POLL_INTERVAL_MS = 5000;
 const GPS_LOCATION_SAVE_INTERVAL_MS = 15000;
 const GPS_LOCATION_DISTANCE_THRESHOLD_METERS = 50;
 const GPS_LIVENESS_PROBE_MS = 20000;
+// average shake (m/s^2) we treat as "full" movement, to map the sensor to a 0..1 level
+const MOVEMENT_FULL_SCALE = 3;
 const PRESENCE_HEARTBEAT_MS = 15000;
 const PRESENCE_ONLINE_THRESHOLD_MS = 45000;
 const ALARM_POLL_INTERVAL_MS = 5000;
@@ -179,8 +182,7 @@ const MISSION_GAME_DEFINITIONS = {
 const MISSION_GAME_IDS = Object.keys(MISSION_GAME_DEFINITIONS);
 
 const ACTIVITY_MODES = ["real", "training"];
-// play an encouragement clip if the player is stuck on a single mission-room
-// stage (a step inside a task) this long
+// play an encouragement clip if the player is stuck on one mission step this long
 const MISSION_INACTIVITY_DELAY_MS = 15000;
 
 const DEFAULT_BASELINE = {
@@ -195,10 +197,11 @@ let state = loadState();
 let orefGpsWatchId = null;
 let lastGpsLocationSave = null;
 let emergencyActivityRedirectTimer = null;
-// whether we currently have a working GPS fix (drives the badge: no live GPS = grey,
-// regardless of any area we saved earlier). starts false until the first fix lands.
+// do we have a live GPS fix right now? drives the badge (no fix = grey)
 let orefGpsLive = false;
 let gpsLivenessProbeId = null;
+// latch so an open admin app auto-raises the group alarm only once per real HFC alert
+let orefAutoRaised = false;
 
 document.addEventListener("DOMContentLoaded", () => {
   ensureDefaults();
@@ -231,10 +234,10 @@ function copy(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-// load saved state from localStorage
+// load saved state from localStorage (so login survives closing the app)
 function loadState() {
   try {
-    const saved = sessionStorage.getItem(STORAGE_KEY);
+    const saved = localStorage.getItem(STORAGE_KEY);
     return saved ? { ...initialState(), ...JSON.parse(saved) } : initialState();
   } catch {
     return initialState();
@@ -243,7 +246,7 @@ function loadState() {
 
 // save the app state to localStorage
 function saveState() {
-  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(stateForStorage()));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(stateForStorage()));
 }
 
 // strip the big avatar pngs so they don't bloat storage
@@ -327,8 +330,7 @@ function ensureDefaults() {
   state.groupActivities = Array.isArray(state.groupActivities) ? state.groupActivities : [];
   state.activityResults = Array.isArray(state.activityResults) ? state.activityResults : [];
   state.baseline = state.baseline || copy(DEFAULT_BASELINE);
-  // always start a page load with no cached HFC status so the badge begins
-  // neutral/grey and only turns green/yellow/red after a fresh check returns
+  // clear cached HFC status so the badge starts grey until a fresh check returns
   state.orefStatus = null;
   delete state.gpsAlertLocationEnabled;
   saveState();
@@ -661,6 +663,11 @@ function routePage() {
 function initLogin() {
   const form = document.querySelector("[data-login-form]");
 
+  // stay connected: if we still have a (refreshable) session, skip the form
+  if (state.user) {
+    void resumeExistingSession();
+  }
+
   form?.addEventListener("submit", async event => {
     event.preventDefault();
     clearFormMessage(form);
@@ -681,6 +688,21 @@ function initLogin() {
       setFormBusy(form, false);
     }
   });
+}
+
+// on the login page, resume a saved session if we have one; else stay on the form
+async function resumeExistingSession() {
+  try {
+    const profile = await loadSessionIntoState();
+    if (!profile) {
+      return;
+    }
+
+    saveState();
+    window.location.href = "groups.html";
+  } catch {
+    // session can't be restored -> leave the login form in place
+  }
 }
 
 // hook up signup form + initial avatar to the auth api
@@ -1066,16 +1088,13 @@ function wireLogoutLink() {
 
     alarmAudio.stop();
     state = initialState();
-    sessionStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STORAGE_KEY);
     window.location.href = "index.html";
   });
 }
 
 // --- web push (alarm notifications even when the app is closed) -------------
-// A device only receives alarms after the member logged in AND allowed
-// notifications at least once — that's when we register it against their user.
-// Re-affirmed on every board load; removed on logout so a logged-out user (or
-// former member) stops getting that group's alarms.
+// a device gets alarms only after login + allowing notifications once; removed on logout
 
 let pushSubscriptionEnsured = false;
 
@@ -1095,8 +1114,7 @@ function pushSupported() {
   return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 }
 
-// register the service worker + subscribe this device for the current user.
-// Safe to call repeatedly; only acts once per page and only when logged in.
+// register the service worker + subscribe this device (safe to call repeatedly)
 async function ensureAlarmPushSubscription() {
   if (pushSubscriptionEnsured || !pushSupported() || !state.user) {
     return;
@@ -1131,8 +1149,7 @@ async function ensureAlarmPushSubscription() {
     }
 
     if (Notification.permission === "default") {
-      // Mobile browsers only allow the permission prompt from a user gesture,
-      // so ask on the first tap rather than on load.
+      // mobile needs a tap for the permission prompt, so ask on first tap
       document.addEventListener("pointerdown", async () => {
         const permission = await Notification.requestPermission();
         if (permission === "granted") {
@@ -1145,8 +1162,7 @@ async function ensureAlarmPushSubscription() {
   }
 }
 
-// drop this device's subscription so a logged-out user stops getting alarms.
-// Call before logout() so the DELETE request is still authenticated.
+// drop this device's subscription on logout (call before logout so it's still authed)
 async function unsubscribeAlarmPush() {
   if (!pushSupported()) {
     return;
@@ -1293,7 +1309,7 @@ async function initGroups() {
       console.warn(readableAuthError(error));
     }
     state = initialState();
-    sessionStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STORAGE_KEY);
     window.location.href = "index.html";
   });
 }
@@ -1461,10 +1477,7 @@ async function initCreateGroup() {
 
 // set up the group board screen
 async function initBoard() {
-  // Paint the cached group name/id right away. state is hydrated from
-  // sessionStorage synchronously, so this avoids the header flashing the
-  // "הקבוצה שלי" placeholder and then jumping to the real group name once the
-  // network refresh below resolves.
+  // paint the cached group name right away so the header doesn't flash a placeholder
   const cachedGroup = getActiveGroup();
   if (cachedGroup) {
     setText("[data-active-group-name]", cachedGroup.name);
@@ -1519,8 +1532,7 @@ async function initBoard() {
     await raiseGroupAlarm("training");
   });
 
-  // the board's HFC badge is wired through initOrefHeaderControls() above, which
-  // both opens the real-alert screen and, when grey, requests GPS access.
+  // the board's HFC badge is wired above via initOrefHeaderControls()
 
   document.querySelector("[data-open-pending-requests]")?.addEventListener("click", event => {
     const panel = document.querySelector("[data-pending-requests-panel]");
@@ -1795,8 +1807,7 @@ function activitiesUnlocked() {
   return allMembersSafe();
 }
 
-// members should move into the opened activity automatically; admins stay here
-// to watch live progress, and members who finished stay here until the alarm ends.
+// members auto-move into the opened activity; admins stay to watch progress
 function shouldAutoOpenActivityFromEmergency() {
   return document.body.dataset.page === "emergency" &&
     activitiesUnlocked() &&
@@ -2177,7 +2188,7 @@ function startBoardRequestsPolling() {
   window.addEventListener("beforeunload", () => clearInterval(intervalId));
 }
 
-// This function polls the server every 15 seconds so regular members see up-to-date member locations and avatars.
+// poll every 15s so members see up-to-date locations and avatars
 function startMembersPolling() {
   const INTERVAL_MS = 15000;
 
@@ -2195,9 +2206,7 @@ function startMembersPolling() {
   window.addEventListener("beforeunload", () => clearInterval(intervalId));
 }
 
-// This function polls every 5s so members get pulled into an alarm the admin raised.
-// It only pulls a member in while they still need to mark safe (active, not yet safe,
-// not already unlocked), so members aren't yanked back after they've checked in.
+// poll every 5s to pull members into a raised alarm (only while they still need to mark safe)
 function startAlarmBroadcastPolling() {
   let initialized = false;
   let wasActiveUnsafe = false;
@@ -2274,8 +2283,7 @@ function showAlarmBroadcastOverlay(mode) {
   }, 2500);
 }
 
-// admin action: raise an alarm for the active group, then open the emergency screen.
-// degrades to a local-only emergency if the alarm tables aren't set up yet.
+// admin raises an alarm then opens the emergency screen (local-only if tables missing)
 async function raiseGroupAlarm(mode) {
   const group = getActiveGroup();
   if (!group) return;
@@ -2312,8 +2320,7 @@ function initAlertLocationControls() {
   void enableGpsAlertLocation();
 }
 
-// tapping the HFC badge: open the real-alert screen when there's a group alert,
-// otherwise (grey badge) ask the browser for GPS so we can connect to an area
+// tap the HFC badge: open the alert screen if there's an alarm, else ask for GPS
 function handleOrefHeaderClick() {
   if (orefGpsLive && state.orefStatus?.hasGroupAlert) {
     startEmergency(state.orefStatus, "real");
@@ -2350,8 +2357,7 @@ async function enableGpsAlertLocation() {
     startGpsAlertLocationWatch();
     startGpsLivenessProbe();
 
-    // having a GPS fix is enough to be "located" (green). the server area save is a
-    // separate concern – if it fails we stay green, we just can't match alarms to an area.
+    // a GPS fix alone means green; a failed area save keeps us green, just no area match
     try {
       await saveGpsAlertLocation(position, { force: true });
     } catch (saveError) {
@@ -2377,9 +2383,7 @@ function setGpsLive(isLive) {
   renderOrefStatus();
 }
 
-// actively re-check GPS so the badge tracks reality: turning location off drops us to
-// grey within one interval even if watchPosition never fires an error, and turning it
-// back on flips us green again. getCurrentPosition does NOT re-prompt once granted.
+// re-check GPS every interval so turning location off/on flips the badge in real time
 function startGpsLivenessProbe() {
   if (!navigator.geolocation || gpsLivenessProbeId !== null) {
     return;
@@ -2511,8 +2515,7 @@ function renderGpsLocationStatus(message, kind = "") {
   const node = document.querySelector("[data-alert-location-status]");
   if (!node) return;
 
-  // once GPS is live, the HFC status owns this line (renderOrefHeaderMessage).
-  // GPS progress/error text only shows while we have no live fix (grey badge).
+  // when GPS is live the HFC status owns this line; GPS text only shows when grey
   if (orefGpsLive) return;
 
   if (!message) {
@@ -2529,7 +2532,7 @@ function renderGpsLocationStatus(message, kind = "") {
 function readableGpsError(error) {
   if (error?.code === 1) return "הגישה למיקום GPS נדחתה";
   if (error?.code === 2) return "מיקום ה-GPS אינו זמין";
-  if (error?.code === 3) return "בקשת ה-GPS חרגה מהזמן המוקצב";
+  if (error?.code === 3) return "לא מתקבל מיקום GPS (ייתכן שהמיקום כבוי)";
   return error?.message || "לא ניתן להשתמש ב-GPS";
 }
 
@@ -2580,6 +2583,48 @@ function startOrefStatusPolling() {
   window.addEventListener("beforeunload", () => window.clearInterval(intervalId));
 }
 
+// on a real HFC alert, any open app auto-raises the alarm so everyone's phone rings (once per alert)
+function maybeAutoRaiseOrefAlarm(status) {
+  // re-arm once the alert clears, so a later real alert can trigger again
+  if (!status?.hasGroupAlert) {
+    orefAutoRaised = false;
+    return;
+  }
+
+  if (orefAutoRaised) return;
+  if (state.alarmStatus?.active) return;
+  if (document.body.dataset.page === "emergency") return;
+
+  orefAutoRaised = true;
+  void autoRaiseOrefAlarm();
+}
+
+// raise the alarm via the member-safe endpoint, then go to emergency (silent, best-effort)
+async function autoRaiseOrefAlarm() {
+  const group = getActiveGroup();
+  if (!group) return;
+
+  alarmAudio.start("real", `pending:${group.id}:${Date.now()}`);
+  startEmergency(null, "real");
+  state.statsUnlocked = false;
+
+  try {
+    const alarm = await raiseOrefAlarm(group.id);
+    setAlarmStatus({
+      active: true,
+      alarmId: alarm?.id,
+      mode: alarm?.mode || "real",
+      safeUserIds: [],
+      unlocked: false
+    });
+  } catch (error) {
+    console.error("auto HFC alarm raise failed:", error);
+  }
+
+  saveState();
+  window.location.href = "emergency.html";
+}
+
 // refresh live HFC status for the active group
 async function refreshOrefStatus() {
   const group = getActiveGroup();
@@ -2595,6 +2640,9 @@ async function refreshOrefStatus() {
 
     saveState();
     renderOrefStatus(status);
+
+    // a real HFC alert -> auto-raise the group alarm so it pushes everyone's phone
+    maybeAutoRaiseOrefAlarm(status);
 
     if (document.body.dataset.page === "board") {
       renderBoardMembers(getActiveGroup());
@@ -2612,8 +2660,7 @@ async function refreshOrefStatus() {
 }
 
 function getOrefHeaderView(status = state.orefStatus, error = null) {
-  // GREY whenever we don't currently have a live GPS fix – no matter what area we saved
-  // before. (turning location off must drop us back to grey in real time.)
+  // grey whenever there's no live GPS fix, even if we saved an area before
   if (!orefGpsLive) {
     return {
       className: "oref-header-status-offline",
@@ -2643,8 +2690,7 @@ function getOrefHeaderView(status = state.orefStatus, error = null) {
     };
   }
 
-  // GREEN – live location, no alarm (we keep it green even if the status fetch is
-  // momentarily unavailable, because the user does have a current GPS fix)
+  // green: live location, no alarm (stays green even if the status fetch fails)
   return {
     className: "oref-header-status-good",
     canOpenEmergency: false,
@@ -2678,11 +2724,7 @@ function renderOrefHeaderStatus(status = state.orefStatus, error = null) {
   });
 }
 
-// the line under the HFC badge (board + groups):
-//   green  (connected, no alert)        -> silent
-//   yellow (alert in other areas)       -> the areas under alert, e.g. "תל אביב"
-//   red    (alert in your own area)     -> take-cover instruction
-//   grey   (not connected yet)          -> leave the GPS guidance/error in place
+// the line under the HFC badge: green=silent, yellow=alert areas, red=take cover, grey=GPS hint
 function renderOrefHeaderMessage(status = state.orefStatus) {
   const node = document.querySelector("[data-alert-location-status]");
   if (!node) return;
@@ -2991,7 +3033,7 @@ function initPractice() {
   }
 }
 
-// This function runs the admin drill monitor view on practice.html.
+// admin drill monitor view on practice.html
 function initAdminDrillMonitor() {
   const monitor = document.querySelector("[data-drill-monitor]");
   if (!monitor) return;
@@ -3026,7 +3068,7 @@ function initAdminDrillMonitor() {
   window.addEventListener("beforeunload", () => clearInterval(drillPollInterval));
 }
 
-// This function renders the drill member grid with safe/pending status.
+// draw the drill member grid with safe/pending status
 function renderDrillMembers(members, safeUsers) {
   const container = document.querySelector("[data-drill-members]");
   if (!container) return;
@@ -3137,8 +3179,7 @@ async function initEmergency() {
     void handleEmergencySafeClick();
   });
 
-  // iOS won't auto-play the siren when the app is opened from a notification tap,
-  // so show a full-screen prompt; the member's first tap sounds the alarm.
+  // iOS blocks auto-play from a notification tap, so show a prompt; first tap sounds the alarm
   const alarmSoundGate = document.querySelector("[data-alarm-sound-gate]");
   if (alarmSoundGate) {
     const syncSoundGate = blocked => {
@@ -3147,8 +3188,7 @@ async function initEmergency() {
     document.addEventListener("saferAlarmAudioState", event => {
       syncSoundGate(Boolean(event.detail?.blocked));
     });
-    // the document-level pointerdown handler in alarmAudio retries playback on tap;
-    // hide the prompt right away so it doesn't sit over the "אני מוגן" button.
+    // alarmAudio retries playback on tap; hide the prompt so it doesn't cover the button
     alarmSoundGate.addEventListener("click", () => alarmSoundGate.classList.add("hidden"));
     syncSoundGate(alarmAudio.isBlocked());
   }
@@ -3231,8 +3271,7 @@ async function handleEmergencySafeClick() {
   }
 }
 
-// poll the server alarm while the emergency screen is open so the member list,
-// unlock state, and "alarm ended" all stay in sync across the group.
+// poll the alarm while the emergency screen is open to keep the group in sync
 function startEmergencyAlarmPolling() {
   let redirectingToStats = false;
   const intervalId = setInterval(async () => {
@@ -3245,8 +3284,7 @@ function startEmergencyAlarmPolling() {
     }
     renderEmergency();
 
-    // admin: the moment every member has finished all the games, end the alarm
-    // (releasing the waiting members) and open the statistics page
+    // admin: once everyone finished the games, end the alarm and open the stats
     if (
       !redirectingToStats &&
       isCurrentUserAdminForActiveGroup() &&
@@ -3412,8 +3450,7 @@ async function initStatistics() {
   }
 }
 
-// if a live alarm is still running, let the admin end it from here (this
-// releases members who are waiting on the alarm screen)
+// if an alarm is still running, let the admin end it from here
 async function maybeShowStatsEndAlarm() {
   const button = document.querySelector("[data-stats-end-alarm]");
   const group = getActiveGroup();
@@ -3734,8 +3771,7 @@ async function generateStatsSummary() {
   return summary;
 }
 
-// hook up the "generate AI summary" button: send the selected member's
-// measurements to Groq (via the gateway) and show the returned situation summary
+// "generate AI summary" button: send the member's data to Groq and show the summary
 function wireStatsSummary() {
   const button = document.querySelector("[data-stats-summary-btn]");
   if (!button || button.dataset.wired === "1") return;
@@ -4106,6 +4142,9 @@ function startEmergency(orefStatus = null, trigger = null) {
       mistakes: 0,
       correct: 0,
       incorrect: 0,
+      movementSum: 0,
+      movementSamples: 0,
+      // desktop fallback; on a phone real shake readings replace this (see recordEmergencyMovement)
       movementLevel: round(0.58 + Math.random() * 0.22)
     },
     missionCompletedAt: null,
@@ -4226,8 +4265,7 @@ function toggleAlarmAdminControls() {
   }
 }
 
-// number of activities active for the current alarm mode; set when an admin
-// opens the emergency screen, used to know when everyone has finished everything
+// how many activities are active this alarm, to know when everyone finished
 let adminExpectedActivityCount = 0;
 
 // have all group members completed every active activity?
@@ -4334,8 +4372,8 @@ async function renderGame() {
     saveState();
   }
 
-  // start sampling hand rotation (phone only; no-op / no data on desktop)
-  startRotationTracking();
+  // start sampling tilt + shake (iPhone asks on the first tap; Android starts now)
+  primeMotionSensors();
 
   area.innerHTML = `<p class="notice">טוען פעילות...</p>`;
 
@@ -4420,8 +4458,7 @@ function renderTriviaGame(area, activity, mode) {
   }
 
   const question = questions[index];
-  // reset the per-question timer so each question is timed on its own, not
-  // cumulatively from when the whole trivia started
+  // reset the timer so each question is timed on its own
   state.emergency.questionStartedAt = Date.now();
   saveState();
   gameAudio.startActivity(audioActivityKey);
@@ -4445,13 +4482,13 @@ function renderTriviaGame(area, activity, mode) {
       const correct = answerIndex === question.correctAnswerIndex;
       const timeToAnswer = secondsSince(state.emergency.questionStartedAt || state.emergency.activityStartedAt);
       const rotation = takeRotationForItem();
+      const movement = takeMovementForItem();
       gameAudio.stopInactivity();
       if (correct) {
         gameAudio.stageSucceeded();
       }
 
-      // always highlight the correct answer in green; if the user picked a
-      // wrong one, also paint their pick red so the mistake is clear.
+      // show the correct answer in green, and the user's wrong pick in red
       area.querySelectorAll("[data-game-answer]").forEach(item => {
         const itemIndex = Number(item.dataset.gameAnswer);
         if (itemIndex === question.correctAnswerIndex) item.classList.add("correct");
@@ -4472,6 +4509,7 @@ function renderTriviaGame(area, activity, mode) {
           correctAnswerIndex: question.correctAnswerIndex,
           index,
           label: `Q${index + 1}`,
+          movement,
           question: question.question,
           rotation,
           selectedAnswer: question.answers[answerIndex],
@@ -4486,6 +4524,7 @@ function renderTriviaGame(area, activity, mode) {
         state.emergency.telemetry.incorrect += 1;
         state.emergency.telemetry.mistakes += 1;
       }
+      recordEmergencyMovement(movement);
       saveState();
       reportActivityProgress(activity, "trivia", index + 1, questions.length);
 
@@ -4518,8 +4557,7 @@ async function renderTriviaComplete(area, activity, mode, questions, answers) {
   await persistTriviaResult(activity, mode, answers, correctCount, questions.length);
 }
 
-// send the per-question trivia results to the backend (feeds the stats charts).
-// failures are swallowed so a flaky network never blocks the score screen.
+// send trivia results to the backend for the stats (ignore errors so the score still shows)
 async function persistTriviaResult(activity, mode, answers, correctCount, totalQuestions) {
   const group = getActiveGroup();
   if (!group || !activity?.id) return;
@@ -4576,9 +4614,7 @@ function advanceToNextActivity() {
     return;
   }
 
-  // finished every game: during a live alarm, members go back to the alarm
-  // screen and wait there for the admin to end the alert. Outside an alarm
-  // (local demo) keep the old summary behavior.
+  // done all games: during an alarm go back and wait; otherwise show the summary
   if (state.alarmStatus?.active) {
     if (state.emergency) {
       state.emergency.activitiesFinished = true;
@@ -4630,8 +4666,7 @@ function renderMissionGame(area, activity, mode) {
   reportActivityProgress(activity, "mission", 0, missionTotal);
   gameAudio.watchStage(MISSION_INACTIVITY_DELAY_MS);
 
-  // each step inside a task (a new bolt, the dial, the next exercise, the next
-  // wire level) pings this so the idle timer restarts from that step
+  // each step inside a task pings this so the idle timer restarts
   window.saferTogetherMissionStageProgress = () => {
     gameAudio.watchStage(MISSION_INACTIVITY_DELAY_MS);
   };
@@ -4642,11 +4677,14 @@ function renderMissionGame(area, activity, mode) {
 
     // time this task took = gap since the previous task completed (or activity start)
     const now = Date.now();
+    const movement = takeMovementForItem();
     stageTimings.push({
+      movement,
       rotation: takeRotationForItem(),
       target,
       timeSeconds: (now - lastStageAt) / 1000
     });
+    recordEmergencyMovement(movement);
     lastStageAt = now;
 
     completedStages.add(target);
@@ -4656,8 +4694,7 @@ function renderMissionGame(area, activity, mode) {
     if (completedStages.size >= missionTotal) {
       missionCompletionAudio = gameAudio.completeActivity(audioActivityKey);
     } else {
-      // more stages to go: re-arm the idle timer so encouragement clips can
-      // play again if the user gets stuck on the next stage
+      // more stages left: restart the idle timer for the next encouragement clip
       gameAudio.watchStage(MISSION_INACTIVITY_DELAY_MS);
     }
   };
@@ -4865,8 +4902,7 @@ function renderUnityMissionStatus(message, tone = "") {
   status.textContent = message;
 }
 
-// mark the room done locally + persist the per-task results for the stats page.
-// the unity room self-verifies before it reports done.
+// mark the room done and save the per-task results for the stats page
 async function submitMissionCompletion(activity, mode, detail = {}, stageTimings = []) {
   const missionKey = `${activity.id}:room`;
   state.emergency.submittedResults = state.emergency.submittedResults || {};
@@ -4966,7 +5002,7 @@ function missionMetricItems(activity, games, stageTimings = []) {
     return items;
   }
 
-  // Backward-compatible fallback for older builds that only report completed task timings.
+  // fallback for older builds that only report completed task timings
   return (stageTimings || [])
     .map(stage => ({
       index: taskOffset.has(stage.target) ? taskOffset.get(stage.target) : -1,
@@ -4977,9 +5013,7 @@ function missionMetricItems(activity, games, stageTimings = []) {
     .filter(item => item.index >= 0);
 }
 
-// send the per-stage mission results to the backend (feeds the stats charts).
-// Unity sends games[]. Each stage becomes a stable metric item so per-stage time,
-// correct/wrong counts, hit counts and phone tilt can be summarized later.
+// send the per-stage mission results to the backend for the stats charts
 async function persistMissionResult(activity, mode, detail = {}, stageTimings = []) {
   const group = getActiveGroup();
   if (!group || !activity?.id) return;
@@ -5067,6 +5101,16 @@ function renderReport(memberId) {
       המלצה: לשוחח ברוגע לאחר האירוע ולשאול איך הרגישו.
     </section>
   `;
+}
+
+// fold a real shake reading into the current-event movement level (0..1); phone only
+function recordEmergencyMovement(movement) {
+  const telemetry = state.emergency?.telemetry;
+  if (movement === null || movement === undefined || !telemetry) return;
+  telemetry.movementSamples = (telemetry.movementSamples || 0) + 1;
+  telemetry.movementSum = (telemetry.movementSum || 0) + movement;
+  const avg = telemetry.movementSum / telemetry.movementSamples;
+  telemetry.movementLevel = Math.max(0, Math.min(1, round(avg / MOVEMENT_FULL_SCALE)));
 }
 
 // build the analytics report data for one member

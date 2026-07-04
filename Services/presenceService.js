@@ -17,8 +17,7 @@ function isMissingPresenceTableError(error) {
   );
 }
 
-// record that the current user's client is online right now.
-// if the table isn't there yet we just no-op so the app keeps working.
+// mark the current user online now; no-ops if the table isn't set up yet
 async function recordHeartbeat(accessToken) {
   const context = await getSessionContext(accessToken);
 

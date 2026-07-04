@@ -29,6 +29,19 @@ function missingAlarmTableError() {
   );
 }
 
+// the member-raise DEFINER function hasn't been installed yet?
+function isMissingOrefRaiseFunctionError(error) {
+  const code = String(error?.code || "");
+  const message = String(error?.message || "").toLowerCase();
+
+  return (
+    code === "42883" ||
+    code === "PGRST202" ||
+    message.includes("could not find the function") ||
+    (message.includes("raise_group_oref_alarm") && message.includes("does not exist"))
+  );
+}
+
 // db row -> the shape we send out
 function mapAlarm(row) {
   if (!row) {
@@ -168,8 +181,39 @@ async function startAlarm(accessToken, groupId, mode) {
   }
 }
 
-// current alarm state for a group (any member can read).
-// degrades to "no alarm" if the tables aren't there yet.
+// any member raises a real alarm via the DEFINER function (bypasses admin RLS); returns { alarm, created }
+async function startOrefAlarm(accessToken, groupId) {
+  const context = await getSessionContext(accessToken);
+
+  try {
+    const { data, error } = await context.client.rpc("raise_group_oref_alarm", {
+      p_group_id: groupId
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    return {
+      alarm: mapAlarm(data?.alarm),
+      created: Boolean(data?.created)
+    };
+  } catch (error) {
+    if (isMissingOrefRaiseFunctionError(error)) {
+      throw httpError(
+        500,
+        "The member-raise function is missing. Run supabase/group_alarm_oref_raise.sql in Supabase first."
+      );
+    }
+    if (isMissingAlarmTableError(error)) {
+      throw missingAlarmTableError();
+    }
+
+    throw error;
+  }
+}
+
+// current alarm state for a group (any member can read); "no alarm" if tables are missing
 async function getActiveAlarm(accessToken, groupId) {
   const context = await getSessionContext(accessToken);
 
@@ -198,8 +242,7 @@ async function getActiveAlarm(accessToken, groupId) {
   }
 }
 
-// a member reports how far they've gotten in an activity (e.g. trivia 2/3).
-// no-ops gracefully when there's no active alarm or the tables are missing.
+// a member reports their progress (e.g. trivia 2/3); no-ops if no alarm or tables missing
 async function reportAlarmProgress(accessToken, groupId, body = {}) {
   const context = await getSessionContext(accessToken);
   const activityId = body.activityId;
@@ -244,8 +287,7 @@ async function reportAlarmProgress(accessToken, groupId, body = {}) {
   }
 }
 
-// the current user marks themselves safe in the active alarm.
-// auto-unlocks the activities once every group member is safe.
+// mark me safe in the active alarm; unlocks the activities once everyone is safe
 async function markAlarmSafe(accessToken, groupId) {
   const context = await getSessionContext(accessToken);
 
@@ -364,5 +406,6 @@ module.exports = {
   markAlarmSafe,
   reportAlarmProgress,
   startAlarm,
+  startOrefAlarm,
   unlockAlarm
 };

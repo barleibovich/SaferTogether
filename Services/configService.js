@@ -64,14 +64,10 @@ function getConfig() {
     port: Number(env.PORT || 5173),
     supabaseAnonKey,
     supabaseUrl,
-    // Optional: powers the AI "user situation" summary on the stats page.
-    // Kept server-side only — the key must never be sent to the browser.
+    // optional: server-only key for the AI stats summary (never sent to the browser)
     groqApiKey: env.GROQ_API_KEY || "",
     groqModel: env.GROQ_MODEL || "llama-3.3-70b-versatile",
-    // Optional: Web Push (VAPID). When all three are set, the gateway can push
-    // a real/training alarm to members' phones even with the app closed.
-    // Generate keys once with: npx web-push generate-vapid-keys
-    // The public key is safe to expose to the browser; the private key is not.
+    // optional: Web Push keys; set all three to push alarms to closed apps (private key stays server-side)
     vapidPublicKey: env.VAPID_PUBLIC_KEY || "",
     vapidPrivateKey: env.VAPID_PRIVATE_KEY || "",
     vapidSubject: env.VAPID_SUBJECT || "mailto:alerts@safertogether.app"

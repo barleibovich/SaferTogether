@@ -60,5 +60,6 @@ async function handleOrefRoute(request, response, pathname) {
 }
 
 module.exports = {
+  getGroupOrefStatus,
   handleOrefRoute
 };

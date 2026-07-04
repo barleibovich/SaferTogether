@@ -10,6 +10,15 @@ export async function startAlarm(groupId, mode) {
   return payload.alarm;
 }
 
+// any member fires a real alarm on a live HFC alert (server checks it's real first)
+export async function raiseOrefAlarm(groupId) {
+  const payload = await requestJson(`/api/groups/${groupId}/alarm/oref`, {
+    method: "POST"
+  });
+
+  return payload.alarm;
+}
+
 // current alarm state for a group: { alarm, safeUserIds, unlocked }
 export async function getActiveAlarm(groupId) {
   return requestJson(`/api/groups/${groupId}/alarm`);

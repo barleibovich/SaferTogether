@@ -88,8 +88,7 @@ async function saveProfileAvatar(client, userId, avatar, avatarImage = undefined
 
   if (error) {
     if (avatarImage !== undefined && isProfileAvatarSetupError(error)) {
-      // avatar image column/policy is missing. if caller really wanted the image
-      // (avatar editor) throw so we dont silently drop it. otherwise (signup) just keep the text avatar.
+      // no avatar-image column: throw if the caller needed it, else keep the text avatar
       if (options.requireAvatarImage) {
         throw httpError(
           503,
@@ -305,8 +304,7 @@ async function updateAuthUser(accessToken, payload) {
   return result;
 }
 
-// the existing password can never be shown (it is hashed); the only way to confirm it is
-// to attempt a fresh sign-in with it.
+// the password is hashed, so the only way to check it is to try signing in with it
 async function verifyCurrentPassword(username, currentPassword) {
   if (!currentPassword) {
     throw httpError(400, "יש להזין את הסיסמה הנוכחית");
@@ -319,9 +317,7 @@ async function verifyCurrentPassword(username, currentPassword) {
   }
 }
 
-// update the logged-in user's name and/or password. password change requires the current
-// password. NOTE: the username is the login identity (auth email = username@domain), so a
-// name change also rewrites the auth email — this needs Supabase "Confirm email change" OFF.
+// change name and/or password; renaming also rewrites the login email (needs "Confirm email change" OFF)
 async function updateCurrentUserCredentials(accessToken, { username, currentPassword, newPassword } = {}) {
   const context = await getSessionContext(accessToken);
   const currentUsername = context.profile.username;
@@ -341,9 +337,7 @@ async function updateCurrentUserCredentials(accessToken, { username, currentPass
       throw httpError(400, "הסיסמה החדשה חייבת להכיל לפחות 6 תווים");
     }
 
-    // the session is already authenticated. only re-verify the current password when the
-    // caller actually supplied one; the inline avatar editor omits it and relies on the
-    // session token instead.
+    // only re-check the current password when one was supplied (the avatar editor skips it)
     if (currentPassword) {
       await verifyCurrentPassword(currentUsername, currentPassword);
     }
@@ -393,10 +387,33 @@ async function updateCurrentUserAlertLocation(accessToken, location) {
   return saveCurrentUserAlertLocation(accessToken, location);
 }
 
+// swap a refresh token for a fresh session, so login survives the access token expiring
+async function refreshSession(refreshToken) {
+  if (!refreshToken) {
+    throw httpError(400, "Missing refresh token");
+  }
+
+  const client = createPublicClient();
+  const { data, error } = await client.auth.refreshSession({ refresh_token: refreshToken });
+
+  if (error || !data?.session?.access_token) {
+    throw httpError(401, "Session expired");
+  }
+
+  const profile = await getCurrentUserProfile(data.session.access_token);
+
+  return {
+    accessToken: data.session.access_token,
+    profile,
+    refreshToken: data.session.refresh_token
+  };
+}
+
 module.exports = {
   getCurrentUserProfile,
   loginWithUsername,
   logout,
+  refreshSession,
   signUpWithUsername,
   updateCurrentUserAlertLocation,
   updateCurrentUserAvatar,

@@ -35,8 +35,7 @@ class GameAudioController {
     this.pendingCueCount = 0;
     this.cueQueue = Promise.resolve();
 
-    // when an encouragement clip finishes and the user is still stuck on the
-    // same stage/question, re-arm the idle timer so we keep nudging them.
+    // clip finished but still stuck on the same stage -> restart the idle timer
     this.handleEncouragementEnded = () => {
       if (this.activeActivityKey) {
         // re-arm with the same delay this stage was started with

@@ -1,96 +1,122 @@
-// Hand-rotation capture for the statistics line chart.
-//
-// On a phone the browser fires `deviceorientation` events as the user tilts the
-// device. We integrate how much the hand rotated (the absolute change in tilt)
-// during each question / mission task, so the stats page can graph it just like
-// time. On desktop no events ever fire, so `takeRotationForItem()` returns null
-// and the chart shows "no rotation data yet" — the plumbing stays dormant until
-// the phone build ships.
+// Reads phone tilt (rotation) and shake (movement) while a game task runs, for the stats.
+// No phone sensors (desktop) -> the take() calls return null and the chart shows "no data".
 
-let tracking = false;
-let hasAnyData = false;       // did we ever receive a real sensor reading?
-let accumulated = 0;          // integrated rotation since the last take(), in degrees
+let listening = false;   // are the sensor listeners attached?
+let armed = false;       // did we already set up the iPhone permission tap?
+let gotTilt = false;     // got at least one real tilt reading?
+let gotShake = false;    // got at least one real shake reading?
+let tiltSum = 0;         // tilt change (degrees) since the last take
+let shakeSum = 0;        // total shake since the last take
+let shakeCount = 0;      // shake readings since the last take
 let lastBeta = null;
 let lastGamma = null;
-let handler = null;
+let lastAccel = null;
 
-// wrap an angle delta so a 360->0 flip doesn't register as a huge jump
-function angleDelta(current, previous) {
-  let delta = Math.abs(current - previous);
-  if (delta > 180) {
-    delta = 360 - delta;
-  }
-  return delta;
+// smallest turn between two angles (so 359 -> 1 counts as 2, not 358)
+function angleDelta(now, prev) {
+  const d = Math.abs(now - prev);
+  return d > 180 ? 360 - d : d;
 }
 
-function onOrientation(event) {
+// add up how much the phone tilted
+function onTilt(event) {
   const beta = typeof event.beta === "number" ? event.beta : null;
   const gamma = typeof event.gamma === "number" ? event.gamma : null;
-
-  // some desktops emit a single all-null event — ignore those
-  if (beta === null && gamma === null) {
-    return;
-  }
-
-  hasAnyData = true;
-
-  if (lastBeta !== null && beta !== null) {
-    accumulated += angleDelta(beta, lastBeta);
-  }
-  if (lastGamma !== null && gamma !== null) {
-    accumulated += angleDelta(gamma, lastGamma);
-  }
-
+  if (beta === null && gamma === null) return; // desktops sometimes send one empty event
+  gotTilt = true;
+  if (lastBeta !== null && beta !== null) tiltSum += angleDelta(beta, lastBeta);
+  if (lastGamma !== null && gamma !== null) tiltSum += angleDelta(gamma, lastGamma);
   lastBeta = beta;
   lastGamma = gamma;
 }
 
-// Begin listening. On iOS 13+ this must be called from a user gesture so the
-// permission prompt can appear; we request it but never block gameplay on it.
-export async function startRotationTracking() {
-  if (tracking || typeof window === "undefined" || !("DeviceOrientationEvent" in window)) {
-    return;
+// add up how much the phone moved/shook between readings
+function onShake(event) {
+  const a = event.accelerationIncludingGravity || event.acceleration;
+  if (!a || (a.x == null && a.y == null && a.z == null)) return;
+  gotShake = true;
+  if (lastAccel) {
+    const dx = (a.x || 0) - lastAccel.x;
+    const dy = (a.y || 0) - lastAccel.y;
+    const dz = (a.z || 0) - lastAccel.z;
+    shakeSum += Math.sqrt(dx * dx + dy * dy + dz * dz);
+    shakeCount += 1;
   }
-
-  try {
-    const requestPermission = window.DeviceOrientationEvent?.requestPermission;
-    if (typeof requestPermission === "function") {
-      const result = await requestPermission();
-      if (result !== "granted") {
-        return;
-      }
-    }
-  } catch (error) {
-    // permission denied / not available — leave tracking off, charts show no data
-    return;
-  }
-
-  handler = onOrientation;
-  window.addEventListener("deviceorientation", handler, { passive: true });
-  tracking = true;
+  lastAccel = { x: a.x || 0, y: a.y || 0, z: a.z || 0 };
 }
 
-// Return the rotation accumulated for the item that just finished and reset the
-// accumulator for the next item. Returns null when there is no sensor data
-// (desktop), so callers store null and the running average skips it.
-export function takeRotationForItem() {
-  if (!tracking || !hasAnyData) {
-    return null;
-  }
+// attach both sensor listeners (once)
+function startListening() {
+  if (listening) return;
+  if ("DeviceOrientationEvent" in window) window.addEventListener("deviceorientation", onTilt, { passive: true });
+  if ("DeviceMotionEvent" in window) window.addEventListener("devicemotion", onShake, { passive: true });
+  listening = true;
+}
 
-  const value = Math.round(accumulated * 10) / 10;
-  accumulated = 0;
+// iPhone needs a per-sensor permission (from a tap); other browsers just allow it
+async function allow(sensorEvent) {
+  const ask = sensorEvent && sensorEvent.requestPermission;
+  if (typeof ask !== "function") return true;
+  try {
+    return (await ask()) === "granted";
+  } catch {
+    return false;
+  }
+}
+
+// true only on browsers that gate the sensors behind a tap permission (iPhone)
+function needsPermissionTap() {
+  return typeof window.DeviceOrientationEvent?.requestPermission === "function"
+    || typeof window.DeviceMotionEvent?.requestPermission === "function";
+}
+
+// ask for the sensors right now (must run inside a real tap on iPhone)
+async function requestNow() {
+  const okTilt = await allow(window.DeviceOrientationEvent);
+  const okShake = await allow(window.DeviceMotionEvent);
+  if (okTilt || okShake) startListening();
+}
+
+// call when a game/mission starts: sense now on Android, or ask on first tap on iPhone
+export function primeMotionSensors() {
+  if (typeof window === "undefined") return;
+  if (!needsPermissionTap()) {
+    startListening(); // Android/desktop: no prompt needed
+    return;
+  }
+  if (armed) return;  // iPhone: only wire the permission tap once
+  armed = true;
+  window.addEventListener("pointerdown", () => { void requestNow(); }, { capture: true, once: true });
+}
+
+// rotation done this task (degrees), or null when there's no phone sensor
+export function takeRotationForItem() {
+  if (!gotTilt) return null;
+  const value = Math.round(tiltSum * 10) / 10;
+  tiltSum = 0;
   return value;
 }
 
-export function stopRotationTracking() {
-  if (handler) {
-    window.removeEventListener("deviceorientation", handler);
-    handler = null;
-  }
-  tracking = false;
-  hasAnyData = false;
-  accumulated = 0;
+// average shake this task (m/s^2), or null when there's no phone sensor
+export function takeMovementForItem() {
+  if (!gotShake || shakeCount === 0) return null;
+  const value = Math.round((shakeSum / shakeCount) * 100) / 100;
+  shakeSum = 0;
+  shakeCount = 0;
+  return value;
+}
+
+// stop and reset everything (between alarms / teardown)
+export function stopMotionTracking() {
+  window.removeEventListener("deviceorientation", onTilt);
+  window.removeEventListener("devicemotion", onShake);
+  listening = false;
+  gotTilt = false;
+  gotShake = false;
+  tiltSum = 0;
+  shakeSum = 0;
+  shakeCount = 0;
   lastBeta = null;
   lastGamma = null;
+  lastAccel = null;
 }

@@ -107,10 +107,7 @@ function summarizeActivityItems(items) {
   };
 }
 
-// Assemble one member's measurements out of the group statistics bundle:
-// for every game item we line up the member's latest reading (time, hand
-// rotation, correctness) next to the group's running averages for real
-// alarms vs training, so the model can judge how the member copes under stress.
+// build one member's readings vs the group averages, so the model can judge their stress
 function buildMemberMeasurements(stats, userId) {
   const member = (stats.members || []).find(entry => entry.userId === userId);
   if (!member) {
@@ -224,16 +221,14 @@ const SYSTEM_PROMPT = [
   "Keep it useful and readable for an admin, about 250-400 words."
 ].join("\n");
 
-// Admin-only: build the selected member's measurements and ask Groq for a
-// Hebrew, admin-facing summary of the member's situation / stress level.
+// admin-only: build a member's readings and ask Groq for a Hebrew stress summary
 async function generateUserSituationSummary(accessToken, groupId, body = {}) {
   const userId = String(body.userId || "").trim();
   if (!userId) {
     throw httpError(400, "נדרש מזהה משתמש");
   }
 
-  // getGroupStatistics enforces the admin-of-this-group check and returns only
-  // the real activity data saved for this group.
+  // getGroupStatistics checks admin access and returns only this group's real data
   const stats = await getGroupStatistics(accessToken, groupId);
   const measurements = buildMemberMeasurements(stats, userId);
 

@@ -59,23 +59,23 @@ export async function leaveGroup(groupId) {
   });
 }
 
-// This function starts a drill for the given group (admin only).
+// start a drill for the group (admin only)
 export async function startDrill(groupId) {
   return requestJson(`/api/groups/${groupId}/drill`, { method: "POST" });
 }
 
-// This function ends an active drill for the given group (admin only).
+// end the active drill (admin only)
 export async function endDrill(groupId) {
   return requestJson(`/api/groups/${groupId}/drill`, { method: "DELETE" });
 }
 
-// This function marks the current user as safe in the active drill.
+// mark me safe in the active drill
 export async function markSafe(groupId) {
   const payload = await requestJson(`/api/groups/${groupId}/drill/safe`, { method: "POST" });
   return payload.safeUsers;
 }
 
-// This function gets the list of members who marked safe in the active drill.
+// who has marked safe in the active drill
 export async function fetchDrillStatus(groupId) {
   const payload = await requestJson(`/api/groups/${groupId}/drill/status`);
   return payload.safeUsers;
