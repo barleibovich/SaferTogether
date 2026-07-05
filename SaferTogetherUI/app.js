@@ -2302,6 +2302,7 @@ async function raiseGroupAlarm(mode) {
       safeUserIds: [],
       unlocked: false
     });
+    if (state.emergency) state.emergency.alarmId = alarm?.id || null;
   } catch (error) {
     console.error("startAlarm failed:", error);
     alert(readableAuthError(error));
@@ -2617,6 +2618,7 @@ async function autoRaiseOrefAlarm() {
       safeUserIds: [],
       unlocked: false
     });
+    if (state.emergency) state.emergency.alarmId = alarm?.id || null;
   } catch (error) {
     console.error("auto HFC alarm raise failed:", error);
   }
@@ -3148,7 +3150,10 @@ async function initEmergency() {
   // sync with the server alarm before deciding what to render
   await refreshAlarmStatus();
 
-  if (!state.emergency?.active) {
+  const serverAlarmId = state.alarmStatus?.active ? (state.alarmStatus.alarmId || null) : null;
+  const isNewAlarm = Boolean(serverAlarmId) && serverAlarmId !== (state.emergency?.alarmId || null);
+
+  if (!state.emergency?.active || isNewAlarm) {
     startEmergency(state.orefStatus, state.alarmStatus?.active ? state.alarmStatus.mode : null);
   }
 
@@ -3394,8 +3399,7 @@ const STATS_PDF_CHARTS = [
   { empty: "אין נתוני סיבוב יד להצגה בגרף זה.", key: "rotation", title: "סיבוב היד" }
 ];
 const STATS_PDF_PRINT_STYLE = `
-  body { margin: 0; background: #ffffff; color: #111827; font-family: Heebo, Arial, sans-serif; direction: rtl; }
-  .stats-pdf-report { box-sizing: border-box; width: 100%; max-width: 820px; margin: 0 auto; padding: 32px; }
+  .stats-pdf-report { box-sizing: border-box; width: 100%; max-width: 820px; margin: 0 auto; padding: 32px; background: #ffffff; color: #111827; font-family: Heebo, Arial, sans-serif; direction: rtl; }
   .stats-pdf-report h1 { margin: 0 0 8px; font-size: 30px; }
   .stats-pdf-report h2 { margin: 26px 0 10px; font-size: 20px; }
   .stats-pdf-report h3 { margin: 0 0 10px; font-size: 16px; }
@@ -3548,10 +3552,11 @@ function renderStatsCharts() {
   const labels = items.map(item => item.label);
 
   // average for a metric+mode, aligned to the activity's canonical item order
+  // red/blue = the global average across ALL groups/users for this item index + mode
   const aggSeries = (metric, mode, targetItems = items) => {
     const byIndex = new Map();
-    (data.aggregates || [])
-      .filter(row => row.activityId === activity.id && row.metric === metric && row.mode === mode)
+    (data.globalAggregates || [])
+      .filter(row => row.metric === metric && row.mode === mode)
       .forEach(row => byIndex.set(row.itemIndex, row.avgValue));
     return targetItems.map(item => (byIndex.has(item.index) ? round1(byIndex.get(item.index)) : null));
   };
@@ -3637,10 +3642,12 @@ function statsDataset(seriesKey, label, values, type) {
       borderColor: seriesKey === "current" ? "rgba(248,250,252,0.95)" : color,
       borderWidth: 2,
       data: values,
+      fill: false,
       label,
       pointBackgroundColor: seriesKey === "current" ? "#0b1220" : color,
       pointBorderColor: "rgba(255,255,255,0.6)",
       pointRadius: 3,
+      showLine: true,
       spanGaps: true,
       tension: 0.3
     };
@@ -3836,6 +3843,9 @@ async function downloadStatsPdfReport(summary) {
 
   const activityChartGroups = await collectStatsPdfActivityChartGroups();
   const report = buildStatsPdfReport(summary, activityChartGroups);
+  const pdfStyle = document.createElement("style");
+  pdfStyle.textContent = STATS_PDF_PRINT_STYLE;
+  document.head.appendChild(pdfStyle);
   document.body.appendChild(report);
 
   try {
@@ -3863,6 +3873,7 @@ async function downloadStatsPdfReport(summary) {
     printStatsPdfReport(report);
   } finally {
     report.remove();
+    pdfStyle.remove();
   }
 }
 
@@ -3964,16 +3975,30 @@ function nextAnimationFrame() {
 
 function statsChartImage(key) {
   const chart = statsState.charts[key];
-  if (!chart || chart.canvas?.classList.contains("hidden")) return "";
+  const source = chart?.canvas;
+  if (!chart || !source || source.classList.contains("hidden")) return "";
+
+  try {
+    const out = document.createElement("canvas");
+    out.width = source.width;
+    out.height = source.height;
+    const ctx = out.getContext("2d");
+    if (!ctx) throw new Error("no 2d context");
+    ctx.fillStyle = "#0b1220";
+    ctx.fillRect(0, 0, out.width, out.height);
+    ctx.drawImage(source, 0, 0);
+    const image = out.toDataURL("image/png");
+    if (image && image !== "data:,") return image;
+  } catch {
+    // fall through to the raw chart image
+  }
 
   if (typeof chart.toBase64Image === "function") {
     const image = chart.toBase64Image("image/png", 1);
     if (image && image !== "data:,") return image;
   }
 
-  return typeof chart.canvas?.toDataURL === "function"
-    ? chart.canvas.toDataURL("image/png")
-    : "";
+  return typeof source.toDataURL === "function" ? source.toDataURL("image/png") : "";
 }
 
 function statsPdfFilename() {
@@ -4138,6 +4163,7 @@ function startEmergency(orefStatus = null, trigger = null) {
   state.familyMembers = buildEmergencyMembers(orefStatus);
   state.emergency = {
     active: true,
+    alarmId: state.alarmStatus?.alarmId || null,
     trigger: cleanTrigger,
     activityMode: cleanTrigger === "training" ? "training" : "real",
     orefStatus: orefStatus || null,

@@ -152,6 +152,20 @@ namespace SaferTogether.UnityClient
         private float faceDir = 1f;
         private float avatarYaw = 0f;   // 3D avatar turn: +90 right, -90 left, 0 face-camera, 180 back-to-camera
         private float bobTime;
+        // phone-tilt movement, same calibrated feel as the missile game
+        private float roomTiltNeutralGamma;
+        private float roomTiltNeutralBeta;
+        private bool roomTiltCalibrated;
+        private float roomSmoothTiltX;
+        private float roomSmoothTiltY;
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+        [System.Runtime.InteropServices.DllImport("__Internal")]
+        private static extern float SaferTogetherGetTiltGamma();
+
+        [System.Runtime.InteropServices.DllImport("__Internal")]
+        private static extern float SaferTogetherGetTiltBeta();
+#endif
 
         // what's been done so far
         private string currentZone = "";
@@ -258,11 +272,22 @@ namespace SaferTogether.UnityClient
             int moveX = ReadMoveX();
             int moveY = ReadMoveY();
 
+            float tiltX;
+            float tiltY;
+            bool hasTilt = ReadRoomTilt(out tiltX, out tiltY);
+
             if (moveX != 0 || moveY != 0)
             {
                 avatarX += moveX * WalkSpeed * dt;
                 avatarDepth += moveY * DepthSpeed * dt;
                 walkTargetX = -1f; // moving by hand cancels tap-to-walk
+            }
+            else if (hasTilt && (tiltX != 0f || tiltY != 0f))
+            {
+                // steer by phone rotation, same as the missile game
+                avatarX += tiltX * WalkSpeed * dt;
+                avatarDepth += tiltY * DepthSpeed * dt;
+                walkTargetX = -1f;
             }
             else if (walkTargetX >= 0f)
             {
@@ -352,6 +377,7 @@ namespace SaferTogether.UnityClient
         private void ApplyPendingMission()
         {
             MissionTilt.Reset();
+            roomTiltCalibrated = false;
 
             try
             {
@@ -1807,6 +1833,46 @@ namespace SaferTogether.UnityClient
             return Mathf.Clamp(y, -1, 1);
         }
 
+        // analog movement from the phone tilt (browser deviceorientation); first reading is
+        // the neutral centre, then it's smoothed + dead-zoned exactly like the missile game
+        private bool ReadRoomTilt(out float tiltX, out float tiltY)
+        {
+            tiltX = 0f;
+            tiltY = 0f;
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+            float gamma = SaferTogetherGetTiltGamma();
+            float beta = SaferTogetherGetTiltBeta();
+
+            if (Mathf.Abs(gamma) >= 900f || Mathf.Abs(beta) >= 900f)
+            {
+                return false; // no reading yet / no permission
+            }
+
+            if (!roomTiltCalibrated)
+            {
+                roomTiltNeutralGamma = gamma;
+                roomTiltNeutralBeta = beta;
+                roomTiltCalibrated = true;
+            }
+
+            float targetX = Mathf.Clamp((gamma - roomTiltNeutralGamma) / 22f, -1f, 1f);   // tilt right -> right
+            float targetY = Mathf.Clamp((roomTiltNeutralBeta - beta) / 22f, -1f, 1f);      // tilt forward -> back of room
+            if (Mathf.Abs(targetX) < 0.12f) targetX = 0f;
+            if (Mathf.Abs(targetY) < 0.12f) targetY = 0f;
+
+            float smooth = 1f - Mathf.Exp(-Time.deltaTime * 12f);
+            roomSmoothTiltX = Mathf.Lerp(roomSmoothTiltX, targetX, smooth);
+            roomSmoothTiltY = Mathf.Lerp(roomSmoothTiltY, targetY, smooth);
+
+            tiltX = roomSmoothTiltX;
+            tiltY = roomSmoothTiltY;
+            return true;
+#else
+            return false;
+#endif
+        }
+
         // walk the avatar over to one of the objects
         private void WalkToZone(string zone)
         {
@@ -1838,9 +1904,11 @@ namespace SaferTogether.UnityClient
             else if (id == "missile" && HasTask("missile") && !missileDone)
             {
                 MissionRoomProfile profile = payload.profile;
+                // pass null texture so the missile builds its OWN animated 3D avatar (walks),
+                // instead of showing the room's frozen render-texture snapshot
                 GetMissile().Open(
                     profile != null ? profile.avatar : "",
-                    avatarRenderReady ? avatarRenderTexture : null,
+                    null,
                     SpriteFromDataUrl(profile != null ? profile.avatarImage : ""),
                     result => OnGameFinished("missile", result));
             }

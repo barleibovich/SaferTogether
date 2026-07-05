@@ -805,6 +805,21 @@ async function getGroupStatistics(accessToken, groupId) {
     }));
   }
 
+  // global averages across ALL groups/users (real=red, training=blue baselines)
+  let globalAggregates = [];
+  const globalResponse = await context.client.rpc("global_activity_metrics");
+  if (globalResponse.error) {
+    console.warn("global_activity_metrics failed (run supabase/global_activity_metrics.sql?):", globalResponse.error.message || globalResponse.error);
+  } else {
+    globalAggregates = (globalResponse.data || []).map(row => ({
+      avgValue: Number(row.avg_value),
+      itemIndex: row.item_index,
+      metric: row.metric,
+      mode: row.mode,
+      sampleCount: Number(row.sample_count)
+    }));
+  }
+
   const resultRows = await runActivityQuery(
     context.client
       .from(RESULT_TABLE)
@@ -834,6 +849,7 @@ async function getGroupStatistics(accessToken, groupId) {
   return {
     activities,
     aggregates,
+    globalAggregates,
     latestResults: [...latestByKey.values()],
     members
   };
