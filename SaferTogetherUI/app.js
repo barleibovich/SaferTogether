@@ -3230,7 +3230,9 @@ async function initEmergency() {
 
 // the user taps "I'm safe": open activities if unlocked, else record safe (server-backed)
 async function handleEmergencySafeClick() {
-  if (activitiesUnlocked()) {
+  const isAdmin = isCurrentUserAdminForActiveGroup();
+
+  if (!isAdmin && activitiesUnlocked()) {
     window.location.href = "game.html";
     return;
   }
@@ -3256,7 +3258,7 @@ async function handleEmergencySafeClick() {
         unlocked: result.unlocked
       });
       renderEmergency();
-      if (activitiesUnlocked()) {
+      if (!isAdmin && activitiesUnlocked()) {
         window.location.href = "game.html";
       }
     } catch (error) {
@@ -3315,6 +3317,12 @@ async function initGame() {
     await loadSessionIntoState();
     saveState();
   } catch {
+  }
+
+  // the admin watches, never plays: keep them out of the mission room
+  if (isCurrentUserAdminForActiveGroup()) {
+    window.location.href = "emergency.html";
+    return;
   }
 
   await refreshAlarmStatus();
