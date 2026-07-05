@@ -212,6 +212,32 @@ namespace SaferTogether.UnityClient.Editor
                 dirty = true;
             }
 
+            // make the idle/walk/run clips loop, or they play once and the avatar freezes
+            // after a few steps while it's still "walking".
+            ModelImporterClipAnimation[] clips = importer.clipAnimations;
+            if (clips == null || clips.Length == 0)
+            {
+                clips = importer.defaultClipAnimations;
+            }
+
+            bool clipsChanged = false;
+            for (int i = 0; clips != null && i < clips.Length; i += 1)
+            {
+                string clipName = (clips[i].name ?? "").ToLowerInvariant();
+                bool shouldLoop = clipName.Contains("walk") || clipName.Contains("idle") || clipName.Contains("run");
+                if (shouldLoop && !clips[i].loopTime)
+                {
+                    clips[i].loopTime = true;
+                    clipsChanged = true;
+                }
+            }
+
+            if (clipsChanged)
+            {
+                importer.clipAnimations = clips;
+                dirty = true;
+            }
+
             // only reimport when something actually changed, so repeat rebuilds/builds stay fast.
             if (dirty)
             {

@@ -50,6 +50,7 @@ import { primeMotionSensors, takeRotationForItem, takeMovementForItem, requestMo
 
 const STORAGE_KEY = "saferTogetherState.v5";
 const SIGNUP_AVATAR_KEY = "saferTogetherSignupAvatar.v1";
+const RESULT_QUEUE_KEY = "saferTogetherResultQueue.v1";
 const EVENT_DURATION_SECONDS = 600;
 const OREF_POLL_INTERVAL_MS = 5000;
 const GPS_LOCATION_SAVE_INTERVAL_MS = 15000;
@@ -207,6 +208,9 @@ document.addEventListener("DOMContentLoaded", () => {
   ensureDefaults();
   routePage();
   startEventTimer();
+  // retry any game results that failed to upload (e.g. connection dropped at submit time)
+  void flushResultQueue();
+  window.addEventListener("online", () => { void flushResultQueue(); });
 });
 
 // default app state in the browser
@@ -247,6 +251,60 @@ function loadState() {
 // save the app state to localStorage
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(stateForStorage()));
+}
+
+// --- offline result queue: keep game results if the upload fails, retry later --------
+function readResultQueue() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(RESULT_QUEUE_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+// stash a game result whose upload failed, so it isn't lost on a brief connection drop
+function queueFailedResult(groupId, body) {
+  try {
+    const queue = readResultQueue();
+    queue.push({ body, groupId, queuedAt: Date.now() });
+    // bound the queue so a long-offline device can't grow it forever
+    localStorage.setItem(RESULT_QUEUE_KEY, JSON.stringify(queue.slice(-50)));
+  } catch (error) {
+    console.warn("could not queue result for retry:", error);
+  }
+}
+
+// resend any queued results; drop the ones that go through, keep the ones that still fail
+let flushingResultQueue = false;
+async function flushResultQueue() {
+  if (flushingResultQueue || !state.user) return;
+
+  const queue = readResultQueue();
+  if (!queue.length) return;
+
+  flushingResultQueue = true;
+  const remaining = [];
+
+  for (const entry of queue) {
+    try {
+      await submitGroupActivityResult(entry.groupId, entry.body);
+    } catch {
+      remaining.push(entry); // still offline / failing -> keep for next time
+    }
+  }
+
+  try {
+    if (remaining.length) {
+      localStorage.setItem(RESULT_QUEUE_KEY, JSON.stringify(remaining));
+    } else {
+      localStorage.removeItem(RESULT_QUEUE_KEY);
+    }
+  } catch {
+    // ignore storage errors
+  }
+
+  flushingResultQueue = false;
 }
 
 // strip the big avatar pngs so they don't bloat storage
@@ -3452,7 +3510,6 @@ async function initStatistics() {
     statsState.activityId = activities[0].id;
 
     renderStatsMemberSelect();
-    renderStatsActivitySelect();
     renderStatsCharts();
     wireStatsSummary();
     wireStatsPdfExport();
@@ -3538,20 +3595,73 @@ function renderStatsActivitySelect() {
   });
 }
 
-// (re)draw the three charts for the selected member + activity
+const STATS_LEGEND = `
+  <div class="chart-legend">
+    <span><i class="dot dot-real"></i>אזעקת אמת (ממוצע)</span>
+    <span><i class="dot dot-training"></i>תרגול (ממוצע)</span>
+    <span><i class="dot dot-current"></i>המשתתף (נוכחי)</span>
+  </div>`;
+
+// draw ALL the games' charts on one page for the selected member (no game picker)
 function renderStatsCharts() {
   const data = statsState.data;
   if (!data) return;
 
   document.querySelector("[data-stats-charts]")?.removeAttribute("hidden");
+  const container = document.querySelector("[data-stats-activities]");
+  if (!container) return;
 
-  const activity = (data.activities || []).find(item => item.id === statsState.activityId);
-  if (!activity) return;
+  // tear down the previous chart instances, then rebuild a block per game
+  Object.keys(statsState.charts).forEach(destroyStatsChart);
+  statsState.charts = {};
+  container.innerHTML = "";
 
+  (data.activities || []).forEach(activity => {
+    const section = buildActivityStatsSection(activity);
+    container.appendChild(section);
+    drawActivityCharts(activity, section);
+  });
+}
+
+// one game's block: title + its four chart cards
+function buildActivityStatsSection(activity) {
+  const typeLabel = activity.type === "mission" ? "חדר משימות" : "טריוויה";
+  const section = document.createElement("section");
+  section.className = "stats-activity-block";
+  section.innerHTML = `
+    <h2 class="stats-activity-title">${escapeHtml(activity.title || typeLabel)} · ${typeLabel}</h2>
+    <div class="card stats-card">
+      <h3>זמן לכל שאלה / משימה (שניות)</h3>
+      ${STATS_LEGEND}
+      <div class="chart-box"><canvas data-chart="time"></canvas></div>
+    </div>
+    <div class="card stats-card">
+      <h3>תשובות נכונות מול שגויות</h3>
+      <div class="chart-box chart-box-pie"><canvas data-chart="pie"></canvas></div>
+      <p class="notice hidden" data-empty="pie">אין עדיין נתוני תשובות עבור משתתף זה.</p>
+    </div>
+    <div class="card stats-card">
+      <h3>טעויות / פגיעות</h3>
+      ${STATS_LEGEND}
+      <div class="chart-box"><canvas data-chart="mistakes"></canvas></div>
+      <p class="notice hidden" data-empty="mistakes">אין עדיין נתוני טעויות או פגיעות.</p>
+    </div>
+    <div class="card stats-card">
+      <h3>סיבוב היד (טלפון)</h3>
+      ${STATS_LEGEND}
+      <div class="chart-box"><canvas data-chart="rotation"></canvas></div>
+      <p class="notice hidden" data-empty="rotation">אין עדיין נתוני סיבוב — נמדד רק במכשיר נייד.</p>
+    </div>
+  `;
+  return section;
+}
+
+// draw the four charts for one game into its section's canvases
+function drawActivityCharts(activity, section) {
+  const data = statsState.data;
   const items = activity.items || [];
   const labels = items.map(item => item.label);
 
-  // average for a metric+mode, aligned to the activity's canonical item order
   // red/blue = the global average across ALL groups/users for this item index + mode
   const aggSeries = (metric, mode, targetItems = items) => {
     const byIndex = new Map();
@@ -3561,7 +3671,7 @@ function renderStatsCharts() {
     return targetItems.map(item => (byIndex.has(item.index) ? round1(byIndex.get(item.index)) : null));
   };
 
-  // this member's latest result for this activity (black series + pie)
+  // this member's latest result for this game (black series + pie)
   const latest = (data.latestResults || []).find(row => (
     row.userId === statsState.memberId && row.activityId === activity.id
   ));
@@ -3574,49 +3684,48 @@ function renderStatsCharts() {
     return typeof value === "number" ? round1(value) : null;
   });
 
-  // 1) time per item
+  const keyFor = name => `${activity.id}:${name}`;
+  const canvasFor = name => section.querySelector(`[data-chart="${name}"]`);
+  const emptyFor = name => section.querySelector(`[data-empty="${name}"]`);
+
+  // 1) time per item (missile is one dodge game, no per-item time)
   const timeItems = items.filter(item => !isMissileStatsItem(item));
-  drawSeriesChart("time", "bar", timeItems.map(item => item.label), {
+  drawSeriesChart(keyFor("time"), canvasFor("time"), "bar", timeItems.map(item => item.label), {
     current: currentSeries("timeSeconds", timeItems),
     real: aggSeries("time", "real", timeItems),
     training: aggSeries("time", "training", timeItems)
   });
 
   // 2) correct vs wrong
-  drawPieChart(activity, latest);
+  drawPieChart(keyFor("pie"), canvasFor("pie"), emptyFor("pie"), activity, latest);
 
   // 3) mistakes / hits per item
-  const mistakes = {
+  drawOrEmpty(keyFor("mistakes"), canvasFor("mistakes"), emptyFor("mistakes"), "bar", labels, {
     current: currentSeries("mistakes"),
     real: aggSeries("mistakes", "real"),
     training: aggSeries("mistakes", "training")
-  };
-  const hasMistakes = [mistakes.current, mistakes.real, mistakes.training]
-    .some(series => series.some(value => value !== null));
-
-  if (hasMistakes) {
-    toggleStatsEmpty("[data-mistakes-empty]", "[data-chart-mistakes]", true);
-    drawSeriesChart("mistakes", "bar", labels, mistakes);
-  } else {
-    destroyStatsChart("mistakes");
-    toggleStatsEmpty("[data-mistakes-empty]", "[data-chart-mistakes]", false);
-  }
+  });
 
   // 4) hand rotation per item
-  const rotation = {
+  drawOrEmpty(keyFor("rotation"), canvasFor("rotation"), emptyFor("rotation"), "line", labels, {
     current: currentSeries("rotation"),
     real: aggSeries("rotation", "real"),
     training: aggSeries("rotation", "training")
-  };
-  const hasRotation = [rotation.current, rotation.real, rotation.training]
-    .some(series => series.some(value => value !== null));
+  });
+}
 
-  if (hasRotation) {
-    toggleStatsEmpty("[data-rotation-empty]", "[data-chart-rotation]", true);
-    drawSeriesChart("rotation", "line", labels, rotation);
+// draw a chart, or hide it + show the "no data" note when every series is empty
+function drawOrEmpty(key, canvas, emptyEl, type, labels, series) {
+  const hasData = [series.current, series.real, series.training]
+    .some(s => s.some(value => value !== null));
+
+  if (hasData) {
+    if (emptyEl) emptyEl.classList.add("hidden");
+    drawSeriesChart(key, canvas, type, labels, series);
   } else {
-    destroyStatsChart("rotation");
-    toggleStatsEmpty("[data-rotation-empty]", "[data-chart-rotation]", false);
+    destroyStatsChart(key);
+    if (canvas) canvas.classList.add("hidden");
+    if (emptyEl) emptyEl.classList.remove("hidden");
   }
 }
 
@@ -3662,8 +3771,7 @@ function statsDataset(seriesKey, label, values, type) {
   };
 }
 
-function drawSeriesChart(key, type, labels, series) {
-  const canvas = document.querySelector(`[data-chart-${key}]`);
+function drawSeriesChart(key, canvas, type, labels, series) {
   if (!canvas || typeof Chart === "undefined") return;
 
   destroyStatsChart(key);
@@ -3692,12 +3800,10 @@ function drawSeriesChart(key, type, labels, series) {
   });
 }
 
-function drawPieChart(activity, latest) {
-  const canvas = document.querySelector("[data-chart-pie]");
-  const empty = document.querySelector("[data-pie-empty]");
+function drawPieChart(key, canvas, empty, activity, latest) {
   if (!canvas || typeof Chart === "undefined") return;
 
-  destroyStatsChart("pie");
+  destroyStatsChart(key);
 
   const scored = (latest?.items || []).filter(item => typeof item.correct === "boolean");
   const correct = scored.filter(item => item.correct).length;
@@ -3717,7 +3823,7 @@ function drawPieChart(activity, latest) {
   canvas.classList.remove("hidden");
   empty?.classList.add("hidden");
 
-  statsState.charts.pie = new Chart(canvas, {
+  statsState.charts[key] = new Chart(canvas, {
     data: {
       datasets: [{
         backgroundColor: ["#29b36a", "#e63f4f"],
@@ -3837,11 +3943,11 @@ function wireStatsPdfExport() {
 }
 
 async function downloadStatsPdfReport(summary) {
-  if (!statsState.data || !statsState.memberId || !statsState.activityId) {
+  if (!statsState.data || !statsState.memberId) {
     throw new Error("אין נתונים זמינים ליצירת PDF.");
   }
 
-  const activityChartGroups = await collectStatsPdfActivityChartGroups();
+  const activityChartGroups = collectStatsPdfActivityChartGroups();
   const report = buildStatsPdfReport(summary, activityChartGroups);
   const pdfStyle = document.createElement("style");
   pdfStyle.textContent = STATS_PDF_PRINT_STYLE;
@@ -3850,6 +3956,7 @@ async function downloadStatsPdfReport(summary) {
 
   try {
     await nextAnimationFrame();
+    await waitForImages(report); // html2canvas captures blank if the chart images aren't decoded yet
 
     if (typeof window.html2pdf === "function") {
       await window.html2pdf()
@@ -3877,34 +3984,16 @@ async function downloadStatsPdfReport(summary) {
   }
 }
 
-async function collectStatsPdfActivityChartGroups() {
+// every game's charts are already drawn on the page, so just read each one's image
+function collectStatsPdfActivityChartGroups() {
   const activities = statsState.data?.activities || [];
-  const originalActivityId = statsState.activityId;
-  const activitySelect = document.querySelector("[data-stats-activity]");
-  const groups = [];
-
-  try {
-    for (const activity of activities) {
-      statsState.activityId = activity.id;
-      if (activitySelect) activitySelect.value = activity.id;
-      renderStatsCharts();
-      await nextAnimationFrame();
-
-      groups.push({
-        activity,
-        charts: STATS_PDF_CHARTS.map(chart => ({
-          ...chart,
-          image: statsChartImage(chart.key)
-        }))
-      });
-    }
-  } finally {
-    statsState.activityId = originalActivityId;
-    if (activitySelect) activitySelect.value = originalActivityId;
-    renderStatsCharts();
-  }
-
-  return groups;
+  return activities.map(activity => ({
+    activity,
+    charts: STATS_PDF_CHARTS.map(chart => ({
+      ...chart,
+      image: statsChartImage(`${activity.id}:${chart.key}`)
+    }))
+  }));
 }
 
 function buildStatsPdfReport(summary, activityChartGroups = []) {
@@ -3971,6 +4060,18 @@ function nextAnimationFrame() {
       : callback => window.setTimeout(callback, 0);
     requestFrame(resolve);
   });
+}
+
+// wait until every <img> in the report has decoded, so the capture isn't blank
+function waitForImages(root) {
+  const images = Array.from(root.querySelectorAll("img"));
+  return Promise.all(images.map(img => {
+    if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+    return new Promise(resolve => {
+      img.addEventListener("load", resolve, { once: true });
+      img.addEventListener("error", resolve, { once: true });
+    });
+  }));
 }
 
 function statsChartImage(key) {
@@ -4601,14 +4702,17 @@ async function persistTriviaResult(activity, mode, answers, correctCount, totalQ
     };
   });
 
+  const body = {
+    activityId: activity.id,
+    mode,
+    payload: { correctCount, items, kind: "trivia", totalQuestions }
+  };
+
   try {
-    await submitGroupActivityResult(group.id, {
-      activityId: activity.id,
-      mode,
-      payload: { correctCount, items, kind: "trivia", totalQuestions }
-    });
+    await submitGroupActivityResult(group.id, body);
   } catch (error) {
-    console.warn("Failed to submit trivia result", error);
+    console.warn("Failed to submit trivia result, queued for retry", error);
+    queueFailedResult(group.id, body); // recover on reconnect / next app open
   }
 }
 
@@ -5076,14 +5180,17 @@ async function persistMissionResult(activity, mode, detail = {}, stageTimings = 
     ? games.map(game => game.id)
     : (stageTimings || []).map(stage => stage.target);
 
+  const body = {
+    activityId: activity.id,
+    mode,
+    payload: { games, items, kind: "mission", tasks: completedTasks }
+  };
+
   try {
-    await submitGroupActivityResult(group.id, {
-      activityId: activity.id,
-      mode,
-      payload: { games, items, kind: "mission", tasks: completedTasks }
-    });
+    await submitGroupActivityResult(group.id, body);
   } catch (error) {
-    console.warn("Failed to submit mission result", error);
+    console.warn("Failed to submit mission result, queued for retry", error);
+    queueFailedResult(group.id, body); // recover on reconnect / next app open
   }
 }
 

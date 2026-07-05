@@ -569,6 +569,20 @@ h3 {
   font-weight: 800;
 }
 
+.stats-activity-block {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,.1);
+}
+
+.stats-activity-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 900;
+}
+
 .group-delete-button {
   width: 52px;
   height: 52px;
