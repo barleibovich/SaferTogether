@@ -147,7 +147,7 @@ namespace SaferTogether.UnityClient
                 timeSeconds = Mathf.Round((Time.unscaledTime - stageStartTime) * 10f) / 10f,
                 correct = wrongThisStage == 0,
                 wrongAttempts = wrongThisStage,
-                rotation = 0f
+                rotation = MissionTilt.Take()
             });
 
             MissionResultBridge.NotifyStageProgress();

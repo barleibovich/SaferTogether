@@ -87,6 +87,9 @@ namespace SaferTogether.UnityClient
         private float tiltNeutralGamma;
         private float tiltNeutralBeta;
         private bool tiltCalibrated;
+        private float smoothTiltX;
+        private float smoothTiltY;
+        private float walkHoldUntil;
         private int hits;
         private int holdX;
         private int holdY;
@@ -132,6 +135,9 @@ namespace SaferTogether.UnityClient
             lastMoveX = 1f;
             avatarYaw = 0f;
             tiltCalibrated = false;
+            smoothTiltX = 0f;
+            smoothTiltY = 0f;
+            walkHoldUntil = 0f;
             timeLeft = GameSeconds;
             spawnTimer = 0.35f;
             holdX = 0;
@@ -456,16 +462,20 @@ namespace SaferTogether.UnityClient
                     tiltCalibrated = true;
                 }
 
-                float tiltX = Mathf.Clamp((rawGamma - tiltNeutralGamma) / 28f, -1f, 1f);  // tilt right -> right
-                float tiltY = Mathf.Clamp((tiltNeutralBeta - rawBeta) / 28f, -1f, 1f);     // tilt forward -> up
-                if (Mathf.Abs(tiltX) < 0.16f) tiltX = 0f;
-                if (Mathf.Abs(tiltY) < 0.16f) tiltY = 0f;
-                if (tiltX != 0f || tiltY != 0f)
-                {
-                    move.x += tiltX;
-                    move.y += tiltY;
-                    tiltStrength += (Mathf.Abs(tiltX) + Mathf.Abs(tiltY)) * dt;
-                }
+                // how far the phone is tilted from the calibrated centre; ~22deg = full speed
+                float targetX = Mathf.Clamp((rawGamma - tiltNeutralGamma) / 22f, -1f, 1f);  // tilt right -> right
+                float targetY = Mathf.Clamp((tiltNeutralBeta - rawBeta) / 22f, -1f, 1f);     // tilt forward -> up
+                if (Mathf.Abs(targetX) < 0.10f) targetX = 0f;
+                if (Mathf.Abs(targetY) < 0.10f) targetY = 0f;
+
+                // smooth the reading so noisy sensor jitter doesn't make the avatar twitch
+                float smooth = 1f - Mathf.Exp(-dt * 12f);
+                smoothTiltX = Mathf.Lerp(smoothTiltX, targetX, smooth);
+                smoothTiltY = Mathf.Lerp(smoothTiltY, targetY, smooth);
+
+                move.x += smoothTiltX;
+                move.y += smoothTiltY;
+                tiltStrength += (Mathf.Abs(smoothTiltX) + Mathf.Abs(smoothTiltY)) * dt;
             }
 #else
             float tiltX = Input.acceleration.x;
@@ -512,9 +522,12 @@ namespace SaferTogether.UnityClient
             if (moving)
             {
                 UpdatePlayerFacing(move);
+                // hold the walk animation briefly so quick dodges still show a walk cycle
+                walkHoldUntil = Time.unscaledTime + 0.18f;
             }
 
-            ApplyPlayerPosition(moving);
+            bool walking = Time.unscaledTime < walkHoldUntil;
+            ApplyPlayerPosition(walking);
         }
 
         private Vector2 ScreenToFieldPoint(Vector2 screenPoint)
@@ -1115,7 +1128,8 @@ namespace SaferTogether.UnityClient
                 timeSeconds = GameSeconds,
                 correct = hits == 0,
                 wrongAttempts = hits,
-                rotation = Mathf.Round(tiltStrength * 100f) / 100f
+                // same rotation measure as the other games, so the chart scales match
+                rotation = MissionTilt.Take()
             };
 
             var result = new MissionGameResult

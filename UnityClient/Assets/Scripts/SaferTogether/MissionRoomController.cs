@@ -217,6 +217,9 @@ namespace SaferTogether.UnityClient
         // every frame: build pending mission, then move the avatar around
         private void Update()
         {
+            // track phone rotation for every mini-game/stage (not just the missile game)
+            MissionTilt.Sample();
+
         #if UNITY_EDITOR
             // Press L in Play mode to print the current layout of every room prop.
             if (Input.GetKeyDown(KeyCode.L))
@@ -348,6 +351,8 @@ namespace SaferTogether.UnityClient
         // parse the json and actually build the mission room
         private void ApplyPendingMission()
         {
+            MissionTilt.Reset();
+
             try
             {
                 payload = JsonUtility.FromJson<MissionRoomPayload>(pendingMissionJson) ?? new MissionRoomPayload();
@@ -587,10 +592,10 @@ namespace SaferTogether.UnityClient
             // multi-word title and the numbered list all read right-to-left
             string content =
                 MissionText.RtlLine("רשימת ציוד לממד:") + "\n" +
-                MissionText.RtlLine("1) רדיו") + "\n" +
-                MissionText.RtlLine("2) מים") + "\n" +
-                MissionText.RtlLine("3) פלאפון") + "\n" +
-                MissionText.RtlLine("4) פנס");
+                MissionText.RtlLine("1( רדיו") + "\n" +
+                MissionText.RtlLine("2( מים") + "\n" +
+                MissionText.RtlLine("3( פלאפון") + "\n" +
+                MissionText.RtlLine("4( פנס");
 
             Text list = CreateText(board, content, 14, FontStyle.Bold, TextAnchor.UpperRight, new Color32(245, 247, 240, 255));
             list.raycastTarget = false;
