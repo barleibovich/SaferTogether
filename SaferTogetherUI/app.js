@@ -1590,6 +1590,13 @@ async function initBoard() {
     await raiseGroupAlarm("training");
   });
 
+  // admin opens the last run's graphs + AI summary any time (not just right after an alarm)
+  document.querySelector("[data-open-stats]")?.addEventListener("click", () => {
+    state.statsUnlocked = true;
+    saveState();
+    window.location.href = "statistics.html";
+  });
+
   // the board's HFC badge is wired above via initOrefHeaderControls()
 
   document.querySelector("[data-open-pending-requests]")?.addEventListener("click", event => {
