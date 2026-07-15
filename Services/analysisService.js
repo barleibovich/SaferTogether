@@ -3,9 +3,9 @@ const { getGroupStatistics } = require("./activityService");
 const { chatCompletion } = require("./groqService");
 
 const MISSION_GAME_DESCRIPTIONS = {
-  code: "Door-code sequence memory game: the keypad flashes random digits, the child repeats them, and early-stage mistakes are weighted more heavily than later ones.",
-  missile: "Missile dodge game: missiles fall for one minute, the child moves or tilts the phone to dodge, and hits plus phone tilt strength are measured.",
-  puzzle: "Emergency-kit puzzle: in each of four stages the child chooses the correct item to bring to the protected room from four images."
+  code: "Door-code sequence memory game. More errors, a lower weighted score, slower recall, or unusually high phone movement versus both baselines may indicate hesitation, reduced concentration, or cognitive load under stress; they are not diagnostic by themselves.",
+  missile: "One-minute missile-dodge game. The duration is fixed, so stress interpretation should focus on hits and tilt strength—not completion time. More hits than the real-alarm and training averages may indicate startle, reduced concentration, or less controlled movement under pressure; sample size and other metrics must be considered.",
+  puzzle: "Emergency-kit selection game. More wrong choices, slower decisions, or unusually high phone rotation versus both baselines may indicate hesitation, distraction, or agitation; fast accurate choices are a possible sign of composed decision-making, not proof of low stress."
 };
 
 // round to 1 decimal, or null for non-numbers
@@ -108,7 +108,7 @@ function summarizeActivityItems(items) {
 }
 
 // build one member's readings vs the group averages, so the model can judge their stress
-function buildMemberMeasurements(stats, userId) {
+function buildMemberMeasurements(stats, userId, resultId = "") {
   const member = (stats.members || []).find(entry => entry.userId === userId);
   if (!member) {
     throw httpError(404, "החבר לא נמצא בקבוצה זו");
@@ -116,17 +116,27 @@ function buildMemberMeasurements(stats, userId) {
 
   const aggByKey = new Map();
   (stats.aggregates || []).forEach(row => {
-    aggByKey.set(`${row.activityId}:${row.metric}:${row.mode}:${row.itemIndex}`, row.avgValue);
+    aggByKey.set(`${row.activityId}:${row.metric}:${row.mode}:${row.itemIndex}`, row);
+  });
+  const globalAggByKey = new Map();
+  (stats.globalAggregates || []).forEach(row => {
+    globalAggByKey.set(`${row.metric}:${row.mode}:${row.itemIndex}`, row);
   });
 
+  const selectedResults = resultId
+    ? (stats.results || []).filter(row => row.id === resultId && row.userId === userId)
+    : (stats.latestResults || []).filter(row => row.userId === userId);
+  const selectedActivityIds = new Set(selectedResults.map(row => row.activityId));
   const latestByActivity = new Map();
-  (stats.latestResults || []).forEach(row => {
+  selectedResults.forEach(row => {
     if (row.userId === userId) {
       latestByActivity.set(row.activityId, row);
     }
   });
 
-  const activities = (stats.activities || []).map(activity => {
+  const activities = (stats.activities || [])
+    .filter(activity => !resultId || selectedActivityIds.has(activity.id))
+    .map(activity => {
     const latest = latestByActivity.get(activity.id);
     const myItems = new Map();
     (latest?.items || []).forEach(item => {
@@ -136,14 +146,25 @@ function buildMemberMeasurements(stats, userId) {
     });
 
     const agg = (metric, mode, index) => round1OrNull(
-      aggByKey.get(`${activity.id}:${metric}:${mode}:${index}`)
+      aggByKey.get(`${activity.id}:${metric}:${mode}:${index}`)?.avgValue
+    );
+    const globalAgg = (metric, mode, index) => round1OrNull(
+      globalAggByKey.get(`${metric}:${mode}:${index}`)?.avgValue
+    );
+    const aggCount = (metric, mode, index) => Number(
+      aggByKey.get(`${activity.id}:${metric}:${mode}:${index}`)?.sampleCount || 0
+    );
+    const globalAggCount = (metric, mode, index) => Number(
+      globalAggByKey.get(`${metric}:${mode}:${index}`)?.sampleCount || 0
     );
 
     const items = (activity.items || []).map(item => {
       const mine = myItems.get(item.index) || {};
+      const gameId = String(mine.game || "").trim().toLowerCase();
       return {
         item: item.label,
-        description: mine.description || null,
+        game: gameId || null,
+        description: MISSION_GAME_DESCRIPTIONS[gameId] || mine.description || null,
         you: {
           timeSeconds: round1OrNull(mine.timeSeconds),
           handRotationDegrees: round1OrNull(mine.rotation),
@@ -162,18 +183,35 @@ function buildMemberMeasurements(stats, userId) {
           mistakesTraining: agg("mistakes", "training", item.index),
           correctRateRealAlarm: agg("correct", "real", item.index),
           correctRateTraining: agg("correct", "training", item.index)
+        },
+        globalAverage: {
+          timeRealAlarm: globalAgg("time", "real", item.index),
+          timeTraining: globalAgg("time", "training", item.index),
+          handRotationRealAlarm: globalAgg("rotation", "real", item.index),
+          handRotationTraining: globalAgg("rotation", "training", item.index),
+          mistakesRealAlarm: globalAgg("mistakes", "real", item.index),
+          mistakesTraining: globalAgg("mistakes", "training", item.index)
+        },
+        baselineSampleCount: {
+          groupRealAlarm: aggCount("mistakes", "real", item.index) || aggCount("time", "real", item.index),
+          groupTraining: aggCount("mistakes", "training", item.index) || aggCount("time", "training", item.index),
+          globalRealAlarm: globalAggCount("mistakes", "real", item.index) || globalAggCount("time", "real", item.index),
+          globalTraining: globalAggCount("mistakes", "training", item.index) || globalAggCount("time", "training", item.index)
         }
       };
     });
 
-    const games = (latest?.games || []).map(game => ({
-      game: game.game,
-      description: MISSION_GAME_DESCRIPTIONS[game.game] || null,
-      totalSeconds: round1OrNull(game.totalSeconds),
-      weightedScore: game.game === "code" ? round1OrNull(game.weightedScore) : null,
-      hits: game.game === "missile" ? round1OrNull(game.hits) : null,
-      tiltStrength: game.game === "missile" ? round1OrNull(game.tiltStrength) : null
-    }));
+    const games = (latest?.games || []).map(game => {
+      const gameId = String(game.id || game.game || "").trim().toLowerCase();
+      return ({
+        game: gameId,
+        description: MISSION_GAME_DESCRIPTIONS[gameId] || game.description || null,
+        totalSeconds: round1OrNull(game.totalSeconds),
+        weightedScore: gameId === "code" ? round1OrNull(game.weightedScore) : null,
+        hits: gameId === "missile" ? round1OrNull(game.hits) : null,
+        tiltStrength: gameId === "missile" ? round1OrNull(game.tiltStrength) : null
+      });
+    });
 
     return {
       games,
@@ -189,6 +227,13 @@ function buildMemberMeasurements(stats, userId) {
 
   return {
     username: member.username,
+    analysisScope: resultId ? "single_selected_run" : "latest_run_per_activity",
+    selectedResultId: resultId || null,
+    selectedSession: selectedResults[0] ? {
+      mode: selectedResults[0].mode,
+      modeLabelHebrew: selectedResults[0].mode === "real" ? "אזעקת אמת" : "תרגול",
+      submittedAt: selectedResults[0].submittedAt || null
+    } : null,
     hasAnyData: activities.some(activity => activity.hasMemberData),
     activities
   };
@@ -206,14 +251,27 @@ const SYSTEM_PROMPT = [
   "- weightedScore: door-code score where earlier mistakes count more heavily.",
   "- hits and tiltStrength: missile-game hits and accumulated phone tilt strength.",
   "Mission item descriptions explain what each game measured; use them when interpreting the data.",
-  "We also provide the group's running averages for REAL alarms vs TRAINING, per item, for comparison.",
+  "Treat each game's description as an interpretation guide, not decorative text. Explain what a worse-than-baseline deviation may mean for possible stress while remaining non-clinical.",
+  "Example rule for missile dodge: if member hits are above both the REAL-alarm and TRAINING averages, identify that as a possible pressure/stress signal (startle, reduced concentration, or less controlled movement). Quantify both gaps. Do not dismiss it merely because other games were accurate.",
+  "Do not interpret the missile game's fixed 60-second duration as slow performance. Use hits and tilt strength for that game.",
+  "Consider baselineSampleCount: comparisons based on very small samples are weak evidence and must be described cautiously.",
+  "We provide two baseline sources per item: groupAverage for this group and globalAverage across all groups/users. Both contain separate REAL-alarm and TRAINING values when data exists.",
+  "When analysisScope is single_selected_run, analyze ONLY that selected run and its activity. Do not describe other games as unplayed, and do not claim to analyze the member's history.",
+  "For every useful metric, explicitly compare the selected run with BOTH groupAverage real-alarm and training baselines when they are available. State clearly when either baseline is missing.",
+  "The selected run's mode and submittedAt identify whether it occurred during a real alarm or a training drill and when it happened.",
+  "HEBREW TERMINOLOGY IS STRICT: never use the words 'רונד', 'ראונד', or 'סשן'. Call mode=training 'תרגול' and mode=real 'אזעקת אמת'. Use 'הריצה שנבחרה' only when a neutral term is necessary.",
+  "BASELINE COMPARISON IS MANDATORY regardless of whether the selected session itself is training or real. Compare the member separately with (1) the REAL-alarm average and (2) the TRAINING average. Prefer globalAverage so the comparison matches the red/blue chart baselines; also mention groupAverage when available.",
+  "Do not tell the admin to check, inspect, or compare the group averages: YOU must perform those comparisons in the analysis. Never put 'compare with the group average' in the recommendations.",
+  "If groupAverage is null, use globalAverage. Only say that a real/training baseline is unavailable when BOTH sources are null for the relevant metrics; never invent a value and never silently skip it.",
+  "Recommendations must address the member's POSSIBLE STRESS LEVEL and emotional/safety support—not whether they were good or bad at a particular game. Recommend concrete stress-focused actions such as a short breathing/grounding routine, calm rehearsal under gradually realistic conditions, a supportive post-event conversation, checking how the member felt, or professional support if concerning signals persist. Never recommend game-specific performance training. Avoid generic instructions to analyze data. Include at most one data-collection recommendation, only when missing baselines materially limit the stress assessment.",
   "Key reading: bigger gaps between the member and the group, slower-than-training times under a real alarm, high hand rotation/tilt, more wrong attempts/hits, and a drop in accuracy under a real alarm all point to higher stress.",
+  "Stress assessment must integrate adverse deviations across games. Strong accuracy in one task does not cancel a meaningful above-baseline stress signal in another task.",
   "Based ONLY on these measurements and chart summaries, write a fuller practical assessment for the admin of how this member is coping and their apparent stress level.",
-  "Be careful and NON-CLINICAL — these are behavioural signals, not a medical diagnosis. Explicitly note when data is sparse, missing, phone-only, or based on a single latest run.",
+  "Be careful and NON-CLINICAL — these are behavioural signals, not a medical diagnosis. Explicitly state that one selected run cannot establish a trend.",
   "Use concrete numbers from the JSON when they matter. Compare the member with real-alarm averages and training averages where those values exist.",
   "Answer in HEBREW with these short sections:",
   "1. תמונת מצב כללית",
-  "2. ממצאים מרכזיים מהגרפים",
+  "2. ממצאים מרכזיים והשוואה לממוצעים (include an explicit real-alarm-average comparison and a separate training-average comparison)",
   "3. פירוט לפי משחקים/משימות",
   "4. סימני לחץ אפשריים",
   "5. חוזקות ונקודות לשימור",
@@ -224,13 +282,14 @@ const SYSTEM_PROMPT = [
 // admin-only: build a member's readings and ask Groq for a Hebrew stress summary
 async function generateUserSituationSummary(accessToken, groupId, body = {}) {
   const userId = String(body.userId || "").trim();
+  const resultId = String(body.resultId || "").trim();
   if (!userId) {
     throw httpError(400, "נדרש מזהה משתמש");
   }
 
   // getGroupStatistics checks admin access and returns only this group's real data
   const stats = await getGroupStatistics(accessToken, groupId);
-  const measurements = buildMemberMeasurements(stats, userId);
+  const measurements = buildMemberMeasurements(stats, userId, resultId);
 
   if (!measurements.hasAnyData) {
     return {
@@ -247,7 +306,12 @@ async function generateUserSituationSummary(accessToken, groupId, body = {}) {
     }
   ]);
 
-  return { summary, generated: true };
+  const sessionLabel = measurements.selectedSession?.modeLabelHebrew || "הריצה שנבחרה";
+  const cleanedSummary = String(summary || "")
+    .replace(/רונדים|ראונדים|סשנים/g, "תרגולים")
+    .replace(/רונד|ראונד|סשן/g, sessionLabel);
+
+  return { summary: cleanedSummary, generated: true };
 }
 
 module.exports = {

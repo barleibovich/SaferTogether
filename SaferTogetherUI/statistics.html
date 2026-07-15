@@ -13,28 +13,20 @@
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 </head>
 <body data-page="statistics">
 <main class="prototype-shell">
   <section class="phone">
-    <div class="status-bar">
-      <span>09:41</span>
-      <span class="status-icons">5G 100%</span>
-    </div>
-
+    <div class="status-bar"><span>09:41</span><span class="status-icons">5G 100%</span></div>
     <div class="screen">
       <header class="app-header">
-        <div>
-          <p class="eyebrow">SAFER TOGETHER</p>
-          <h1>גרפי ביצועים</h1>
-        </div>
+        <div><p class="eyebrow">SAFER TOGETHER</p><h1>גרפי ביצועים</h1></div>
       </header>
 
-      <p class="subtitle">ביצועי כל משתתף בטריוויה ובחדר המשימות, בהשוואה לממוצע הקבוצה.</p>
-
+      <p class="subtitle">בחרו משתתף וריצה כדי להציג את המדידות בפועל ולהשוות אותן לממוצעים.</p>
       <p class="notice" data-stats-status>טוען נתונים...</p>
-
       <button class="btn btn-danger hidden" type="button" data-stats-end-alarm>סיים אזעקה ושחרר את הקבוצה</button>
 
       <label class="report-select" data-stats-member-wrap hidden>
@@ -42,10 +34,15 @@
         <select class="select-field" data-stats-member></select>
       </label>
 
+      <label class="report-select" data-stats-run-wrap hidden>
+        <span class="eyebrow">בחר ריצה</span>
+        <select class="select-field" data-stats-run></select>
+      </label>
+
       <section class="list-stack" data-stats-charts hidden>
         <section class="card stats-card" data-stats-summary-card>
-          <h2>סיכום AI של מצב המשתתף</h2>
-          <p class="subtitle">ניתוח מבוסס בינה מלאכותית של כל נתוני המשתתף והגרפים: זמני תגובה, סיבוב יד, טעויות, פגיעות ודיוק.</p>
+          <h2>ניתוח AI של הריצה שנבחרה</h2>
+          <p class="subtitle">הניתוח אינו נוצר אוטומטית. לחצו על הכפתור כדי לנתח את נתוני הריצה שנבחרה בלבד.</p>
           <div class="stats-report-actions">
             <button class="btn btn-primary" type="button" data-stats-summary-btn>צור ניתוח AI</button>
             <button class="btn btn-secondary" type="button" data-stats-pdf-btn>הורד PDF</button>
@@ -53,15 +50,11 @@
           <p class="notice hidden" data-stats-summary-status></p>
           <div class="stats-summary-text hidden" data-stats-summary-text></div>
         </section>
-
         <div class="list-stack" data-stats-activities></div>
       </section>
 
-      <nav class="bottom-nav" aria-label="ניווט תחתון">
-        <a class="home-round" href="board.html">⌂</a>
-      </nav>
+      <nav class="bottom-nav" aria-label="ניווט תחתון"><a class="home-round" href="board.html">⌂</a></nav>
     </div>
-
     <div class="home-indicator"></div>
   </section>
 </main>

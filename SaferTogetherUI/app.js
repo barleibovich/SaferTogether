@@ -3456,7 +3456,27 @@ function initReport() {
 
 // ---- admin statistics page (per-user performance charts) ----
 const STATS_COLORS = { current: "#0b1220", real: "#e63f4f", training: "#4b8ff0" };
-const statsState = { activityId: "", charts: {}, data: null, memberId: "" };
+const statsState = { activityId: "", charts: {}, data: null, memberId: "", runId: "" };
+
+// Repair legacy UTF-8 text that was previously decoded as Windows-1252.
+function statsDisplayText(value) {
+  const text = String(value || "");
+  if (!/[×ÃÂâð]/.test(text)) return text;
+  const cp1252 = { 0x20ac: 0x80, 0x201a: 0x82, 0x0192: 0x83, 0x201e: 0x84, 0x2026: 0x85, 0x2020: 0x86, 0x2021: 0x87, 0x02c6: 0x88, 0x2030: 0x89, 0x0160: 0x8a, 0x2039: 0x8b, 0x0152: 0x8c, 0x017d: 0x8e, 0x2018: 0x91, 0x2019: 0x92, 0x201c: 0x93, 0x201d: 0x94, 0x2022: 0x95, 0x2013: 0x96, 0x2014: 0x97, 0x02dc: 0x98, 0x2122: 0x99, 0x0161: 0x9a, 0x203a: 0x9b, 0x0153: 0x9c, 0x017e: 0x9e, 0x0178: 0x9f };
+  const bytes = [];
+  for (const char of text) {
+    const code = char.codePointAt(0);
+    const byte = code <= 0xff ? code : cp1252[code];
+    if (byte === undefined) return text;
+    bytes.push(byte);
+  }
+  try {
+    const repaired = new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(bytes));
+    return repaired.includes("�") ? text : repaired;
+  } catch {
+    return text;
+  }
+}
 const STATS_PDF_CHARTS = [
   { empty: "אין נתוני זמן להצגה בגרף זה.", key: "time", title: "זמן לכל שאלה / משימה" },
   { empty: "אין נתוני תשובות להצגה בגרף זה.", key: "pie", title: "תשובות נכונות מול שגויות" },
@@ -3464,7 +3484,9 @@ const STATS_PDF_CHARTS = [
   { empty: "אין נתוני סיבוב יד להצגה בגרף זה.", key: "rotation", title: "סיבוב היד" }
 ];
 const STATS_PDF_PRINT_STYLE = `
-  .stats-pdf-report { box-sizing: border-box; width: 100%; max-width: 820px; margin: 0 auto; padding: 32px; background: #ffffff; color: #111827; font-family: Heebo, Arial, sans-serif; direction: rtl; }
+  @page { margin: 12mm; }
+  html, body { margin: 0; padding: 0; background: #ffffff; }
+  .stats-pdf-report { box-sizing: border-box; width: 100%; max-width: 820px; margin: 0 auto; padding: 24px; background: #ffffff; color: #111827; font-family: Heebo, Arial, sans-serif; direction: rtl; }
   .stats-pdf-report h1 { margin: 0 0 8px; font-size: 30px; }
   .stats-pdf-report h2 { margin: 26px 0 10px; font-size: 20px; }
   .stats-pdf-report h3 { margin: 0 0 10px; font-size: 16px; }
@@ -3482,12 +3504,6 @@ function round1(value) {
 
 // load the group's stats and render the per-member dropdown + charts
 async function initStatistics() {
-  // the statistics page only opens for the admin once an alarm has been finished
-  if (!state.statsUnlocked) {
-    window.location.href = "board.html";
-    return;
-  }
-
   const status = document.querySelector("[data-stats-status]");
   const group = getActiveGroup();
 
@@ -3513,11 +3529,15 @@ async function initStatistics() {
     }
 
     status?.classList.add("hidden");
-    statsState.memberId = members[0].userId;
-    statsState.activityId = activities[0].id;
+    const firstMemberWithRun = members.find(member => (
+      (data.results || []).some(result => result.userId === member.userId)
+    ));
+    statsState.memberId = (firstMemberWithRun || members[0]).userId;
+    statsState.activityId = "";
+    statsState.runId = "";
 
     renderStatsMemberSelect();
-    renderStatsCharts();
+    renderStatsRunSelect();
     wireStatsSummary();
     wireStatsPdfExport();
     void maybeShowStatsEndAlarm();
@@ -3572,15 +3592,60 @@ function renderStatsMemberSelect() {
 
   wrap.hidden = false;
   select.innerHTML = (statsState.data?.members || []).map(member => (
-    `<option value="${escapeHtml(member.userId)}">${escapeHtml(member.username)}</option>`
+    `<option value="${escapeHtml(member.userId)}">${escapeHtml(statsDisplayText(member.username))}</option>`
   )).join("");
   select.value = statsState.memberId;
 
   select.addEventListener("change", () => {
     statsState.memberId = select.value;
     resetStatsSummary();
-    renderStatsCharts();
+    renderStatsRunSelect();
   });
+}
+
+function memberStatsRuns() {
+  return (statsState.data?.results || [])
+    .filter(result => result.userId === statsState.memberId)
+    .sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0));
+}
+
+function selectedStatsRun() {
+  return memberStatsRuns().find(result => result.id === statsState.runId) || null;
+}
+
+function renderStatsRunSelect() {
+  const wrap = document.querySelector("[data-stats-run-wrap]");
+  const select = document.querySelector("[data-stats-run]");
+  if (!wrap || !select) return;
+  const runs = memberStatsRuns();
+  wrap.hidden = false;
+  if (!runs.length) {
+    statsState.runId = "";
+    statsState.activityId = "";
+    select.innerHTML = `<option value="">אין ריצות שמורות למשתתף זה</option>`;
+    select.disabled = true;
+    resetStatsSummary();
+    renderStatsCharts();
+    return;
+  }
+  select.disabled = false;
+  if (!runs.some(run => run.id === statsState.runId)) statsState.runId = runs[0].id;
+  select.innerHTML = runs.map(run => {
+    const activity = (statsState.data?.activities || []).find(item => item.id === run.activityId);
+    const mode = run.mode === "real" ? "אזעקת אמת" : "תרגול";
+    const date = run.submittedAt ? new Date(run.submittedAt).toLocaleString("he-IL", { dateStyle: "short", timeStyle: "short" }) : "ללא תאריך";
+    return `<option value="${escapeHtml(run.id)}">${escapeHtml(statsDisplayText(activity?.title || "משחק"))} · ${mode} · ${escapeHtml(date)}</option>`;
+  }).join("");
+  select.value = statsState.runId;
+  statsState.activityId = selectedStatsRun()?.activityId || "";
+  select.onchange = () => {
+    statsState.runId = select.value;
+    statsState.activityId = selectedStatsRun()?.activityId || "";
+    resetStatsSummary();
+    renderStatsCharts();
+  };
+  resetStatsSummary();
+  renderStatsCharts();
 }
 
 // game (activity) picker
@@ -3623,11 +3688,15 @@ function renderStatsCharts() {
   statsState.charts = {};
   container.innerHTML = "";
 
-  (data.activities || []).forEach(activity => {
-    const section = buildActivityStatsSection(activity);
-    container.appendChild(section);
-    drawActivityCharts(activity, section);
-  });
+  const run = selectedStatsRun();
+  const activity = (data.activities || []).find(item => item.id === run?.activityId);
+  if (!run || !activity) {
+    container.innerHTML = `<p class="notice">אין נתוני ריצה להצגה.</p>`;
+    return;
+  }
+  const section = buildActivityStatsSection(activity);
+  container.appendChild(section);
+  drawActivityCharts(activity, section);
 }
 
 // one game's block: title + its four chart cards
@@ -3679,9 +3748,7 @@ function drawActivityCharts(activity, section) {
   };
 
   // this member's latest result for this game (black series + pie)
-  const latest = (data.latestResults || []).find(row => (
-    row.userId === statsState.memberId && row.activityId === activity.id
-  ));
+  const latest = selectedStatsRun();
   const latestByIndex = new Map();
   (latest?.items || []).forEach(item => {
     if (Number.isInteger(item.index)) latestByIndex.set(item.index, item);
@@ -3862,6 +3929,7 @@ function resetStatsSummary() {
   if (text) {
     text.textContent = "";
     delete text.dataset.memberId;
+    delete text.dataset.runId;
     text.classList.add("hidden");
   }
   status?.classList.add("hidden");
@@ -3871,28 +3939,30 @@ function currentStatsSummaryText() {
   const text = document.querySelector("[data-stats-summary-text]");
   if (!text || text.classList.contains("hidden")) return "";
   if (text.dataset.memberId && text.dataset.memberId !== statsState.memberId) return "";
+  if (text.dataset.runId && text.dataset.runId !== statsState.runId) return "";
   return text.textContent.trim();
 }
 
 async function generateStatsSummary() {
   const group = getActiveGroup();
-  if (!group || !statsState.memberId) {
-    throw new Error("אין נתוני משתתף לניתוח.");
+  if (!group || !statsState.memberId || !statsState.runId) {
+    throw new Error("אין ריצה שנבחרה לניתוח.");
   }
 
   const status = document.querySelector("[data-stats-summary-status]");
   const text = document.querySelector("[data-stats-summary-text]");
 
   text?.classList.add("hidden");
-  setStatsStatus(status, "מנתח את המדידות האמיתיות...", "");
+  setStatsStatus(status, "מנתח את נתוני הריצה שנבחרה...", "");
 
-  const result = await getUserStatsSummary(group.id, statsState.memberId);
-  const summary = result?.summary || "לא התקבל סיכום.";
+  const result = await getUserStatsSummary(group.id, statsState.memberId, statsState.runId);
+  const summary = result?.summary || "לא התקבל ניתוח.";
   status?.classList.add("hidden");
 
   if (text) {
     text.textContent = summary;
     text.dataset.memberId = statsState.memberId;
+    text.dataset.runId = statsState.runId;
     text.classList.remove("hidden");
   }
 
@@ -3936,10 +4006,10 @@ function wireStatsPdfExport() {
     if (summaryButton) summaryButton.disabled = true;
 
     try {
-      const summary = currentStatsSummaryText() || await generateStatsSummary();
-      setStatsStatus(status, "מכין PDF עם הסיכום והגרפים...", "");
+      const summary = currentStatsSummaryText() || "ניתוח AI לא נוצר עבור ריצה זו.";
+      setStatsStatus(status, "מכין PDF...", "");
       await downloadStatsPdfReport(summary);
-      setStatsStatus(status, "ה-PDF נוצר בהצלחה.", "good");
+      setStatsStatus(status, "קובץ ה-PDF מוכן.", "good");
     } catch (error) {
       setStatsStatus(status, readableAuthError(error), "warn");
     } finally {
@@ -3955,45 +4025,94 @@ async function downloadStatsPdfReport(summary) {
   }
 
   const activityChartGroups = collectStatsPdfActivityChartGroups();
-  const report = buildStatsPdfReport(summary, activityChartGroups);
-  const pdfStyle = document.createElement("style");
-  pdfStyle.textContent = STATS_PDF_PRINT_STYLE;
-  document.head.appendChild(pdfStyle);
-  document.body.appendChild(report);
+
+  // Preferred: build a real PDF with jsPDF (silent direct download). Charts are already
+  // images (added straight in — no screenshot), only the small Hebrew text blocks are
+  // rendered to images, so we never hit the giant-canvas limit that blanked html2pdf.
+  const jsPDFCtor = window.jspdf?.jsPDF;
+  if (jsPDFCtor && typeof window.html2canvas === "function") {
+    try {
+      await buildStatsPdfWithJsPdf(jsPDFCtor, summary, activityChartGroups);
+      return;
+    } catch (error) {
+      console.warn("jsPDF export failed, falling back to print:", error);
+    }
+  }
+
+  // Fallback: native browser print-to-PDF (the user picks "Save as PDF").
+  await printStatsPdfReport(buildStatsPdfReport(summary, activityChartGroups));
+}
+
+// render a small HTML block (Hebrew text) to a PNG data URL via html2canvas
+async function renderHtmlBlockToImage(innerHtml, widthPx = 760) {
+  if (typeof window.html2canvas !== "function") return "";
+
+  const holder = document.createElement("div");
+  holder.style.cssText = `position:fixed;left:-10000px;top:0;width:${widthPx}px;padding:16px;background:#ffffff;color:#111827;font-family:Heebo,Arial,sans-serif;direction:rtl;box-sizing:border-box;`;
+  holder.innerHTML = innerHtml;
+  document.body.appendChild(holder);
 
   try {
     await nextAnimationFrame();
-    await waitForImages(report); // html2canvas captures blank if the chart images aren't decoded yet
-
-    if (typeof window.html2pdf === "function") {
-      await window.html2pdf()
-        .set({
-          filename: statsPdfFilename(),
-          html2canvas: {
-            backgroundColor: "#ffffff",
-            scale: 2,
-            useCORS: true
-          },
-          image: { quality: 0.98, type: "jpeg" },
-          jsPDF: { format: "a4", orientation: "portrait", unit: "mm" },
-          margin: [8, 8, 8, 8],
-          pagebreak: { mode: ["avoid-all", "css", "legacy"] }
-        })
-        .from(report)
-        .save();
-      return;
-    }
-
-    printStatsPdfReport(report);
+    const canvas = await window.html2canvas(holder, { backgroundColor: "#ffffff", scale: 2 });
+    return canvas.toDataURL("image/png");
+  } catch {
+    return "";
   } finally {
-    report.remove();
-    pdfStyle.remove();
+    holder.remove();
   }
+}
+
+// assemble the PDF page by page (text-block images + chart images) and save it
+async function buildStatsPdfWithJsPdf(jsPDFCtor, summary, activityChartGroups) {
+  const doc = new jsPDFCtor({ compress: true, format: "a4", orientation: "portrait", unit: "mm" });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 10;
+  const contentW = pageW - margin * 2;
+  let y = margin;
+
+  const addImg = dataUrl => {
+    if (!dataUrl) return;
+    const props = doc.getImageProperties(dataUrl);
+    const imgH = (props.height / props.width) * contentW;
+    if (y + imgH > pageH - margin && y > margin) {
+      doc.addPage();
+      y = margin;
+    }
+    doc.addImage(dataUrl, "PNG", margin, y, contentW, imgH);
+    y += imgH + 4;
+  };
+
+  const member = selectedStatsMember();
+  const group = getActiveGroup();
+  const generatedAt = new Date().toLocaleString("he-IL", { dateStyle: "short", timeStyle: "short" });
+
+  addImg(await renderHtmlBlockToImage(`
+    <h1 style="margin:0 0 6px;font-size:26px;">דוח ביצועים וניתוח AI</h1>
+    <p style="margin:0;color:#4b5563;font-size:13px;">קבוצה: ${escapeHtml(statsDisplayText(group?.name) || "לא ידוע")} · משתתף: ${escapeHtml(statsDisplayText(member?.username) || "לא ידוע")}</p>
+    <p style="margin:0 0 10px;color:#4b5563;font-size:13px;">נוצר: ${escapeHtml(generatedAt)}</p>
+    <h2 style="margin:8px 0 6px;font-size:18px;">סיכום AI</h2>
+    <div style="white-space:pre-wrap;line-height:1.7;border:1px solid #d1d5db;border-radius:10px;padding:12px;font-size:13px;">${escapeHtml(summary || "לא נוצר סיכום.")}</div>
+  `));
+
+  for (const grouped of activityChartGroups) {
+    const typeLabel = grouped.activity?.type === "mission" ? "חדר משימות" : "טריוויה";
+    addImg(await renderHtmlBlockToImage(`
+      <h2 style="margin:0;font-size:18px;">${escapeHtml(grouped.activity?.title || typeLabel)} · ${typeLabel}</h2>
+    `));
+    for (const chart of grouped.charts) {
+      if (chart.image) addImg(chart.image);
+    }
+  }
+
+  doc.save(statsPdfFilename());
 }
 
 // every game's charts are already drawn on the page, so just read each one's image
 function collectStatsPdfActivityChartGroups() {
-  const activities = statsState.data?.activities || [];
+  const activity = selectedStatsActivity();
+  const activities = activity ? [activity] : [];
   return activities.map(activity => ({
     activity,
     charts: STATS_PDF_CHARTS.map(chart => ({
@@ -4036,7 +4155,7 @@ function buildStatsPdfReport(summary, activityChartGroups = []) {
   report.innerHTML = `
     <header>
       <h1>דוח ביצועים וניתוח AI</h1>
-      <p class="stats-pdf-meta">קבוצה: ${escapeHtml(group?.name || "לא ידוע")} · משתתף: ${escapeHtml(member?.username || "לא ידוע")}</p>
+      <p class="stats-pdf-meta">קבוצה: ${escapeHtml(statsDisplayText(group?.name) || "לא ידוע")} · משתתף: ${escapeHtml(statsDisplayText(member?.username) || "לא ידוע")}</p>
       <p class="stats-pdf-meta">משחקים בדוח: ${activityChartGroups.length} · נוצר: ${escapeHtml(generatedAt)}</p>
     </header>
     <section>
@@ -4111,8 +4230,18 @@ function statsChartImage(key) {
 
 function statsPdfFilename() {
   const member = selectedStatsMember();
-  const memberName = safeFilenamePart(member?.username || "member");
-  return `SaferTogether-${memberName}-statistics.pdf`;
+  const memberName = safeFilenamePart(statsDisplayText(member?.username) || "member");
+  const runDate = compactStatsRunDate(selectedStatsRun()?.submittedAt);
+  return `Analyze_${memberName}_${runDate}.pdf`;
+}
+
+function compactStatsRunDate(value) {
+  const date = new Date(value || "");
+  if (Number.isNaN(date.getTime())) return "unknown-date";
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = String(date.getFullYear()).slice(-2);
+  return `${day}${month}${year}`;
 }
 
 function safeFilenamePart(value) {
@@ -4124,27 +4253,58 @@ function safeFilenamePart(value) {
 }
 
 function printStatsPdfReport(report) {
-  const printWindow = window.open("", "_blank");
-  if (!printWindow) {
-    throw new Error("לא ניתן לפתוח חלון הדפסה. בדקו שחוסם חלונות קופצים לא פעיל.");
-  }
+  return new Promise((resolve, reject) => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      reject(new Error("לא ניתן לפתוח חלון הדפסה. אפשרו חלונות קופצים לאתר ונסו שוב."));
+      return;
+    }
 
-  printWindow.document.write(`
-    <!DOCTYPE html>
-    <html lang="he" dir="rtl">
-    <head>
-      <meta charset="UTF-8">
-      <title>SaferTogether PDF</title>
-      <style>${STATS_PDF_PRINT_STYLE}</style>
-    </head>
-    <body>
-      <article class="stats-pdf-report">${report.innerHTML}</article>
-    </body>
-    </html>
-  `);
-  printWindow.document.close();
-  printWindow.focus();
-  printWindow.print();
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html lang="he" dir="rtl">
+      <head>
+        <meta charset="UTF-8">
+        <title>${escapeHtml(statsPdfFilename().replace(/\.pdf$/i, ""))}</title>
+        <style>${STATS_PDF_PRINT_STYLE}</style>
+      </head>
+      <body>
+        <article class="stats-pdf-report">${report.innerHTML}</article>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+
+    let printed = false;
+    const doPrint = () => {
+      if (printed) return;
+      printed = true;
+      try {
+        printWindow.focus();
+        printWindow.print();
+      } catch {
+        // some browsers block print() until the user interacts; the window stays open
+      }
+      resolve();
+    };
+
+    // print only once the chart images have decoded (else the charts come out blank)
+    const images = Array.from(printWindow.document.images || []);
+    const pending = images.filter(img => !(img.complete && img.naturalWidth > 0));
+
+    if (!pending.length) {
+      printWindow.setTimeout(doPrint, 200);
+      return;
+    }
+
+    let left = pending.length;
+    const onOne = () => { left -= 1; if (left <= 0) printWindow.setTimeout(doPrint, 150); };
+    pending.forEach(img => {
+      img.addEventListener("load", onOne, { once: true });
+      img.addEventListener("error", onOne, { once: true });
+    });
+    printWindow.setTimeout(doPrint, 5000); // safety, in case an image never fires
+  });
 }
 
 // draw the local family member cards

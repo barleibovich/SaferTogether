@@ -59,9 +59,9 @@ export async function getGroupStatistics(groupId) {
 }
 
 // admin-only: AI summary of one member's situation/stress from their measurements
-export async function getUserStatsSummary(groupId, userId) {
+export async function getUserStatsSummary(groupId, userId, resultId) {
   const payload = await requestJson(`/api/groups/${groupId}/stats-summary`, {
-    body: { userId },
+    body: { resultId, userId },
     method: "POST"
   });
 

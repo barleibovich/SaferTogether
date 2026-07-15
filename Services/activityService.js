@@ -580,6 +580,63 @@ function cleanMetricItems(payload) {
   }, []);
 }
 
+// Rebuild per-mode averages from the raw saved runs. This covers legacy results and
+// pending mission reviews that were never added to activity_metric_aggregates.
+function deriveMetricAggregates(resultRows = []) {
+  const buckets = new Map();
+
+  const add = (row, item, metric, value) => {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return;
+    const key = `${row.activity_id}:${item.index}:${row.mode}:${metric}`;
+    const bucket = buckets.get(key) || {
+      activityId: row.activity_id,
+      itemIndex: item.index,
+      itemLabel: item.label || "",
+      metric,
+      mode: row.mode,
+      sampleCount: 0,
+      sum: 0
+    };
+    bucket.sampleCount += 1;
+    bucket.sum += number;
+    buckets.set(key, bucket);
+  };
+
+  resultRows.forEach(row => {
+    cleanMetricItems(row.payload).forEach(item => {
+      if (item.timeSeconds !== undefined) add(row, item, "time", item.timeSeconds);
+      if (item.rotation !== undefined) add(row, item, "rotation", item.rotation);
+      if (item.mistakes !== undefined) add(row, item, "mistakes", item.mistakes);
+      if (item.correct !== undefined) add(row, item, "correct", item.correct ? 1 : 0);
+    });
+  });
+
+  return [...buckets.values()].map(bucket => ({
+    activityId: bucket.activityId,
+    avgValue: bucket.sum / bucket.sampleCount,
+    itemIndex: bucket.itemIndex,
+    itemLabel: bucket.itemLabel,
+    metric: bucket.metric,
+    mode: bucket.mode,
+    sampleCount: bucket.sampleCount
+  }));
+}
+
+function mergeMetricAggregates(stored = [], derived = []) {
+  const merged = new Map();
+  stored.forEach(row => merged.set(
+    `${row.activityId}:${row.itemIndex}:${row.mode}:${row.metric}`,
+    row
+  ));
+  // Raw results are the most complete source and include legacy/pending runs.
+  derived.forEach(row => merged.set(
+    `${row.activityId}:${row.itemIndex}:${row.mode}:${row.metric}`,
+    row
+  ));
+  return [...merged.values()];
+}
+
 // add a result's metrics to the running totals; best-effort so a missing table can't fail submit
 async function applyActivityMetrics(client, groupId, activityId, mode, payload) {
   const items = cleanMetricItems(payload);
@@ -823,27 +880,30 @@ async function getGroupStatistics(accessToken, groupId) {
   const resultRows = await runActivityQuery(
     context.client
       .from(RESULT_TABLE)
-      .select("user_id, activity_id, mode, payload, submitted_at")
+      .select("id, user_id, activity_id, mode, payload, submitted_at")
       .eq("group_id", groupId)
       .order("submitted_at", { ascending: false })
   );
+  aggregates = mergeMetricAggregates(aggregates, deriveMetricAggregates(resultRows));
+
+  const results = (resultRows || []).map(row => ({
+    activityId: row.activity_id,
+    games: Array.isArray(row.payload?.games) ? row.payload.games : [],
+    id: row.id,
+    items: Array.isArray(row.payload?.items) ? row.payload.items : [],
+    mode: row.mode,
+    submittedAt: row.submitted_at,
+    userId: row.user_id
+  }));
 
   // rows are newest-first, so the first one seen per (user, activity) is the latest
   const latestByKey = new Map();
-  (resultRows || []).forEach(row => {
-    const key = `${row.user_id}:${row.activity_id}`;
+  results.forEach(result => {
+    const key = `${result.userId}:${result.activityId}`;
     if (latestByKey.has(key)) {
       return;
     }
-
-    latestByKey.set(key, {
-      activityId: row.activity_id,
-      games: Array.isArray(row.payload?.games) ? row.payload.games : [],
-      items: Array.isArray(row.payload?.items) ? row.payload.items : [],
-      mode: row.mode,
-      submittedAt: row.submitted_at,
-      userId: row.user_id
-    });
+    latestByKey.set(key, result);
   });
 
   return {
@@ -851,7 +911,8 @@ async function getGroupStatistics(accessToken, groupId) {
     aggregates,
     globalAggregates,
     latestResults: [...latestByKey.values()],
-    members
+    members,
+    results
   };
 }
 
